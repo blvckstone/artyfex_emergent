@@ -119,6 +119,39 @@ class RzpVerify(BaseModel):
     razorpay_signature: str
 
 
+class UserSignup(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    phone: Optional[str] = None
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class ReviewSubmit(BaseModel):
+    rating: int
+    title: str
+    body: str
+    location: Optional[str] = None
+    image: Optional[str] = None
+
+
+class ReturnRequestIn(BaseModel):
+    order_number: str
+    reason: str
+    details: Optional[str] = None
+
+
+class ReturnRequest(ReturnRequestIn):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_email: str
+    status: str = "requested"  # requested | approved | rejected | received | refunded
+    created_at: str = Field(default_factory=now_iso)
+
+
 # ---------- SEED ---------- #
 from server_seed import SEED_PRODUCTS, SEED_REVIEWS  # noqa: E402
 
@@ -141,23 +174,36 @@ async def seed_if_empty():
 
 
 # ---------- AUTH ---------- #
-def create_token(email: str) -> str:
-    payload = {"sub": email, "exp": datetime.now(timezone.utc) + timedelta(days=7)}
+def create_token(email: str, role: str = "admin") -> str:
+    payload = {"sub": email, "role": role, "exp": datetime.now(timezone.utc) + timedelta(days=7)}
     return pyjwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
-async def get_current_admin(authorization: str = Header(None)):
+async def _decode(authorization: Optional[str]):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
-    token = authorization.split(" ", 1)[1]
     try:
-        payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        return pyjwt.decode(authorization.split(" ", 1)[1], JWT_SECRET, algorithms=["HS256"])
     except pyjwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+
+async def get_current_admin(authorization: str = Header(None)):
+    payload = await _decode(authorization)
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
     admin = await db.admins.find_one({"email": payload.get("sub")}, {"_id": 0, "password_hash": 0})
     if not admin:
         raise HTTPException(status_code=401, detail="Admin not found")
     return admin
+
+
+async def get_current_user(authorization: str = Header(None)):
+    payload = await _decode(authorization)
+    user = await db.users.find_one({"email": payload.get("sub")}, {"_id": 0, "password_hash": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
 
 
 # ---------- PUBLIC ROUTES ---------- #
@@ -245,7 +291,7 @@ async def admin_login(payload: AdminLogin):
     admin = await db.admins.find_one({"email": payload.email})
     if not admin or not bcrypt.checkpw(payload.password.encode(), admin["password_hash"].encode()):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"token": create_token(payload.email), "email": payload.email}
+    return {"token": create_token(payload.email, role="admin"), "email": payload.email}
 
 
 @api_router.get("/admin/me")
@@ -332,6 +378,76 @@ async def admin_delete_review(review_id: str, admin=Depends(get_current_admin)):
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return {"deleted": True}
+
+
+# ---------- USER (CUSTOMER) ROUTES ---------- #
+@api_router.post("/auth/signup")
+async def user_signup(payload: UserSignup):
+    if await db.users.find_one({"email": payload.email}):
+        raise HTTPException(status_code=400, detail="Email already registered")
+    pw_hash = bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt()).decode()
+    user = {
+        "id": str(uuid.uuid4()), "name": payload.name, "email": payload.email,
+        "phone": payload.phone or "", "password_hash": pw_hash, "created_at": now_iso(),
+    }
+    await db.users.insert_one(user)
+    return {"token": create_token(payload.email, role="user"),
+            "user": {"name": user["name"], "email": user["email"], "phone": user["phone"]}}
+
+
+@api_router.post("/auth/login")
+async def user_login(payload: UserLogin):
+    user = await db.users.find_one({"email": payload.email})
+    if not user or not bcrypt.checkpw(payload.password.encode(), user["password_hash"].encode()):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return {"token": create_token(payload.email, role="user"),
+            "user": {"name": user["name"], "email": user["email"], "phone": user.get("phone", "")}}
+
+
+@api_router.get("/auth/me")
+async def user_me(user=Depends(get_current_user)):
+    return {"name": user["name"], "email": user["email"], "phone": user.get("phone", "")}
+
+
+@api_router.get("/me/orders", response_model=List[Order])
+async def my_orders(user=Depends(get_current_user)):
+    return await db.orders.find({"customer.email": user["email"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+@api_router.post("/products/{slug}/reviews", response_model=Review)
+async def submit_review(slug: str, payload: ReviewSubmit, user=Depends(get_current_user)):
+    prod = await db.products.find_one({"slug": slug}, {"_id": 0})
+    if not prod:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if payload.rating < 1 or payload.rating > 5:
+        raise HTTPException(status_code=400, detail="Rating 1-5")
+    r = Review(
+        author=user["name"], location=payload.location or "",
+        rating=payload.rating, title=payload.title, body=payload.body,
+        image=payload.image, verified=True,
+    )
+    doc = r.model_dump()
+    doc["product_slug"] = slug
+    doc["user_email"] = user["email"]
+    await db.reviews.insert_one(doc)
+    return r
+
+
+@api_router.post("/me/returns", response_model=ReturnRequest)
+async def request_return(payload: ReturnRequestIn, user=Depends(get_current_user)):
+    order = await db.orders.find_one({"order_number": payload.order_number, "customer.email": user["email"]})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.get("status") not in ("delivered", "shipped"):
+        raise HTTPException(status_code=400, detail="Return only for shipped/delivered orders")
+    rr = ReturnRequest(**payload.model_dump(), user_email=user["email"])
+    await db.returns.insert_one(rr.model_dump())
+    return rr
+
+
+@api_router.get("/me/returns", response_model=List[ReturnRequest])
+async def my_returns(user=Depends(get_current_user)):
+    return await db.returns.find({"user_email": user["email"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
 
 
 app.include_router(api_router)

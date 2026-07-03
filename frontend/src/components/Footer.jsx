@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { Instagram, Facebook } from "lucide-react";
 
 export const Footer = () => {
@@ -42,6 +43,13 @@ export const Footer = () => {
             <a href="#">Contact Atelier</a>
           </FooterCol>
 
+          <FooterCol title="Legal">
+            <Link to="/policies/privacy">Privacy Policy</Link>
+            <Link to="/policies/terms">Terms &amp; Conditions</Link>
+            <Link to="/policies/refund">Returns &amp; Refunds</Link>
+            <Link to="/policies/shipping">Shipping Policy</Link>
+          </FooterCol>
+
           <FooterCol title="Contact">
             <span className="text-cream/70">Maloni Mahada</span>
             <span className="text-cream/50">Mumbai 400095</span>
@@ -66,9 +74,9 @@ export const Footer = () => {
         <div className="flex flex-col md:flex-row justify-between gap-4 text-[10px] uppercase tracking-luxury text-cream/40">
           <span>© {new Date().getFullYear()} ArtyFex · All rights reserved</span>
           <div className="flex gap-6">
-            <a href="#">Terms</a>
-            <a href="#">Privacy</a>
-            <a href="#">Refund Policy</a>
+            <Link to="/policies/terms">Terms</Link>
+            <Link to="/policies/privacy">Privacy</Link>
+            <Link to="/policies/refund">Refunds</Link>
           </div>
         </div>
       </div>

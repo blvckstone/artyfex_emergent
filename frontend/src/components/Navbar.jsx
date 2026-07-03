@@ -1,18 +1,22 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingBag, Menu, X } from "lucide-react";
+import { ShoppingBag, Menu, X, User } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
 import { IDS } from "@/constants/testIds";
 
 const links = [
-  { id: IDS.nav.collection, label: "Collection", href: "#collection" },
-  { id: IDS.nav.craft, label: "The Craft", href: "#craft" },
-  { id: IDS.nav.reviews, label: "Reviews", href: "#reviews" },
-  { id: IDS.nav.b2b, label: "Trade / B2B", href: "#b2b" },
+  { id: IDS.nav.collection, label: "Shop", href: "/shop", route: true },
+  { id: IDS.nav.craft, label: "The Craft", href: "/#craft" },
+  { id: IDS.nav.reviews, label: "Reviews", href: "/#reviews" },
+  { id: IDS.nav.b2b, label: "Trade / B2B", href: "/#b2b" },
 ];
 
 export const Navbar = () => {
   const { setIsOpen, count } = useCart();
+  const { user, openAuth } = useAuth();
+  const nav = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -32,13 +36,13 @@ export const Navbar = () => {
       }`}
     >
       <div className="max-w-[1440px] mx-auto px-6 md:px-12 lg:px-16 flex items-center justify-between h-20">
-        <a
-          href="#top"
+        <Link
+          to="/"
           data-testid={IDS.nav.logo}
           className="font-serif text-2xl md:text-3xl tracking-tight text-cream flex items-baseline gap-1"
         >
           Arty<span className="italic text-gold">Fex</span>
-        </a>
+        </Link>
 
         <nav className="hidden lg:flex items-center gap-10">
           {links.map((l) => (
@@ -54,13 +58,13 @@ export const Navbar = () => {
         </nav>
 
         <div className="flex items-center gap-3">
-          <a
-            href="#product"
-            data-testid={IDS.nav.shopNow}
-            className="hidden md:inline-flex text-xs uppercase tracking-luxury px-5 py-3 border border-gold/40 text-gold hover:bg-gold hover:text-ink-950 transition-all duration-300"
+          <button
+            data-testid="nav-account"
+            onClick={() => user ? nav("/account") : openAuth("login")}
+            className="hidden md:inline-flex items-center gap-2 text-xs uppercase tracking-luxury px-4 py-3 border border-white/10 hover:border-gold/40 text-cream/80 hover:text-gold transition-all"
           >
-            Shop Now
-          </a>
+            <User className="w-3.5 h-3.5" /> {user ? user.name.split(" ")[0] : "Sign in"}
+          </button>
           <button
             data-testid={IDS.nav.cartToggle}
             onClick={() => setIsOpen(true)}

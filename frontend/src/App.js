@@ -3,6 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import { CartProvider, useCart } from "@/context/CartContext";
+import { AuthProvider } from "@/context/AuthContext";
 import { fetchProducts, fetchReviews } from "@/lib/api";
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
@@ -14,32 +15,23 @@ import B2B from "@/components/B2B";
 import Footer from "@/components/Footer";
 import CartSheet from "@/components/CartSheet";
 import CheckoutDialog from "@/components/CheckoutDialog";
+import AuthDialog from "@/components/AuthDialog";
 import AdminPage from "@/pages/AdminPage";
+import ShopPage from "@/pages/ShopPage";
+import AccountPage from "@/pages/AccountPage";
+import LegalPage from "@/pages/LegalPage";
 
-function Shell() {
+function Home() {
   const [products, setProducts] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const { setIsOpen } = useCart();
-
   useEffect(() => {
     Promise.all([fetchProducts(), fetchReviews()])
-      .then(([p, r]) => {
-        setProducts(p);
-        setReviews(r);
-      })
+      .then(([p, r]) => { setProducts(p); setReviews(r); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
-
   const hero = products.find((p) => p.is_hero) || products[0];
-
-  const openCheckout = () => {
-    setIsOpen(false);
-    setTimeout(() => setCheckoutOpen(true), 250);
-  };
-
   if (loading || !hero) {
     return (
       <div className="min-h-screen bg-ink-950 flex items-center justify-center">
@@ -50,9 +42,8 @@ function Shell() {
       </div>
     );
   }
-
   return (
-    <div className="App relative">
+    <>
       <Navbar />
       <main>
         <Hero />
@@ -63,9 +54,25 @@ function Shell() {
         <B2B />
       </main>
       <Footer />
+    </>
+  );
+}
+
+function StoreShell() {
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const { setIsOpen } = useCart();
+  const openCheckout = () => { setIsOpen(false); setTimeout(() => setCheckoutOpen(true), 250); };
+  return (
+    <div className="App relative">
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/shop" element={<ShopPage />} />
+        <Route path="/account" element={<AccountPage />} />
+        <Route path="/policies/:slug" element={<LegalPage />} />
+      </Routes>
       <CartSheet onCheckout={openCheckout} />
       <CheckoutDialog open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
-      <Toaster position="bottom-center" theme="dark" />
+      <AuthDialog />
     </div>
   );
 }
@@ -78,12 +85,15 @@ export default function App() {
         <Route
           path="/*"
           element={
-            <CartProvider>
-              <Shell />
-            </CartProvider>
+            <AuthProvider>
+              <CartProvider>
+                <StoreShell />
+              </CartProvider>
+            </AuthProvider>
           }
         />
       </Routes>
+      <Toaster position="bottom-center" theme="dark" />
     </BrowserRouter>
   );
 }
