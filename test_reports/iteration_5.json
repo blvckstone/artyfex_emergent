@@ -1,0 +1,21 @@
+{
+  "summary": "Verified 4 reported bug fixes on ArtyFex SPA: (1) SPA client-side navigation preserved across /shop and footer Terms links via window marker, (2) mobile Sign-in visible in top nav + hamburger drawer, (3) footer Atelier links functional from /shop with correct URLs (/#craft, /#reviews, /shop), (4) new Admin Panel footer link routes to /admin. Zero console errors on /shop, /policies/privacy, /admin, /account.",
+  "tested_scope": ["frontend", "integration"],
+  "passed": [
+    "Desktop nav Shop click preserves window.__spa_marker (true SPA nav)",
+    "Footer 'The Collection' from /shop is client-side (marker preserved, url=/shop)",
+    "Footer bottom 'Terms' link is client-side (marker preserved, url=/policies/terms)",
+    "Footer 'The Craft' from /shop navigates to /#craft (works from non-home page)",
+    "Footer 'Collectors' from /shop navigates to /#reviews (works from non-home page)",
+    "Footer 'Admin Panel' link visible on home & routes to /admin",
+    "Mobile (375x812) [data-testid=nav-account] visible (40x36 icon) and opens AuthDialog",
+    "Mobile hamburger opens menu with [data-testid=nav-account-mobile] full-width 'Sign in / Create account' button visible",
+    "Regression: 0 console errors on /shop, /policies/privacy, /admin, /account"
+  ],
+  "failed": [],
+  "action_items": [],
+  "notes": "Note: Footer '#craft' / '#reviews' anchors are plain <a> tags so from a non-home route they trigger a document navigation to '/' + hash (per plan expectation) — NOT tested as pure SPA. 'The Collection', 'Terms', 'Privacy', 'Refunds' and Admin Panel are all <Link> and confirmed client-side.",
+  "success_rate": {"backend": "not tested (deferred per request)", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}

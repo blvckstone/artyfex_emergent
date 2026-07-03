@@ -45,25 +45,36 @@ export const Navbar = () => {
         </Link>
 
         <nav className="hidden lg:flex items-center gap-10">
-          {links.map((l) => (
-            <a
-              key={l.href}
-              href={l.href}
-              data-testid={l.id}
-              className="text-xs uppercase tracking-luxury text-cream/70 hover:text-gold transition-colors duration-300"
-            >
-              {l.label}
-            </a>
-          ))}
+          {links.map((l) =>
+            l.route ? (
+              <Link
+                key={l.href}
+                to={l.href}
+                data-testid={l.id}
+                className="text-xs uppercase tracking-luxury text-cream/70 hover:text-gold transition-colors duration-300"
+              >
+                {l.label}
+              </Link>
+            ) : (
+              <a
+                key={l.href}
+                href={l.href}
+                data-testid={l.id}
+                className="text-xs uppercase tracking-luxury text-cream/70 hover:text-gold transition-colors duration-300"
+              >
+                {l.label}
+              </a>
+            ),
+          )}
         </nav>
 
         <div className="flex items-center gap-3">
           <button
             data-testid="nav-account"
             onClick={() => user ? nav("/account") : openAuth("login")}
-            className="hidden md:inline-flex items-center gap-2 text-xs uppercase tracking-luxury px-4 py-3 border border-white/10 hover:border-gold/40 text-cream/80 hover:text-gold transition-all"
+            className="inline-flex items-center gap-2 text-xs uppercase tracking-luxury px-3 md:px-4 py-2.5 md:py-3 border border-white/10 hover:border-gold/40 text-cream/80 hover:text-gold transition-all"
           >
-            <User className="w-3.5 h-3.5" /> {user ? user.name.split(" ")[0] : "Sign in"}
+            <User className="w-3.5 h-3.5" /> <span className="hidden sm:inline">{user ? user.name.split(" ")[0] : "Sign in"}</span>
           </button>
           <button
             data-testid={IDS.nav.cartToggle}
@@ -106,16 +117,34 @@ export const Navbar = () => {
             className="lg:hidden overflow-hidden glass border-t border-white/5"
           >
             <div className="px-6 py-6 flex flex-col gap-4">
-              {links.map((l) => (
-                <a
-                  key={l.href}
-                  href={l.href}
-                  onClick={() => setMobileOpen(false)}
-                  className="text-sm uppercase tracking-luxury text-cream/80 hover:text-gold"
-                >
-                  {l.label}
-                </a>
-              ))}
+              {links.map((l) =>
+                l.route ? (
+                  <Link
+                    key={l.href}
+                    to={l.href}
+                    onClick={() => setMobileOpen(false)}
+                    className="text-sm uppercase tracking-luxury text-cream/80 hover:text-gold"
+                  >
+                    {l.label}
+                  </Link>
+                ) : (
+                  <a
+                    key={l.href}
+                    href={l.href}
+                    onClick={() => setMobileOpen(false)}
+                    className="text-sm uppercase tracking-luxury text-cream/80 hover:text-gold"
+                  >
+                    {l.label}
+                  </a>
+                ),
+              )}
+              <button
+                data-testid="nav-account-mobile"
+                onClick={() => { setMobileOpen(false); user ? nav("/account") : openAuth("login"); }}
+                className="text-left text-sm uppercase tracking-luxury text-gold border-t border-white/5 pt-4 mt-2"
+              >
+                {user ? `Your account (${user.name.split(" ")[0]})` : "Sign in / Create account"}
+              </button>
             </div>
           </motion.div>
         )}

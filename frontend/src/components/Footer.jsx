@@ -30,10 +30,11 @@ export const Footer = () => {
           </div>
 
           <FooterCol title="Atelier">
-            <a href="#craft">The Craft</a>
-            <a href="#collection">The Collection</a>
-            <a href="#reviews">Collectors</a>
-            <a href="#b2b">Trade / B2B</a>
+            <a href="/#craft">The Craft</a>
+            <Link to="/shop">The Collection</Link>
+            <a href="/#reviews">Collectors</a>
+            <a href="/#b2b">Trade / B2B</a>
+            <Link to="/admin">Admin Panel</Link>
           </FooterCol>
 
           <FooterCol title="Support">
