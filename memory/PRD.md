@@ -29,21 +29,20 @@ Build a highly attractive, ultra-premium, fully functional SPA e-commerce websit
 - Seeded 4 products + 6 reviews + 1 admin.
 - **[Phase A — Feb 2026] Returns Overhaul**: strict 3-day return window from delivery timestamp; customer return dialog with packaging warning + damage image URL + packaging confirmation checkbox; admin Returns tab with approve/reject + genuine assessment + admin notes to customer; delivered_at auto-set on admin status change; refund + privacy policies updated. ✅
 - **[Phase B — Feb 2026] Product Details + Wishlist + Emails**: dedicated `/product/:slug` page (gallery, MRP strikethrough, savings badge, low-stock/out-of-stock indicators, variant picker, qty controls, add-to-cart, wishlist toggle, per-product WhatsApp CTA to +91 9970107760 with product context, social share menu — WhatsApp/Instagram/X/copy link); Wishlist context + `/api/me/wishlist` endpoints + Wishlist tab in /account (move-to-cart + remove); ShopPage cards linked to product page with heart + low-stock badges; ProductShowcase hero got low-stock badge + view-details CTA. Resend integrated (verified `artyfex.in` domain, sender `no-reply@artyfex.in`) — customer receives branded email when admin approves or rejects their return. 9/9 backend pytest, 100% frontend flows verified with live Resend delivery. ✅
+- **[Phase C — Feb 2026] Admin CRM + Profile Edit + Messages**: PATCH `/api/auth/me` (name/phone update, email read-only); Admin `Customers` tab with searchable table (orders count, lifetime spend, last order, contact) + right-side drawer showing full order/return/message history + inline "Send personal message" composer; customer sees admin messages under new `Messages` tab in `/account` with unread badge on tab, gold pulsing indicator per unread item, mark-as-read; gold banner surfaces unread messages from any tab. 29/29 backend pytest, retest passed on frontend after Messages+Profile render branches were wired. ✅
 
 ## Prioritized Backlog
-### P1 — Next (Phase C — Admin CRM & Profile)
-- Custom Admin-to-Customer messages displayed on targeted customer's dashboard.
-- Admin Users tab (list registered users, industry-standard CRM options: search, filter, view order history, block, message).
-- Customer profile edit (name, phone) in /account.
+### P1 — Next
+- Order-confirmation email on checkout success (extend send_email helper).
+- Product reviews section on product detail page (per-product review submit + display).
 
 ### P2 — Later
 - Object-storage backed image uploads in admin (replace URL paste), including damage evidence upload.
-- Order confirmation email on checkout success (extend send_email helper).
 - Inventory decrement on order confirmation + low-stock alerts.
 - Multi-currency / international shipping calculator.
 - Instagram lookbook grid + Pinterest boards.
 - Search + filters on collection.
-- Reviews on product detail page (per-product review section).
+- Move admin_list_users to a MongoDB aggregation pipeline (currently N+1).
 
 ## Credentials
 - Admin: admin@artyfex.in / ArtyFex@2026

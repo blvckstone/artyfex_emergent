@@ -247,14 +247,38 @@ export default function AccountPage() {
             </div>
           )}
 
-          {!loading && tab === "profile" && (
-            <div className="hairline p-8 max-w-xl">
-              <div className="grid sm:grid-cols-2 gap-6">
-                <Info label="Name" value={user.name} />
-                <Info label="Email" value={user.email} />
-                <Info label="Phone" value={user.phone || "—"} />
-              </div>
+          {!loading && tab === "messages" && (
+            <div className="grid gap-4">
+              {messages.length === 0 && <div className="hairline p-10 text-center text-cream/40">No messages yet from the atelier.</div>}
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  data-testid={`account-message-${m.id}`}
+                  className={`hairline p-6 transition-colors ${!m.read ? "bg-gold/5 border-gold/30" : ""}`}
+                >
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {!m.read && <span data-testid={`account-message-unread-${m.id}`} className="w-2 h-2 rounded-full bg-gold animate-pulse" />}
+                    <div className="font-serif text-xl text-cream">{m.subject}</div>
+                    <div className="ml-auto text-[10px] uppercase tracking-luxury text-cream/40">{new Date(m.created_at).toLocaleString()}</div>
+                  </div>
+                  <div className="mt-3 text-sm text-cream/70 whitespace-pre-wrap leading-relaxed">{m.body}</div>
+                  <div className="mt-4 text-[10px] uppercase tracking-luxury text-gold-soft">From the ArtyFex Atelier</div>
+                  {!m.read && (
+                    <button
+                      data-testid={`account-message-mark-${m.id}`}
+                      onClick={() => markMessageRead(m.id)}
+                      className="mt-4 text-[10px] uppercase tracking-luxury text-gold hover:text-cream border-b border-gold/40 pb-0.5"
+                    >
+                      Mark as read
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
+          )}
+
+          {!loading && tab === "profile" && (
+            <ProfileEditor user={user} updateProfile={updateProfile} />
           )}
         </div>
       </div>
