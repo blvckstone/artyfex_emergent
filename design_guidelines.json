@@ -1,0 +1,136 @@
+{
+  "theme": "dark",
+  "archetype": "5",
+  "archetype_name": "Luxury",
+  "vibe": "High-end penthouse atmosphere, modern elegance, luxury interior design magazine style. Think Restoration Hardware × Cartier × a modern art gallery.",
+  "colors": {
+    "background": {
+      "primary": "#050505",
+      "secondary": "#121212",
+      "tertiary": "#1A1A1A"
+    },
+    "text": {
+      "primary": "#F5F2EA",
+      "secondary": "#A3A3A3",
+      "accent": "#D4AF37"
+    },
+    "accents": {
+      "gold": "#D4AF37",
+      "champagne": "#E6D5B8",
+      "border": "rgba(255, 255, 255, 0.1)",
+      "overlay": "rgba(0, 0, 0, 0.4)"
+    },
+    "customizer_variants": {
+      "aqua": "#40E0D0",
+      "lavender": "#E6E6FA",
+      "silver": "#C0C0C0",
+      "gold": "#FFD700"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Cormorant Garamond",
+      "body": "Outfit",
+      "accent": "Instrument Serif"
+    },
+    "rules": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-medium",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-medium",
+      "h3": "text-xl sm:text-2xl font-medium",
+      "body": "text-base leading-relaxed tracking-wide font-light",
+      "overline": "text-xs uppercase tracking-[0.2em] font-medium text-[#E6D5B8]"
+    }
+  },
+  "layout_and_spacing": {
+    "spacing_scale": "p-4, p-8, p-12, p-16, p-24, p-32",
+    "grid_system": "Bento 'Tetris' Grid for visuals, asymmetric editorial columns for storytelling. Generous whitespace is critical.",
+    "alignment": "Optical alignment, heavy use of negative space. Avoid center-everything. Left-align dense text.",
+    "container_padding": "px-6 md:px-12 lg:px-24"
+  },
+  "surfaces_and_borders": {
+    "glassmorphism": "backdrop-blur-2xl bg-black/60 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)]",
+    "cards": "bg-[#121212] border border-white/5 hover:border-white/20 transition-colors duration-300",
+    "images": "max-h-[80vh] object-cover"
+  },
+  "motion_and_interaction": {
+    "libraries": [
+      "framer-motion",
+      "lucide-react"
+    ],
+    "hover_states": "Text colors must explicitly change or brighten. Buttons lift (-translate-y-1) with subtle glow shadow.",
+    "scroll": "Native smooth scrolling or Lenis for momentum scrolling.",
+    "page_transitions": "Fade up and staggered reveals for list items."
+  },
+  "components_instructions": {
+    "hero": "Cinematic full-bleed image/video. Max bg-black/40 overlay. Expressive serif heading. Strong CTA.",
+    "product_viewer": "Interactive gallery with zoom capability. Split layout: Image on left (sticky), details on right.",
+    "customizer": "Interactive color swatches updating the main image or a subtle glowing element. Use Shadcn Tabs or Radio Group deeply customized.",
+    "cart": "Shadcn Sheet component. Styled with dark background, 1px white/10 borders, elegant typography.",
+    "checkout_modal": "Shadcn Dialog. Clean, high-trust simulated payment UI (Stripe/Razorpay look) with dark styling.",
+    "reviews": "Masonry grid or horizontal scroll. Dark cards, 5-star gold icons, authentic-looking text and photos.",
+    "b2b_portal": "Structured form using Shadcn Input/Select/Form. Elegant floating labels or stark minimalist inputs with bottom borders only.",
+    "footer": "Darkest background (#000000). Huge typography for brand name (text-[8vw] Cormorant Garamond), sparse links, tracked-out text."
+  },
+  "testing": {
+    "attributes": "Must include data-testid on all interactive elements (buttons, swatches, cart toggles, etc)."
+  },
+  "media": {
+    "hero_backgrounds": [
+      {
+        "url": "https://images.unsplash.com/photo-1688646953306-5ec93eab8c06?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHwzfHxsdXh1cnklMjBwZW50aG91c2UlMjBsaXZpbmclMjByb29tfGVufDB8fHx8MTc4MzA2MjM3M3ww&ixlib=rb-4.1.0&q=85",
+        "category": "hero",
+        "description": "Luxury penthouse living room with expansive window"
+      },
+      {
+        "url": "https://images.pexels.com/photos/3960244/pexels-photo-3960244.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "texture",
+        "description": "Stunning abstract image featuring swirling dark fluid designs"
+      }
+    ],
+    "product_details": [
+      {
+        "url": "https://images.pexels.com/photos/8068653/pexels-photo-8068653.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "product_macro",
+        "description": "Closeup of golden and white marble textures with glittery details"
+      },
+      {
+        "url": "https://images.pexels.com/photos/18325786/pexels-photo-18325786.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "product_macro",
+        "description": "Close-up of a dark Carnico marble surface showcasing intricate natural patterns"
+      },
+      {
+        "url": "https://images.pexels.com/photos/37955298/pexels-photo-37955298.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "product_macro",
+        "description": "Blue mineral surface texture for crystal detailing"
+      }
+    ],
+    "lifestyle_and_gallery": [
+      {
+        "url": "https://images.unsplash.com/photo-1630699144035-c0f6311ec482?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHw0fHxsdXh1cnklMjBwZW50aG91c2UlMjBsaXZpbmclMjByb29tfGVufDB8fHx8MTc4MzA2MjM3M3ww&ixlib=rb-4.1.0&q=85",
+        "category": "lifestyle",
+        "description": "Living room interior setting"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1564078516393-cf04bd966897?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBwZW50aG91c2UlMjBsaXZpbmclMjByb29tfGVufDB8fHx8MTc4MzA2MjM3M3ww&ixlib=rb-4.1.0&q=85",
+        "category": "lifestyle",
+        "description": "Gray padded chaise couch beside window, moody lighting"
+      },
+      {
+        "url": "https://images.pexels.com/photos/27584011/pexels-photo-27584011.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "lifestyle",
+        "description": "Art gallery hallway"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "You are building a luxury e-commerce SPA. NEVER use placeholder images. Use ONLY the URLs provided in the media section.",
+    "Implement an asymmetrical, text-rich layout with overlapping layers. Adhere strictly to the spacing and container_padding rules.",
+    "The hero image must feature a cinematic overlay (bg-black/40) with expressive serif typography (Cormorant Garamond). Do not center-align everything.",
+    "Use Framer Motion to animate the product showcase, Customizer, and reviews.",
+    "Shadcn components must be highly customized. Limit rounded corners to achieve a sharper luxury magazine aesthetic. Inject 1px glassmorphism borders for cards/panels instead of standard solid borders.",
+    "The shopping cart must be a Shadcn Sheet with dark styling, and the checkout modal must be a simulated payment UI built with Shadcn Dialog.",
+    "Ensure the 'data-testid' attribute is added to every interactive element for automated testing.",
+    "Do NOT use generic fonts like Space Grotesk or Inter. Use 'Cormorant Garamond' for headings and 'Outfit' for body text.",
+    "Provide installation command for required font packages (e.g., from Google Fonts) and icon packages like lucide-react."
+  ]
+}
