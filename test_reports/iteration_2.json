@@ -1,0 +1,38 @@
+{
+  "summary": "Backend admin + storefront + Razorpay integration APIs verified end-to-end and all pass. Admin panel UI login, all 5 tabs, product editor open, and logout work with no console errors. However, the CheckoutDialog visual bug is NOT fully fixed: on desktop the modal is not centered — it renders offset to the right so the right column (Order Summary + 'Complete Order'/'Pay' button) is clipped off-screen, making it impossible to click Pay and therefore Razorpay checkout modal cannot be exercised from the UI. Inputs render dark (bg-ink-950) which is fine.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "POST /api/admin/login returns JWT token (field name is 'token'); wrong password returns 401",
+    "GET /api/admin/stats without token returns 401; with token returns {orders_total, revenue_inr, leads_new, products_total, ...}",
+    "POST/PUT/DELETE /api/admin/products with correct schema (mrp_inr, size, craft_hours, hero_image, gallery, variants) — create, update, list-reflection on /api/products, delete all work (200)",
+    "POST /api/orders with payment_method='razorpay' returns order.order_number (ARF-...), order.razorpay_order_id (order_...), and razorpay_key_id (rzp_test_T8wuUhk6q4NKFz)",
+    "POST /api/orders/verify with invalid signature returns 400 {'detail':'Invalid payment signature'}",
+    "PATCH /api/admin/orders/{order_number} with {status:'shipped'} returns 200 {ok:true}",
+    "POST /api/b2b/leads with correct schema (full_name, business_type) accepts lead; PATCH /api/admin/leads/{id} returns 200",
+    "Storefront /: page loads, add-to-cart works, cart sheet opens, 'Secure Checkout' opens CheckoutDialog, no console errors",
+    "CheckoutDialog input fields render with dark bg (bg-ink-950) — autofill white-background bug appears fixed",
+    "Admin /admin: login flow works with admin@artyfex.in / ArtyFex@2026; dashboard, products, orders, leads, reviews tabs render with 0 console errors; admin-add-product opens editor; admin-logout works"
+  ],
+  "failed": [
+    {
+      "area": "frontend / CheckoutDialog centering",
+      "issue": "Dialog is NOT centered on desktop (1365x768). The dialog left edge is at x≈700 and its width ~920px extends past viewport width 1365, clipping the right column (Order Summary + 'Complete Order/Pay ₹' button). Likely cause: framer-motion's inline transform on motion.div overrides Tailwind's '-translate-x-1/2 -translate-y-1/2' (both set the CSS transform property). Consider using flex/grid centering on the wrapper instead of translate, or use motion's `style={{x:'-50%',y:'-50%'}}`/x/y motion values combined with left/top 50%.",
+      "evidence": "See /tmp/co2.png. Measured via getBoundingClientRect: dialog bounding box shows right edge > viewport width; 'Pay ₹' button not clickable (Playwright timeout finding it because it is off-screen right).",
+      "priority": "HIGH"
+    },
+    {
+      "area": "frontend / Razorpay UI verification blocked",
+      "issue": "Because the Pay button is clipped off-screen due to the centering bug above, the flow that dynamically loads https://checkout.razorpay.com/v1/checkout.js and opens the Razorpay modal could NOT be exercised from the UI. window.Razorpay remained undefined and no razorpay iframe/script tag was injected. The underlying backend /api/orders + verify APIs are confirmed working, and CheckoutDialog.jsx contains the correct integration code — it just cannot be reached until the centering bug is fixed.",
+      "evidence": "page.evaluate returned {hasRzp:false, iframes:[], scriptLoaded:false} after attempting to submit the form.",
+      "priority": "HIGH"
+    }
+  ],
+  "action_items": [
+    "Fix CheckoutDialog centering: replace the `fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2` on the motion.div with a flex-centering wrapper (e.g., an outer fixed inset-0 flex items-center justify-center container, and keep motion.div as the inner card). Framer-motion's transform is currently clobbering the translate utilities. After the fix, re-test that dialog center matches viewport center and 'Pay ₹' is clickable.",
+    "After centering fix, re-run frontend test to confirm POST /api/orders is called, checkout.razorpay.com/v1/checkout.js is loaded, and Razorpay iframe opens with the returned order_id.",
+    "Minor: /api/admin/login returns the JWT as `token` (not `access_token`) — confirm this matches what AdminPage.jsx expects (it does per code review) so no change needed, just noting for docs."
+  ],
+  "success_rate": {"backend": "100%", "frontend": "80%"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}

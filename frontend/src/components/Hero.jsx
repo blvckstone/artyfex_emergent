@@ -1,0 +1,164 @@
+import React from "react";
+import { motion } from "framer-motion";
+import { ArrowDownRight, Sparkles } from "lucide-react";
+import { IDS } from "@/constants/testIds";
+
+const HERO_BG =
+  "https://images.unsplash.com/photo-1688646953306-5ec93eab8c06?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHwzfHxsdXh1cnklMjBwZW50aG91c2UlMjBsaXZpbmclMjByb29tfGVufDB8fHx8MTc4MzA2MjM3M3ww&ixlib=rb-4.1.0&q=85";
+
+const MIRROR_IMG =
+  "https://images.pexels.com/photos/8068653/pexels-photo-8068653.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940";
+
+const fade = {
+  hidden: { opacity: 0, y: 30 },
+  show: (i = 0) => ({
+    opacity: 1, y: 0,
+    transition: { duration: 0.9, delay: i * 0.15, ease: [0.22, 1, 0.36, 1] },
+  }),
+};
+
+export const Hero = () => {
+  return (
+    <section
+      id="top"
+      data-testid={IDS.hero.section}
+      className="relative min-h-[100svh] w-full overflow-hidden bg-ink-950"
+    >
+      {/* Background image */}
+      <div className="absolute inset-0">
+        <img src={HERO_BG} alt="" className="w-full h-full object-cover opacity-40" />
+        <div className="absolute inset-0 bg-gradient-to-b from-ink-950/70 via-ink-950/50 to-ink-950" />
+        <div className="absolute inset-0 grain" />
+      </div>
+
+      <div className="relative max-w-[1440px] mx-auto px-6 md:px-12 lg:px-16 pt-40 md:pt-44 pb-24">
+        <div className="grid lg:grid-cols-12 gap-10 lg:gap-16 items-center">
+          {/* Copy */}
+          <div className="lg:col-span-7 relative z-10">
+            <motion.div
+              variants={fade}
+              initial="hidden"
+              animate="show"
+              custom={0}
+              className="flex items-center gap-3 mb-8"
+            >
+              <span className="gold-line w-16" />
+              <span className="text-[10px] md:text-xs uppercase tracking-luxury text-gold-soft">
+                ArtyFex Atelier · Est. 2020 · Mumbai
+              </span>
+            </motion.div>
+
+            <motion.h1
+              variants={fade}
+              initial="hidden"
+              animate="show"
+              custom={1}
+              data-testid={IDS.hero.title}
+              className="font-serif text-[13vw] sm:text-[10vw] md:text-8xl lg:text-[7.5rem] leading-[0.92] tracking-tight text-cream text-balance"
+            >
+              A mirror,{" "}
+              <span className="italic font-display text-gold">poured</span>
+              <br />
+              over one hundred
+              <br />
+              and twenty hours.
+            </motion.h1>
+
+            <motion.p
+              variants={fade}
+              initial="hidden"
+              animate="show"
+              custom={2}
+              className="mt-10 max-w-xl text-base md:text-lg text-cream/70 leading-relaxed font-light"
+            >
+              The Obsidian Aurora — a 2×3 ft statement mirror of black marbled resin, real crushed
+              blue crystal, and a hand-brushed golden aluminum border. Signed by the artisan.
+              One of one.
+            </motion.p>
+
+            <motion.div
+              variants={fade}
+              initial="hidden"
+              animate="show"
+              custom={3}
+              className="mt-12 flex flex-col sm:flex-row gap-4"
+            >
+              <a
+                href="#product"
+                data-testid={IDS.hero.shopNow}
+                className="group inline-flex items-center justify-between gap-6 bg-gold text-ink-950 px-7 py-5 text-xs uppercase tracking-luxury hover:bg-cream transition-colors duration-500"
+              >
+                <span>Acquire the piece</span>
+                <ArrowDownRight className="w-4 h-4 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform" />
+              </a>
+              <a
+                href="#craft"
+                data-testid={IDS.hero.exploreCraft}
+                className="group inline-flex items-center gap-3 px-7 py-5 text-xs uppercase tracking-luxury text-cream border border-white/15 hover:border-gold hover:text-gold transition-all"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Explore the craft
+              </a>
+            </motion.div>
+
+            <motion.div
+              variants={fade}
+              initial="hidden"
+              animate="show"
+              custom={4}
+              className="mt-16 grid grid-cols-3 gap-6 max-w-lg"
+            >
+              {[
+                { k: "120", v: "artisan hours" },
+                { k: "1 of 1", v: "unique piece" },
+                { k: "24 mo", v: "warranty" },
+              ].map((s) => (
+                <div key={s.v}>
+                  <div className="font-serif text-3xl md:text-4xl text-cream">{s.k}</div>
+                  <div className="mt-1 text-[10px] uppercase tracking-luxury text-cream/50">{s.v}</div>
+                </div>
+              ))}
+            </motion.div>
+          </div>
+
+          {/* Mirror image */}
+          <div className="lg:col-span-5 relative">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 40 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
+              className="relative aspect-[3/4] w-full max-w-md mx-auto"
+            >
+              <div className="absolute -inset-6 bg-gold/10 blur-3xl rounded-full" />
+              <div className="relative w-full h-full overflow-hidden border border-gold/30">
+                <img src={MIRROR_IMG} alt="Obsidian Aurora mirror" className="w-full h-full object-cover animate-float" />
+                <div className="absolute inset-0 ring-1 ring-inset ring-gold/20" />
+              </div>
+              <div className="absolute -bottom-6 -left-6 glass px-5 py-4 hidden md:block">
+                <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Edition</div>
+                <div className="font-serif text-xl text-cream">Obsidian Aurora №03</div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </div>
+
+      {/* Marquee */}
+      <div className="relative border-y border-white/5 py-6 overflow-hidden">
+        <div className="marquee font-serif text-2xl md:text-3xl text-cream/40 italic">
+          {Array.from({ length: 2 }).map((_, j) => (
+            <div key={j} className="flex gap-16 shrink-0">
+              {["Handpoured in Mumbai", "· Anti-yellowing epoxy ·", "5mm scatter-proof glass", "· 1-inch golden aluminum border ·", "Real crushed crystal", "· 100% original ·"].map(
+                (t, i) => (
+                  <span key={`${j}-${i}`}>{t}</span>
+                ),
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+export default Hero;
