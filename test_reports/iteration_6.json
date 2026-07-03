@@ -1,0 +1,27 @@
+{
+  "summary": "Frontend-only verification of Footer social/WhatsApp link updates for ArtyFex. 3 of 4 spec items pass. Regression across /, /shop, /admin, /account, /policies/privacy is clean (0 console errors on all 5 pages). One spec item fails: the Contact column still shows old phone tel:+919819973850 (+91 98199 73850) instead of the required WhatsApp link wa.me/919970107760 (+91 99701 07760).",
+  "tested_scope": ["frontend", "integration"],
+  "passed": [
+    "Instagram icon href = https://www.instagram.com/artyfex.in with target=_blank",
+    "Pinterest icon href = https://in.pinterest.com/artyfexin/ with target=_blank",
+    "Amazon icon href = https://www.amazon.in/s?k=ArtyFex&ref=bl_dp_s_web_0 with target=_blank (Facebook replaced by Amazon as expected)",
+    "New WhatsApp icon button visible in social row with href https://wa.me/919970107760?text=Hi%20ArtyFex%20... target=_blank and aria-label='WhatsApp'",
+    "4 footer social/action SVG icons render (Instagram, Pinterest, Amazon, WhatsApp)",
+    "Contact column email link = mailto:artyfex@artyfex.in (correct)",
+    "Regression: /, /shop, /admin, /account, /policies/privacy all load with 0 console errors"
+  ],
+  "failed": [
+    {
+      "area": "Footer.jsx - Contact column phone link",
+      "issue": "Spec requires Contact column to show WhatsApp phone '+91 99701 07760' linking to https://wa.me/919970107760, but the code still shows the old number '+91 98199 73850' with href='tel:+919819973850'. Only the icon-row WhatsApp link uses wa.me/919970107760; the contact column phone was not updated.",
+      "evidence": "Footer.jsx line 61: <a href=\"tel:+919819973850\">+91 98199 73850</a>. DOM query on live site also confirmed tel:+919819973850 is present and no wa.me/919970107760 link exists inside the Contact column (only 1 wa.me link total in footer, which is the icon).",
+      "priority": "MEDIUM"
+    }
+  ],
+  "action_items": [
+    "In /app/frontend/src/components/Footer.jsx line 61, replace `<a href=\"tel:+919819973850\" ...>+91 98199 73850</a>` with `<a href=\"https://wa.me/919970107760\" target=\"_blank\" rel=\"noreferrer\" className=\"text-cream/70 hover:text-gold\">+91 99701 07760</a>` to satisfy spec item #3."
+  ],
+  "success_rate": {"backend": "n/a (not tested per request)", "frontend": "75% (3/4 spec items)"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}
