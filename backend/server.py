@@ -14,6 +14,8 @@ from datetime import datetime, timezone, timedelta
 import bcrypt
 import jwt as pyjwt
 import razorpay
+import asyncio
+import resend
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -29,6 +31,76 @@ ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@artyfex.in')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'ArtyFex@2026')
 
 rzp_client = razorpay.Client(auth=(RZP_KEY, RZP_SECRET)) if RZP_KEY else None
+
+# Resend email config
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
+SENDER_NAME = os.environ.get('SENDER_NAME', 'ArtyFex Atelier')
+if RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
+
+
+async def send_email(to_email: str, subject: str, html: str):
+    """Non-blocking send. Silent-fails so email issues never break API responses."""
+    if not RESEND_API_KEY:
+        logging.warning("RESEND_API_KEY not configured — skipping email")
+        return
+    try:
+        params = {"from": f"{SENDER_NAME} <{SENDER_EMAIL}>", "to": [to_email], "subject": subject, "html": html}
+        await asyncio.to_thread(resend.Emails.send, params)
+        logging.info(f"Email sent to {to_email}: {subject}")
+    except Exception as e:
+        logging.error(f"Email send failed for {to_email}: {e}")
+
+
+def render_return_email(status: str, customer_name: str, order_number: str, admin_notes: Optional[str], is_genuine: Optional[bool]) -> tuple[str, str]:
+    approved = status == "approved"
+    accent = "#D4AF37" if approved else "#E37878"
+    headline = "Your return has been approved" if approved else "Your return could not be approved"
+    intro = (
+        "Our atelier has reviewed your return request and approved it. Our reverse-pickup team will reach out within 24 hours to schedule the collection."
+        if approved else
+        "After careful inspection our atelier could not approve this return. See the note from our team below for details."
+    )
+    subject = f"[ArtyFex] Return {status} · {order_number}"
+    genuine_line = ""
+    if approved and is_genuine is True:
+        genuine_line = '<p style="margin:16px 0 0 0;color:#4ade80;font-size:12px;letter-spacing:1.6px;text-transform:uppercase;">Verified genuine · full refund eligible</p>'
+    elif approved and is_genuine is False:
+        genuine_line = '<p style="margin:16px 0 0 0;color:#fbbf24;font-size:12px;letter-spacing:1.6px;text-transform:uppercase;">Restocking / repair fees may apply</p>'
+    notes_block = ""
+    if admin_notes:
+        notes_block = f'''
+        <div style="margin-top:28px;padding:20px;background:#141414;border-left:3px solid {accent};">
+          <div style="font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:#888;margin-bottom:8px;">Note from atelier</div>
+          <div style="color:#e8e2d5;font-size:14px;line-height:1.6;">{admin_notes}</div>
+        </div>'''
+    html = f'''<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#0a0a0a;font-family:Georgia,serif;color:#e8e2d5;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0a0a0a;padding:48px 24px;">
+    <tr><td align="center">
+      <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="max-width:560px;background:#111;border:1px solid #1f1f1f;">
+        <tr><td style="padding:40px 40px 24px 40px;border-bottom:1px solid #1f1f1f;">
+          <div style="font-size:11px;letter-spacing:2.4px;text-transform:uppercase;color:{accent};">ArtyFex · Atelier</div>
+          <h1 style="margin:16px 0 0 0;font-size:28px;font-weight:normal;color:#f5efdf;font-family:Georgia,serif;">{headline}</h1>
+          <div style="margin-top:8px;font-size:12px;color:#888;">Order · <span style="font-family:monospace;color:{accent};">{order_number}</span></div>
+        </td></tr>
+        <tr><td style="padding:32px 40px 40px 40px;">
+          <p style="margin:0;font-size:15px;line-height:1.7;color:#e8e2d5;">Dear {customer_name},</p>
+          <p style="margin:16px 0 0 0;font-size:15px;line-height:1.7;color:#c9c2b1;">{intro}</p>
+          {genuine_line}
+          {notes_block}
+          <div style="margin-top:32px;padding-top:24px;border-top:1px solid #1f1f1f;font-size:12px;color:#888;line-height:1.8;">
+            You can track this request anytime in <a href="https://artyfex.in/account" style="color:{accent};text-decoration:none;">your account → Returns</a>.
+          </div>
+          <p style="margin-top:32px;font-size:14px;color:#c9c2b1;">With care,<br/><span style="color:{accent};font-style:italic;">The ArtyFex Atelier</span></p>
+        </td></tr>
+      </table>
+      <div style="margin-top:24px;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:#555;">100% Handmade · Mumbai</div>
+    </td></tr>
+  </table>
+</body></html>'''
+    return subject, html
 
 app = FastAPI(title="ArtyFex API")
 api_router = APIRouter(prefix="/api")
@@ -435,7 +507,60 @@ async def admin_update_return(return_id: str, payload: ReturnStatusUpdate, admin
     res = await db.returns.update_one({"id": return_id}, {"$set": update})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Return not found")
+    # Fire customer email on approved / rejected (fire-and-forget)
+    if payload.status in ("approved", "rejected"):
+        rr = await db.returns.find_one({"id": return_id}, {"_id": 0})
+        if rr:
+            order = await db.orders.find_one({"order_number": rr["order_number"]}, {"_id": 0})
+            customer_name = (order or {}).get("customer", {}).get("name", "there")
+            subject, html = render_return_email(
+                status=payload.status,
+                customer_name=customer_name,
+                order_number=rr["order_number"],
+                admin_notes=rr.get("admin_notes"),
+                is_genuine=rr.get("is_genuine"),
+            )
+            asyncio.create_task(send_email(rr["user_email"], subject, html))
     return {"ok": True}
+
+
+# ---------- WISHLIST ---------- #
+class WishlistToggleOut(BaseModel):
+    product_id: str
+    action: str  # added | removed
+
+
+@api_router.get("/me/wishlist")
+async def my_wishlist(user=Depends(get_current_user)):
+    items = await db.wishlist.find({"user_email": user["email"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    # Enrich with product data
+    result = []
+    for it in items:
+        prod = await db.products.find_one({"id": it["product_id"]}, {"_id": 0})
+        if prod:
+            result.append({"product_id": it["product_id"], "added_at": it["created_at"], "product": prod})
+    return result
+
+
+@api_router.post("/me/wishlist/{product_id}")
+async def add_to_wishlist(product_id: str, user=Depends(get_current_user)):
+    prod = await db.products.find_one({"id": product_id}, {"_id": 0, "id": 1})
+    if not prod:
+        raise HTTPException(status_code=404, detail="Product not found")
+    existing = await db.wishlist.find_one({"user_email": user["email"], "product_id": product_id})
+    if existing:
+        return {"product_id": product_id, "action": "already_saved"}
+    await db.wishlist.insert_one({
+        "id": str(uuid.uuid4()), "user_email": user["email"],
+        "product_id": product_id, "created_at": now_iso(),
+    })
+    return {"product_id": product_id, "action": "added"}
+
+
+@api_router.delete("/me/wishlist/{product_id}")
+async def remove_from_wishlist(product_id: str, user=Depends(get_current_user)):
+    await db.wishlist.delete_one({"user_email": user["email"], "product_id": product_id})
+    return {"product_id": product_id, "action": "removed"}
 
 
 # ---------- USER (CUSTOMER) ROUTES ---------- #

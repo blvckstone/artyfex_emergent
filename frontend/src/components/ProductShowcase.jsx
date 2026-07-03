@@ -1,13 +1,19 @@
 import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Minus, ShoppingBag, Check } from "lucide-react";
+import { Plus, Minus, ShoppingBag, Check, Heart, ArrowUpRight } from "lucide-react";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import { useCart } from "@/context/CartContext";
+import { useWishlist } from "@/context/WishlistContext";
+import { useAuth } from "@/context/AuthContext";
 import { IDS } from "@/constants/testIds";
 
 const formatINR = (n) => `₹${n.toLocaleString("en-IN")}`;
 
 export const ProductShowcase = ({ product }) => {
   const { addItem } = useCart();
+  const { has, toggle } = useWishlist();
+  const { user, openAuth } = useAuth();
   const [variantKey, setVariantKey] = useState(product.variants[0].key);
   const [qty, setQty] = useState(1);
   const [galleryIdx, setGalleryIdx] = useState(0);
@@ -19,11 +25,21 @@ export const ProductShowcase = ({ product }) => {
   );
 
   const mainImage = activeVariant.image || product.gallery[galleryIdx] || product.hero_image;
+  const inWishlist = has(product.id);
+  const lowStock = product.stock > 0 && product.stock <= 3;
 
   const handleAdd = () => {
     addItem(product, variantKey, qty);
     setAdded(true);
     setTimeout(() => setAdded(false), 1600);
+  };
+
+  const handleWishlist = async () => {
+    if (!user) { openAuth("login"); toast.info("Sign in to save pieces"); return; }
+    try {
+      const a = await toggle(product);
+      toast.success(a === "added" ? "Saved to wishlist" : "Removed from wishlist");
+    } catch { toast.error("Could not update wishlist"); }
   };
 
   return (
@@ -93,6 +109,11 @@ export const ProductShowcase = ({ product }) => {
               </span>
             </div>
             <p className="text-xs text-cream/50 mt-2">Inclusive of all taxes · Insured white-glove delivery</p>
+            {lowStock && (
+              <div className="mt-3 inline-flex items-center gap-2 text-xs uppercase tracking-luxury text-yellow-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" /> Only {product.stock} left
+              </div>
+            )}
 
             <p className="mt-8 text-base text-cream/70 leading-relaxed font-light max-w-xl">
               {product.description}
@@ -200,6 +221,25 @@ export const ProductShowcase = ({ product }) => {
             <p className="mt-4 text-[11px] text-cream/40 leading-relaxed">
               Note: No inbuilt LED lighting. Ambient light shown in imagery is for styling visualisation only.
             </p>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                data-testid="hero-wishlist"
+                onClick={handleWishlist}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 border text-[10px] uppercase tracking-luxury transition-colors ${
+                  inWishlist ? "border-gold/60 text-gold bg-gold/5" : "border-white/15 text-cream/70 hover:border-gold/40 hover:text-gold"
+                }`}
+              >
+                <Heart className={`w-3.5 h-3.5 ${inWishlist ? "fill-gold" : ""}`} /> {inWishlist ? "Saved" : "Wishlist"}
+              </button>
+              <Link
+                to={`/product/${product.slug}`}
+                data-testid="hero-view-details"
+                className="inline-flex items-center gap-2 px-4 py-2.5 border border-white/15 text-cream/70 text-[10px] uppercase tracking-luxury hover:border-gold/40 hover:text-gold"
+              >
+                Full details <ArrowUpRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
         </div>
       </div>

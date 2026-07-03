@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useWishlist } from "@/context/WishlistContext";
+import { useCart } from "@/context/CartContext";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { Package, RotateCcw, User, LogOut, Loader2 } from "lucide-react";
+import { Package, RotateCcw, User, LogOut, Loader2, Heart, ShoppingBag, X } from "lucide-react";
 import { toast } from "sonner";
 
 const formatINR = (n) => `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -17,6 +19,8 @@ const statusColor = (s) => ({
 
 export default function AccountPage() {
   const { user, ready, logout, openAuth, authedApi } = useAuth();
+  const { items: wishItems, toggle: toggleWish, refresh: refreshWish } = useWishlist();
+  const { addItem } = useCart();
   const nav = useNavigate();
   const [tab, setTab] = useState("orders");
   const [orders, setOrders] = useState([]);
@@ -54,6 +58,7 @@ export default function AccountPage() {
   const tabs = [
     { key: "orders", label: "Orders", icon: Package },
     { key: "returns", label: "Returns", icon: RotateCcw },
+    { key: "wishlist", label: "Wishlist", icon: Heart },
     { key: "profile", label: "Profile", icon: User },
   ];
 
@@ -162,6 +167,53 @@ export default function AccountPage() {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {!loading && tab === "wishlist" && (
+            <div>
+              {wishItems.length === 0 ? (
+                <div className="hairline p-10 text-center text-cream/40">
+                  Nothing saved yet. <Link to="/shop" className="text-gold hover:text-cream">Browse the collection →</Link>
+                </div>
+              ) : (
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {wishItems.map((w) => {
+                    const p = w.product;
+                    return (
+                      <div key={w.product_id} className="group relative bg-ink-900 border border-white/5 hover:border-gold/30 transition-colors" data-testid={`account-wishlist-${p.slug}`}>
+                        <Link to={`/product/${p.slug}`} className="block">
+                          <div className="aspect-[4/5] overflow-hidden relative">
+                            <img src={p.hero_image} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-[1000ms]" />
+                          </div>
+                        </Link>
+                        <button
+                          data-testid={`account-wishlist-remove-${p.slug}`}
+                          onClick={async () => { await toggleWish(p); refreshWish(); toast.success("Removed from wishlist"); }}
+                          className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center bg-black/60 border border-white/10 text-cream/70 hover:text-red-400 hover:border-red-400/40 backdrop-blur-md"
+                          aria-label="Remove"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                        <div className="p-5">
+                          <div className="text-[10px] uppercase tracking-luxury text-gold-soft">{p.size}</div>
+                          <Link to={`/product/${p.slug}`} className="block mt-2 font-serif text-lg hover:text-gold">{p.name.split(" — ")[0]}</Link>
+                          <div className="mt-3 flex items-center justify-between">
+                            <div className="font-serif text-xl">₹{(p.price_inr || 0).toLocaleString("en-IN")}</div>
+                            <button
+                              data-testid={`account-wishlist-move-${p.slug}`}
+                              onClick={() => { addItem(p, p.variants[0].key, 1); toast.success("Moved to cart"); }}
+                              className="inline-flex items-center gap-2 text-[10px] uppercase tracking-luxury text-gold hover:text-cream border border-gold/40 px-3 py-2"
+                            >
+                              <ShoppingBag className="w-3 h-3" /> Move to cart
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

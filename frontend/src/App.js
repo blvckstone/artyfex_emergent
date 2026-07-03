@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import { CartProvider, useCart } from "@/context/CartContext";
 import { AuthProvider } from "@/context/AuthContext";
+import { WishlistProvider } from "@/context/WishlistContext";
 import { fetchProducts, fetchReviews } from "@/lib/api";
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
@@ -20,6 +21,7 @@ import AdminPage from "@/pages/AdminPage";
 import ShopPage from "@/pages/ShopPage";
 import AccountPage from "@/pages/AccountPage";
 import LegalPage from "@/pages/LegalPage";
+import ProductPage from "@/pages/ProductPage";
 
 function Home() {
   const [products, setProducts] = useState([]);
@@ -67,6 +69,7 @@ function StoreShell() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/shop" element={<ShopPage />} />
+        <Route path="/product/:slug" element={<ProductPage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="/policies/:slug" element={<LegalPage />} />
       </Routes>
@@ -86,9 +89,11 @@ export default function App() {
           path="/*"
           element={
             <AuthProvider>
-              <CartProvider>
-                <StoreShell />
-              </CartProvider>
+              <WishlistProvider>
+                <CartProvider>
+                  <StoreShell />
+                </CartProvider>
+              </WishlistProvider>
             </AuthProvider>
           }
         />
