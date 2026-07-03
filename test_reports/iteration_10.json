@@ -1,0 +1,53 @@
+{
+  "summary": "Phase C tested: backend fully green (29/29 pytest), admin CRM UI works end-to-end (Customers tab, search, drawer, send-message). CRITICAL frontend bugs found in /account: (1) Messages tab has no rendered content — no message list, no empty state, none of the account-message-{id}/account-message-mark-{id}/account-message-unread-{id} testids exist. (2) Profile tab renders read-only Info panel instead of <ProfileEditor/> — profile-editor, profile-name, profile-phone, profile-save testids all missing though the ProfileEditor component is defined but never mounted. AuthContext.updateProfile is fine.",
+  "tested_scope": ["backend", "frontend"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AccountPage — Profile tab", "issue": "ProfileEditor component is defined (lines 272-335 of AccountPage.jsx) but NEVER rendered. The 'profile' tab still shows the old read-only <Info> block (lines 250-258). Testids profile-editor, profile-name, profile-phone, profile-save are absent from the DOM. Users cannot edit name/phone.", "selector": "[data-testid=profile-editor]", "priority": "CRITICAL"},
+      {"component": "AccountPage — Messages tab", "issue": "Messages tab is fully missing its content block. There is no `{tab === 'messages' && ...}` render branch in AccountPage.jsx. Clicking the Messages tab shows a blank area — no messages list, no empty state, no account-message-{id}, no account-message-unread-{id}, no account-message-mark-{id}, no read/unread UI. Backend messages ARE fetched into state but never displayed.", "selector": "[data-testid^=account-message-]", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [
+      {"flow": "Admin sends message → customer sees it under Messages tab with unread badge", "issue": "Cannot complete because Messages tab renders nothing. Backend delivers messages correctly (verified: unreadCount memo sees them) but UI branch is missing. The unread badge on the tab itself works if unreadCount>0 (memo present), and the account-unread-banner will render, but clicking it switches to a blank Messages tab.", "affected_selectors": ["[data-testid=account-tab-badge-messages]", "[data-testid=account-unread-banner]", "[data-testid^=account-message-]"]}
+    ],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend PATCH /api/auth/me — auth required (401), updates name+phone, GET /auth/me reflects change, rejects name<2 with 400, rejects phone<7 or >20 with 400, empty phone allowed",
+    "Backend GET /api/admin/users — admin required, enriched with orders_count/total_spent_inr/last_order_at/messages_count",
+    "Backend GET /api/admin/users?q= — filters by email, phone, name (case-insensitive)",
+    "Backend total_spent_inr excludes cancelled orders (verified by cancelling one order then creating a delivered one)",
+    "Backend GET /api/admin/users/{email} — returns {user, orders, returns, messages, wishlist_count}; 404 for unknown; admin required",
+    "Backend POST /api/admin/messages — 200 with full AdminMessage (id, created_by, read=False, read_at=None); 400 empty subject/body (whitespace-only trimmed); 404 unknown user; admin required",
+    "Backend GET /api/admin/messages — all + user_email filter; DELETE by id returns {deleted:true}; 404 for unknown id",
+    "Backend GET /api/me/messages — auth required, only own messages, sorted created_at desc, other user's messages not visible",
+    "Backend PATCH /api/me/messages/{id}/read — returns {ok:true}, sets read=True and read_at; 404 on other user's msg or unknown id",
+    "Frontend /admin Customers tab — sidebar 'Customers' shows, Users tab clickable, search input works, user row + View·Message button both open the drawer, drawer has 3 stats (Orders/Lifetime/Wishlist), Send-message form works, 'Message sent to customer' toast appears, subject clears, message immediately shows in drawer's Message History with 'Unread' badge"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_phase_c.py",
+    "/app/test_reports/pytest/phase_c_results.xml"
+  ],
+  "action_items": [
+    "FIX AccountPage.jsx: add `{!loading && tab === 'messages' && (...)}` render block that maps `messages` to card elements with data-testid=account-message-{id}, account-message-unread-{id} (gold pulsing dot when !m.read), and account-message-mark-{id} button calling markMessageRead(m.id). Show subject, body, timestamp. Empty state when messages.length===0.",
+    "FIX AccountPage.jsx line 250-258: replace the read-only <Info> block on the `profile` tab with `<ProfileEditor user={user} updateProfile={updateProfile} />` so the edit form is actually rendered.",
+    "After both fixes: verify Hello, <firstName> greeting updates immediately after profile save (updateProfile setUser is already correct in AuthContext)."
+  ],
+  "critical_code_review_comments": [
+    "AccountPage.jsx defines ProfileEditor (lines 272-335) but never uses it — dead code until wired.",
+    "AccountPage.jsx unreadCount memo, unread banner, and account-tab-badge-messages all work — only the Messages tab content branch is missing.",
+    "AuthContext.updateProfile replaces user with {name,email,phone} — drops other server-provided fields (created_at, etc). Currently harmless since UI only uses .name/.email/.phone but consider spreading: setUser(prev => ({...prev, ...data})).",
+    "server.py update_profile allows empty phone (used to clear); good. Rejects invalid non-empty phone lengths — correct.",
+    "server.py admin_list_users runs N+1 queries (per-user find orders + count_documents messages). Fine at current scale but should be an aggregation pipeline once user base grows."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase_c.py (new — 29 tests)"
+  ],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "50% — admin CRM works, customer /account Messages+Profile tabs broken"},
+  "test_credentials": "Admin: admin@artyfex.in / ArtyFex@2026. Test user (kept in DB for main-agent verification): TEST_phc_ui@example.com / password123. Other TEST_phc_* users auto-cleaned.",
+  "seed_data_creation": "Backend suite created and cleaned up TEST_phc_* users, orders, messages. Left TEST_phc_ui@example.com in DB with 1 admin message ('UI subj') for main-agent UI retesting.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend Phase C is complete and locked (test_phase_c.py 29/29). The two remaining bugs are pure frontend AccountPage.jsx JSX — Messages tab render branch missing entirely, Profile tab still renders read-only Info instead of ProfileEditor. Both fixes are localized to /app/frontend/src/pages/AccountPage.jsx. Test user TEST_phc_ui@example.com already has 1 unread admin message from playwright run — perfect for retesting the Messages tab flow.",
+  "rca of the issue": "During Phase C implementation, ProfileEditor + Messages tab content JSX were added to AccountPage.jsx but never wired into the render tree. The tabs config array, unreadCount memo, banner, and message-fetch effect were all added, but the two `{tab === 'X'}` conditional blocks that would display the actual tab content were omitted. Reproduce: login as any user → /account → click Messages (blank) or Profile (read-only). Fix: add both missing render branches."
+}

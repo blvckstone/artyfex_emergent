@@ -38,8 +38,15 @@ export const AuthProvider = ({ children }) => {
     return inst;
   };
 
+  const updateProfile = async (updates) => {
+    const inst = authedApi();
+    const { data } = await inst.patch("/auth/me", updates);
+    setUser(data);
+    return data;
+  };
+
   return (
-    <AuthContext.Provider value={{ token, user, ready, login, signup, logout, dialogOpen, setDialogOpen, dialogMode, openAuth, authedApi }}>
+    <AuthContext.Provider value={{ token, user, ready, login, signup, logout, updateProfile, dialogOpen, setDialogOpen, dialogMode, openAuth, authedApi }}>
       {children}
     </AuthContext.Provider>
   );

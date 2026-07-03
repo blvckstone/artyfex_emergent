@@ -237,6 +237,25 @@ class ReturnStatusUpdate(BaseModel):
     admin_notes: Optional[str] = None
 
 
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class AdminMessageIn(BaseModel):
+    user_email: EmailStr
+    subject: str
+    body: str
+
+
+class AdminMessage(AdminMessageIn):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: str = Field(default_factory=now_iso)
+    created_by: str = ""
+    read: bool = False
+    read_at: Optional[str] = None
+
+
 # Strict return window enforced from delivery date
 RETURN_WINDOW_DAYS = 3
 
@@ -655,6 +674,102 @@ async def request_return(payload: ReturnRequestIn, user=Depends(get_current_user
 @api_router.get("/me/returns", response_model=List[ReturnRequest])
 async def my_returns(user=Depends(get_current_user)):
     return await db.returns.find({"user_email": user["email"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+
+# ---------- PROFILE ---------- #
+@api_router.patch("/auth/me")
+async def update_profile(payload: ProfileUpdate, user=Depends(get_current_user)):
+    updates = {}
+    if payload.name is not None:
+        name = payload.name.strip()
+        if len(name) < 2:
+            raise HTTPException(status_code=400, detail="Name must be at least 2 characters.")
+        updates["name"] = name
+    if payload.phone is not None:
+        phone = payload.phone.strip()
+        if phone and (len(phone) < 7 or len(phone) > 20):
+            raise HTTPException(status_code=400, detail="Please enter a valid phone number.")
+        updates["phone"] = phone
+    if not updates:
+        raise HTTPException(status_code=400, detail="No updates provided.")
+    await db.users.update_one({"email": user["email"]}, {"$set": updates})
+    fresh = await db.users.find_one({"email": user["email"]}, {"_id": 0, "password_hash": 0})
+    return {"name": fresh["name"], "email": fresh["email"], "phone": fresh.get("phone", "")}
+
+
+# ---------- CUSTOMER MESSAGES ---------- #
+@api_router.get("/me/messages")
+async def my_messages(user=Depends(get_current_user)):
+    return await db.admin_messages.find({"user_email": user["email"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+
+@api_router.patch("/me/messages/{msg_id}/read")
+async def mark_message_read(msg_id: str, user=Depends(get_current_user)):
+    res = await db.admin_messages.update_one(
+        {"id": msg_id, "user_email": user["email"]},
+        {"$set": {"read": True, "read_at": now_iso()}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"ok": True}
+
+
+# ---------- ADMIN — USERS (CRM) ---------- #
+@api_router.get("/admin/users")
+async def admin_list_users(q: Optional[str] = None, admin=Depends(get_current_admin)):
+    query = {}
+    if q:
+        query = {"$or": [{"email": {"$regex": q, "$options": "i"}}, {"name": {"$regex": q, "$options": "i"}}, {"phone": {"$regex": q, "$options": "i"}}]}
+    users = await db.users.find(query, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(500)
+    # Enrich with order aggregates
+    for u in users:
+        orders = await db.orders.find({"customer.email": u["email"], "status": {"$nin": ["pending_payment", "cancelled", "payment_failed"]}}, {"_id": 0, "total_inr": 1, "created_at": 1}).to_list(500)
+        u["orders_count"] = len(orders)
+        u["total_spent_inr"] = sum(o.get("total_inr", 0) for o in orders)
+        u["last_order_at"] = max((o["created_at"] for o in orders), default=None)
+        u["messages_count"] = await db.admin_messages.count_documents({"user_email": u["email"]})
+    return users
+
+
+@api_router.get("/admin/users/{email}")
+async def admin_user_detail(email: str, admin=Depends(get_current_admin)):
+    user = await db.users.find_one({"email": email}, {"_id": 0, "password_hash": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    orders = await db.orders.find({"customer.email": email}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    returns = await db.returns.find({"user_email": email}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    messages = await db.admin_messages.find({"user_email": email}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    wishlist = await db.wishlist.count_documents({"user_email": email})
+    return {"user": user, "orders": orders, "returns": returns, "messages": messages, "wishlist_count": wishlist}
+
+
+# ---------- ADMIN — MESSAGES ---------- #
+@api_router.post("/admin/messages", response_model=AdminMessage)
+async def admin_create_message(payload: AdminMessageIn, admin=Depends(get_current_admin)):
+    subject = payload.subject.strip()
+    body = payload.body.strip()
+    if not subject or not body:
+        raise HTTPException(status_code=400, detail="Subject and message are required.")
+    target = await db.users.find_one({"email": payload.user_email}, {"_id": 0, "name": 1, "email": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="Recipient user not found")
+    msg = AdminMessage(user_email=payload.user_email, subject=subject, body=body, created_by=admin["email"])
+    await db.admin_messages.insert_one(msg.model_dump())
+    return msg
+
+
+@api_router.get("/admin/messages")
+async def admin_list_messages(user_email: Optional[str] = None, admin=Depends(get_current_admin)):
+    query = {"user_email": user_email} if user_email else {}
+    return await db.admin_messages.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api_router.delete("/admin/messages/{msg_id}")
+async def admin_delete_message(msg_id: str, admin=Depends(get_current_admin)):
+    res = await db.admin_messages.delete_one({"id": msg_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"deleted": True}
 
 
 app.include_router(api_router)

@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useCart } from "@/context/CartContext";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { Package, RotateCcw, User, LogOut, Loader2, Heart, ShoppingBag, X } from "lucide-react";
+import { Package, RotateCcw, User, LogOut, Loader2, Heart, ShoppingBag, X, Mail, Save } from "lucide-react";
 import { toast } from "sonner";
 
 const formatINR = (n) => `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -18,15 +18,18 @@ const statusColor = (s) => ({
 }[s] || "text-cream");
 
 export default function AccountPage() {
-  const { user, ready, logout, openAuth, authedApi } = useAuth();
+  const { user, ready, logout, openAuth, authedApi, updateProfile } = useAuth();
   const { items: wishItems, toggle: toggleWish, refresh: refreshWish } = useWishlist();
   const { addItem } = useCart();
   const nav = useNavigate();
   const [tab, setTab] = useState("orders");
   const [orders, setOrders] = useState([]);
   const [returns, setReturns] = useState([]);
+  const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [returnFor, setReturnFor] = useState(null);
+
+  const unreadCount = useMemo(() => messages.filter((m) => !m.read).length, [messages]);
 
   useEffect(() => {
     if (ready && !user) openAuth("login");
@@ -35,11 +38,18 @@ export default function AccountPage() {
   useEffect(() => {
     if (!user) return;
     const a = authedApi();
-    Promise.all([a.get("/me/orders"), a.get("/me/returns")])
-      .then(([o, r]) => { setOrders(o.data); setReturns(r.data); })
+    Promise.all([a.get("/me/orders"), a.get("/me/returns"), a.get("/me/messages")])
+      .then(([o, r, m]) => { setOrders(o.data); setReturns(r.data); setMessages(m.data); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [user, authedApi]);
+
+  const markMessageRead = async (id) => {
+    try {
+      await authedApi().patch(`/me/messages/${id}/read`);
+      setMessages((arr) => arr.map((m) => (m.id === id ? { ...m, read: true } : m)));
+    } catch { /* silent */ }
+  };
 
   if (!ready) return <div className="min-h-screen bg-ink-950" />;
   if (!user) {
@@ -59,6 +69,7 @@ export default function AccountPage() {
     { key: "orders", label: "Orders", icon: Package },
     { key: "returns", label: "Returns", icon: RotateCcw },
     { key: "wishlist", label: "Wishlist", icon: Heart },
+    { key: "messages", label: "Messages", icon: Mail, badge: unreadCount },
     { key: "profile", label: "Profile", icon: User },
   ];
 
@@ -86,14 +97,33 @@ export default function AccountPage() {
           <button data-testid="account-logout" onClick={() => { logout(); nav("/"); }} className="text-xs uppercase tracking-luxury text-cream/60 hover:text-red-400 flex items-center gap-2"><LogOut className="w-3.5 h-3.5" />Sign out</button>
         </div>
 
-        <div className="mt-10 flex gap-2 border-b border-white/5">
+        <div className="mt-10 flex gap-2 border-b border-white/5 overflow-x-auto">
           {tabs.map((t) => (
             <button key={t.key} data-testid={`account-tab-${t.key}`} onClick={() => setTab(t.key)}
-              className={`flex items-center gap-2 px-4 py-3 text-xs uppercase tracking-luxury border-b-2 -mb-px ${tab===t.key?"border-gold text-gold":"border-transparent text-cream/50"}`}>
+              className={`relative flex items-center gap-2 px-4 py-3 text-xs uppercase tracking-luxury border-b-2 -mb-px whitespace-nowrap ${tab===t.key?"border-gold text-gold":"border-transparent text-cream/50"}`}>
               <t.icon className="w-3.5 h-3.5" />{t.label}
+              {t.badge > 0 && (
+                <span data-testid={`account-tab-badge-${t.key}`} className="ml-1 min-w-[18px] h-[18px] px-1.5 flex items-center justify-center bg-gold text-ink-950 text-[10px] rounded-full font-medium">
+                  {t.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
+
+        {!loading && unreadCount > 0 && tab !== "messages" && (
+          <button
+            data-testid="account-unread-banner"
+            onClick={() => setTab("messages")}
+            className="mt-6 w-full flex items-center gap-3 border border-gold/40 bg-gold/5 hover:bg-gold/10 px-5 py-3 text-left transition-colors"
+          >
+            <Mail className="w-4 h-4 text-gold" />
+            <span className="text-sm text-cream">
+              You have <span className="text-gold font-medium">{unreadCount}</span> unread message{unreadCount === 1 ? "" : "s"} from our atelier
+            </span>
+            <span className="ml-auto text-[10px] uppercase tracking-luxury text-gold">Read now →</span>
+          </button>
+        )}
 
         <div className="mt-10">
           {loading && <div className="text-cream/40 text-sm"><Loader2 className="w-4 h-4 animate-spin inline" /> Loading…</div>}
@@ -237,6 +267,71 @@ export default function AccountPage() {
 
 function Info({ label, value }) {
   return (<div><div className="text-[10px] uppercase tracking-luxury text-cream/50">{label}</div><div className="mt-1 text-cream">{value}</div></div>);
+}
+
+function ProfileEditor({ user, updateProfile }) {
+  const [name, setName] = useState(user.name || "");
+  const [phone, setPhone] = useState(user.phone || "");
+  const [saving, setSaving] = useState(false);
+  const dirty = name.trim() !== (user.name || "") || phone.trim() !== (user.phone || "");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!dirty) return;
+    setSaving(true);
+    try {
+      await updateProfile({ name: name.trim(), phone: phone.trim() });
+      toast.success("Profile updated");
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Update failed");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <form onSubmit={submit} className="hairline p-8 max-w-xl" data-testid="profile-editor">
+      <div className="text-[10px] uppercase tracking-luxury text-gold-soft mb-2">Your details</div>
+      <p className="text-xs text-cream/50 mb-6">Update your name and phone. Email is your account identity and cannot be changed.</p>
+      <div className="grid sm:grid-cols-2 gap-5">
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Name</span>
+          <input
+            data-testid="profile-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="mt-1.5 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2.5 text-sm text-cream outline-none"
+            required
+            minLength={2}
+          />
+        </label>
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Phone</span>
+          <input
+            data-testid="profile-phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            type="tel"
+            placeholder="+91 98765 43210"
+            className="mt-1.5 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2.5 text-sm text-cream outline-none"
+          />
+        </label>
+        <div className="sm:col-span-2">
+          <Info label="Email (read-only)" value={user.email} />
+        </div>
+      </div>
+      <div className="mt-8 flex items-center gap-3">
+        <button
+          data-testid="profile-save"
+          type="submit"
+          disabled={!dirty || saving}
+          className="inline-flex items-center gap-2 bg-gold text-ink-950 px-6 py-3 text-xs uppercase tracking-luxury disabled:opacity-40 disabled:cursor-not-allowed hover:bg-cream"
+        >
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+          {saving ? "Saving…" : "Save changes"}
+        </button>
+        {dirty && !saving && <span className="text-xs text-cream/40">Unsaved changes</span>}
+      </div>
+    </form>
+  );
 }
 
 function ReturnDialog({ order, onCancel, onSubmit }) {

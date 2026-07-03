@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast, Toaster } from "sonner";
-import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw } from "lucide-react";
+import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search } from "lucide-react";
 
 const TOKEN_KEY = "artyfex_admin_token";
 
@@ -67,6 +67,9 @@ export default function AdminPage() {
   const [leads, setLeads] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [returns, setReturns] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [userDetail, setUserDetail] = useState(null);
   const [editing, setEditing] = useState(null); // null | product obj | "new"
   const [saving, setSaving] = useState(false);
 
@@ -75,12 +78,12 @@ export default function AdminPage() {
   const reload = React.useCallback(async () => {
     if (!token) return;
     try {
-      const [s, p, o, l, r, rt] = await Promise.all([
+      const [s, p, o, l, r, rt, u] = await Promise.all([
         authed.get("/admin/stats"), authed.get("/products"),
         authed.get("/admin/orders"), authed.get("/admin/leads"), authed.get("/reviews"),
-        authed.get("/admin/returns"),
+        authed.get("/admin/returns"), authed.get("/admin/users"),
       ]);
-      setStats(s.data); setProducts(p.data); setOrders(o.data); setLeads(l.data); setReviews(r.data); setReturns(rt.data);
+      setStats(s.data); setProducts(p.data); setOrders(o.data); setLeads(l.data); setReviews(r.data); setReturns(rt.data); setUsers(u.data);
     } catch (err) {
       if (err?.response?.status === 401) { localStorage.removeItem(TOKEN_KEY); setToken(""); }
     }
@@ -133,9 +136,38 @@ export default function AdminPage() {
     { key: "products", label: "Products", icon: Package },
     { key: "orders", label: "Orders", icon: ShoppingBag },
     { key: "returns", label: "Returns", icon: RotateCcw },
+    { key: "users", label: "Customers", icon: UserCircle },
     { key: "leads", label: "B2B Leads", icon: Users },
     { key: "reviews", label: "Reviews", icon: Star },
   ];
+
+  const openUserDetail = async (email) => {
+    try {
+      const { data } = await authed.get(`/admin/users/${encodeURIComponent(email)}`);
+      setUserDetail(data);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not load user");
+    }
+  };
+
+  const sendMessage = async (email, subject, body) => {
+    await authed.post("/admin/messages", { user_email: email, subject, body });
+    toast.success("Message sent to customer");
+    if (userDetail && userDetail.user.email === email) {
+      openUserDetail(email);
+    }
+    reload();
+  };
+
+  const filteredUsers = users.filter((u) => {
+    if (!userSearch.trim()) return true;
+    const q = userSearch.toLowerCase();
+    return (
+      u.email?.toLowerCase().includes(q) ||
+      u.name?.toLowerCase().includes(q) ||
+      (u.phone || "").toLowerCase().includes(q)
+    );
+  });
 
   const updateReturnStatus = async (id, patch) => {
     try {
@@ -277,6 +309,79 @@ export default function AdminPage() {
           </>
         )}
 
+        {tab === "users" && (
+          <>
+            <div className="flex items-end justify-between flex-wrap gap-4">
+              <div>
+                <h1 className="font-serif text-4xl">Customers</h1>
+                <div className="mt-2 text-xs text-cream/40">{users.length} registered · click a row to view full history & send a personal message</div>
+              </div>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-cream/40" />
+                <input
+                  data-testid="admin-users-search"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  placeholder="Search by name, email or phone…"
+                  className="pl-9 pr-3 py-2.5 bg-ink-950 border border-white/15 focus:border-gold text-sm text-cream w-80 max-w-full outline-none"
+                />
+              </div>
+            </div>
+            <div className="mt-6 hairline overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/5 text-[10px] uppercase tracking-luxury text-cream/40">
+                    <th className="px-4 py-3 text-left font-normal">Customer</th>
+                    <th className="px-4 py-3 text-left font-normal">Contact</th>
+                    <th className="px-4 py-3 text-right font-normal">Orders</th>
+                    <th className="px-4 py-3 text-right font-normal">Lifetime spend</th>
+                    <th className="px-4 py-3 text-left font-normal">Last order</th>
+                    <th className="px-4 py-3 text-right font-normal">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsers.length === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-cream/40">No customers match your search.</td></tr>
+                  )}
+                  {filteredUsers.map((u) => (
+                    <tr
+                      key={u.email}
+                      data-testid={`admin-user-row-${u.email}`}
+                      className="border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors"
+                      onClick={() => openUserDetail(u.email)}
+                    >
+                      <td className="px-4 py-4">
+                        <div className="font-serif text-cream">{u.name}</div>
+                        <div className="text-[10px] uppercase tracking-luxury text-cream/40 mt-0.5">Since {new Date(u.created_at).toLocaleDateString()}</div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="text-cream/80 text-xs">{u.email}</div>
+                        <div className="text-cream/50 text-xs mt-0.5">{u.phone || "—"}</div>
+                      </td>
+                      <td className="px-4 py-4 text-right text-cream">{u.orders_count}</td>
+                      <td className="px-4 py-4 text-right text-gold font-serif">{formatINR(u.total_spent_inr)}</td>
+                      <td className="px-4 py-4 text-xs text-cream/60">{u.last_order_at ? new Date(u.last_order_at).toLocaleDateString() : "—"}</td>
+                      <td className="px-4 py-4 text-right">
+                        <button
+                          data-testid={`admin-user-message-${u.email}`}
+                          onClick={(e) => { e.stopPropagation(); openUserDetail(u.email); }}
+                          className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-luxury text-gold hover:text-cream border border-gold/40 px-3 py-1.5"
+                        >
+                          <MessageSquare className="w-3 h-3" /> View · Message
+                          {u.messages_count > 0 && <span className="ml-1 text-cream/50">({u.messages_count})</span>}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {userDetail && (
+              <UserDetailDrawer detail={userDetail} onClose={() => setUserDetail(null)} onSendMessage={sendMessage} />
+            )}
+          </>
+        )}
+
         {tab === "reviews" && (
           <>
             <h1 className="font-serif text-4xl">Reviews</h1>
@@ -344,9 +449,6 @@ function ProductEditor({ initial, onCancel, onSave, saving }) {
     </div>
   );
 }
-const inp = "w-full bg-ink-950 border border-white/15 focus:border-gold focus:outline-none px-3 py-2 text-sm text-cream outline-none";
-const Fld = ({ label, children }) => (<label className="block"><span className="text-[10px] uppercase tracking-luxury text-cream/50">{label}</span><div className="mt-1.5">{children}</div></label>);
-
 function ReturnRow({ r, onUpdate }) {
   const [notes, setNotes] = useState(r.admin_notes || "");
   const [genuine, setGenuine] = useState(r.is_genuine === null || r.is_genuine === undefined ? "" : String(r.is_genuine));
@@ -452,6 +554,154 @@ function ReturnRow({ r, onUpdate }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+
+const inp = "w-full bg-ink-950 border border-white/15 focus:border-gold focus:outline-none px-3 py-2 text-sm text-cream outline-none";
+const Fld = ({ label, children }) => (<label className="block"><span className="text-[10px] uppercase tracking-luxury text-cream/50">{label}</span><div className="mt-1.5">{children}</div></label>);
+const formatDate = (iso) => (iso ? new Date(iso).toLocaleString() : "—");
+
+function UserDetailDrawer({ detail, onClose, onSendMessage }) {
+  const { user, orders, returns, messages, wishlist_count } = detail;
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const totalSpent = orders.filter((o) => !["pending_payment", "cancelled", "payment_failed"].includes(o.status)).reduce((s, o) => s + (o.total_inr || 0), 0);
+  const canSend = subject.trim().length > 0 && body.trim().length > 0;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!canSend) return;
+    setSending(true);
+    try {
+      await onSendMessage(user.email, subject.trim(), body.trim());
+      setSubject(""); setBody("");
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Send failed");
+    } finally { setSending(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/70 backdrop-blur-sm flex justify-end" onClick={onClose} data-testid="admin-user-drawer">
+      <div className="w-[min(720px,100vw)] h-full bg-ink-900 border-l border-white/10 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 z-10 bg-ink-900 border-b border-white/10 px-8 py-6 flex items-start gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Customer profile</div>
+            <h2 className="mt-1 font-serif text-3xl text-cream truncate">{user.name}</h2>
+            <div className="text-xs text-cream/50 mt-1 truncate">{user.email} · {user.phone || "no phone"}</div>
+          </div>
+          <button data-testid="admin-user-drawer-close" onClick={onClose} className="p-2 text-cream/50 hover:text-cream">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-8 py-6">
+          <div className="grid grid-cols-3 gap-3">
+            <SmallStat label="Orders" value={orders.length} />
+            <SmallStat label="Lifetime" value={`₹${totalSpent.toLocaleString("en-IN")}`} accent />
+            <SmallStat label="Wishlist" value={wishlist_count} />
+          </div>
+
+          {/* Send message */}
+          <form onSubmit={submit} className="mt-8 hairline p-6 bg-ink-950/40" data-testid="admin-message-form">
+            <div className="text-[10px] uppercase tracking-luxury text-gold-soft mb-1">Send a personal message</div>
+            <p className="text-xs text-cream/50 mb-4">Appears on the customer&apos;s account dashboard with an unread badge.</p>
+            <div className="space-y-3">
+              <input
+                data-testid="admin-message-subject"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="Subject (e.g. Thank you for your recent order)"
+                className={inp}
+              />
+              <textarea
+                data-testid="admin-message-body"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={4}
+                placeholder="Write your personal note to the customer…"
+                className={inp}
+              />
+              <button
+                data-testid="admin-message-send"
+                type="submit"
+                disabled={!canSend || sending}
+                className="inline-flex items-center gap-2 bg-gold text-ink-950 px-5 py-2.5 text-xs uppercase tracking-luxury disabled:opacity-40 disabled:cursor-not-allowed hover:bg-cream"
+              >
+                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                {sending ? "Sending…" : "Send message"}
+              </button>
+            </div>
+          </form>
+
+          {/* Message history */}
+          <div className="mt-8">
+            <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-3">Message history ({messages.length})</div>
+            <div className="grid gap-2">
+              {messages.length === 0 && <div className="text-xs text-cream/40 italic">No messages sent yet.</div>}
+              {messages.map((m) => (
+                <div key={m.id} className="hairline p-4" data-testid={`admin-user-msg-${m.id}`}>
+                  <div className="flex items-baseline gap-3 flex-wrap">
+                    <div className="font-serif text-lg text-cream">{m.subject}</div>
+                    <div className="text-[10px] uppercase tracking-luxury ml-auto text-cream/40">
+                      {formatDate(m.created_at)}
+                    </div>
+                  </div>
+                  <div className="mt-2 text-sm text-cream/70 whitespace-pre-wrap">{m.body}</div>
+                  <div className="mt-2 text-[10px] uppercase tracking-luxury">
+                    {m.read ? <span className="text-emerald-400/70">Read {m.read_at ? `· ${formatDate(m.read_at)}` : ""}</span> : <span className="text-yellow-400/70">Unread</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Orders history */}
+          <div className="mt-8">
+            <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-3">Orders ({orders.length})</div>
+            <div className="grid gap-2">
+              {orders.length === 0 && <div className="text-xs text-cream/40 italic">No orders yet.</div>}
+              {orders.map((o) => (
+                <div key={o.order_number} className="hairline p-4 flex items-center gap-4 flex-wrap">
+                  <div>
+                    <div className="text-gold font-mono text-xs">{o.order_number}</div>
+                    <div className="text-[10px] text-cream/40">{formatDate(o.created_at)}</div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-luxury text-cream/60">{o.status.replace(/_/g, " ")}</div>
+                  <div className="ml-auto font-serif text-cream">{formatINR(o.total_inr)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Returns history */}
+          {returns.length > 0 && (
+            <div className="mt-8">
+              <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-3">Returns ({returns.length})</div>
+              <div className="grid gap-2">
+                {returns.map((r) => (
+                  <div key={r.id} className="hairline p-4 flex items-center gap-3 flex-wrap">
+                    <div className="text-xs text-gold font-mono">{r.order_number}</div>
+                    <div className="text-xs text-cream/60 flex-1 truncate">{r.reason}</div>
+                    <div className="text-[10px] uppercase tracking-luxury text-cream/50">{r.status}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SmallStat({ label, value, accent }) {
+  return (
+    <div className="hairline p-4 bg-ink-950/40">
+      <div className="text-[10px] uppercase tracking-luxury text-cream/40">{label}</div>
+      <div className={`mt-1 font-serif text-2xl ${accent ? "text-gold" : "text-cream"}`}>{value}</div>
     </div>
   );
 }
