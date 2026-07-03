@@ -27,15 +27,23 @@ Build a highly attractive, ultra-premium, fully functional SPA e-commerce websit
 - Admin panel at /admin with JWT auth, dashboard stats, products/orders/leads/reviews management. ✅
 - Autofill dark-background fix + centered checkout dialog. ✅
 - Seeded 4 products + 6 reviews + 1 admin.
+- **[Phase A — Feb 2026] Returns Overhaul**: strict 3-day return window from delivery timestamp; customer return dialog with packaging warning + damage image URL + packaging confirmation checkbox; admin Returns tab with approve/reject + genuine assessment + admin notes to customer; delivered_at auto-set on admin status change; refund + privacy policies updated. 9/9 backend pytest passing, frontend flows verified. ✅
 
 ## Prioritized Backlog
-### P1 — Next
+### P1 — Next (Phase B — Product Details, Wishlist, Socials)
+- Product Details Page `/product/:slug` — dedicated page, stock status ("low on stock"), MRP strikethrough beside sale price.
+- Social share buttons on product page.
+- Per-product WhatsApp CTA (+91 9970107760) with product context in message.
+- Wishlist functionality (save products, wishlist tab in /account).
 - Object-storage backed image uploads in admin (replace URL paste).
 - Email confirmation on order (Resend/SendGrid).
-- Product-detail deep-link routing (/product/:slug).
 
-### P2 — Later
-- Wishlist / save-for-later.
+### P2 — Later (Phase C — Admin CRM & Profile)
+- Custom Admin-to-Customer messages displayed on targeted customer's dashboard.
+- Admin Users tab (list registered users, industry-standard CRM options).
+- Customer profile edit (name, phone) in /account.
+
+### P3 — Backlog
 - Inventory decrement on order confirmation + low-stock alerts.
 - Multi-currency / international shipping calculator.
 - Instagram lookbook grid + Pinterest boards.

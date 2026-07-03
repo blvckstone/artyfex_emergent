@@ -12,6 +12,7 @@ const CONTENT = {
       ["Cookies", "We use minimal, first-party cookies to keep your session logged in and remember your cart. Analytics cookies (privacy-preserving) may be used to understand aggregate site performance."],
       ["Your rights", "You may request access to, correction of, or deletion of your personal data at any time by writing to artyfex@artyfex.in. We will respond within 30 days."],
       ["Retention", "Order records — including any return requests, admin notes and damage-evidence links — are retained for 7 years for tax, warranty and dispute-resolution purposes. Account data is deleted within 30 days of an account deletion request, except where retention is legally required."],
+      ["Returns handling", "Return requests are governed by our Returns & Refunds policy: a strict 3-day window from the delivery timestamp applies, and the piece must be returned in its original packaging. Any personal data submitted with a return request (evidence image link, damage description, packaging confirmation) is used only to evaluate that specific claim and is not shared with third parties beyond our courier partners when necessary."],
       ["Security", "All connections are encrypted over TLS 1.3. Passwords are stored using bcrypt. Access to production data is restricted to authorised personnel."],
     ],
   },
