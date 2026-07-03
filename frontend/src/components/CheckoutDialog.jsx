@@ -102,10 +102,11 @@ export const CheckoutDialog = ({ open, onClose }) => {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[90] bg-black/80 backdrop-blur-sm"
             onClick={step === "processing" ? undefined : close} />
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
           <motion.div data-testid={IDS.checkout.dialog}
             initial={{ opacity: 0, y: 20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.98 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] w-[min(920px,94vw)] max-h-[92vh] overflow-y-auto bg-ink-900 border border-white/10 shadow-2xl">
+            className="relative w-[min(920px,94vw)] max-h-[92vh] overflow-y-auto bg-ink-900 border border-white/10 shadow-2xl pointer-events-auto">
             {step !== "processing" && (
               <button onClick={close} className="absolute top-4 right-4 p-2 border border-white/10 hover:border-gold/50 z-10">
                 <X className="w-4 h-4 text-cream" />
@@ -191,6 +192,7 @@ export const CheckoutDialog = ({ open, onClose }) => {
               </div>
             )}
           </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>
