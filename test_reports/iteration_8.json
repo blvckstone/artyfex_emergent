@@ -1,0 +1,63 @@
+{
+  "summary": "Phase A Returns Overhaul E2E tested. 9/9 backend pytest passed. Frontend customer + admin flows fully verified. Fixed one CRITICAL schema bug (delivered_at stripped from /me/orders) that was breaking the entire customer return button visibility.",
+  "tested_scope": ["backend", "frontend"],
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/policies/privacy", "issues": ["Privacy page does not explicitly mention '3-day return window' or 'original packaging mandatory' clauses. It does describe damage-evidence link storage & retention. Spec asked both refund AND privacy pages to reflect the new rules; consider adding a brief cross-reference clause. Non-blocking."]}
+    ]
+  },
+  "passed_tests": [
+    "POST /api/me/returns rejects when order not delivered (400, 'delivered' in msg)",
+    "POST /api/me/returns rejects when packaging_confirmed=false (400)",
+    "POST /api/me/returns rejects when >3 days since delivered (400, 'window closed')",
+    "PATCH /api/admin/orders/{n} status=delivered sets delivered_at timestamp",
+    "POST /api/me/returns success returns status='requested', damage_image_url, packaging_confirmed=true",
+    "Duplicate return for same open order rejected (400 'already open')",
+    "GET /api/admin/returns enriched with order_customer_name/phone/total_inr/delivered_at/status",
+    "PATCH /api/admin/returns approve with is_genuine=true + admin_notes persists to customer view",
+    "PATCH /api/admin/returns reject with is_genuine=false + notes persists",
+    "PATCH /api/admin/returns with invalid status='foobar' returns 400",
+    "Frontend: /account shows 'Request return · 3 days left' button (data-testid=return-{order_number})",
+    "Frontend: ReturnDialog opens with red PACKAGING NOTICE + '3 days' text, reason/damage-url/details/checkbox/submit all present with correct data-testids",
+    "Frontend: Submit button disabled until packaging checkbox confirmed",
+    "Frontend: Successful submit posts to /api/me/returns, shows success toast, populates Returns tab with damage evidence link + details + reason",
+    "Frontend: Admin /admin Returns tab (data-testid=admin-tab-returns) lists return with days-since-delivery, packaging-confirmed badge, evidence link, genuine dropdown, notes input, Approve/Reject buttons",
+    "Frontend: Admin approving with genuine=true + notes -> customer /account Returns tab shows 'approved' status, 'Verified genuine — full refund eligible' badge, and 'From atelier: Approved by atelier — refund initiated'",
+    "Frontend: /policies/refund contains '3-day return window' + 'Original packaging is mandatory' sections"
+  ],
+  "rca_of_bug_fixed": {
+    "bug": "Customer Account page always displayed 'Return window closed (+ days since delivery)' even for freshly delivered orders — Request Return button never appeared, breaking the entire Phase A customer return flow.",
+    "root_cause": "Order Pydantic model in /app/backend/server.py did not declare delivered_at field. The backend admin_update_order() correctly persisted delivered_at into MongoDB when status='delivered', but GET /api/me/orders (response_model=List[Order]) with ConfigDict(extra='ignore') silently stripped delivered_at from the response payload. Frontend AccountPage.jsx then computed deliveredAt=null -> daysSince=null -> withinWindow=false -> always rendered 'Return window closed' branch.",
+    "fix": "Added `delivered_at: Optional[str] = None` to Order model (server.py line ~81). Verified via curl that /me/orders now returns delivered_at ISO string.",
+    "reproduction": "1) Create COD order 2) Admin PATCH /admin/orders/{n} {status:'delivered'} 3) GET /me/orders — delivered_at was missing before fix, present after."
+  },
+  "action_items": [
+    "OPTIONAL: Update /policies/privacy content to briefly restate the strict 3-day window & original-packaging clauses (spec asked for both refund + privacy pages to reflect these rules).",
+    "No other action items — Phase A Returns feature is functionally complete and verified end-to-end."
+  ],
+  "critical_code_review_comments": [
+    "Order model was missing delivered_at declaration despite backend writing it — same class of bug could recur for other status timestamps (e.g. shipped_at, packed_at). Consider a StatusTimestamps sub-model or generic dict.",
+    "AccountPage return-window logic uses Math.floor days: an order delivered <24h ago shows '3 days left' (0 elapsed). Frontend and backend both use days-floored math, so they stay consistent, but a stricter 72h check (hours) would match the legal policy verbatim ('72 hours from the timestamp').",
+    "ReturnRequest response leaks user_email; acceptable for own /me/returns but confirm this endpoint enforces user filter (it does via find({user_email: user.email}))."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (added delivered_at to Order model)",
+    "/app/backend/tests/test_returns.py (new pytest suite, 9 tests)"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_returns.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% critical flows"},
+  "test_credentials": "Admin: admin@artyfex.in / ArtyFex@2026 (from /app/memory/test_credentials.md). Test user created dynamically via /api/auth/signup with TEST_ prefix and cleaned up afterwards.",
+  "seed_data_creation": "Test data cleaned up after run (TEST_ prefixed users/orders/returns removed from MongoDB).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase A Returns Overhaul fully verified. Backend regression suite at /app/backend/tests/test_returns.py — run `pytest backend/tests/test_returns.py`. Only remaining spec gap: /policies/privacy content does not explicitly restate 3-day window (minor). If the main agent adds shipped_at/packed_at timestamps in future, remember to declare them on the Order Pydantic model."
+}

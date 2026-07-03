@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast, Toaster } from "sonner";
-import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2 } from "lucide-react";
+import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw } from "lucide-react";
 
 const TOKEN_KEY = "artyfex_admin_token";
 
@@ -66,6 +66,7 @@ export default function AdminPage() {
   const [orders, setOrders] = useState([]);
   const [leads, setLeads] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [returns, setReturns] = useState([]);
   const [editing, setEditing] = useState(null); // null | product obj | "new"
   const [saving, setSaving] = useState(false);
 
@@ -74,11 +75,12 @@ export default function AdminPage() {
   const reload = React.useCallback(async () => {
     if (!token) return;
     try {
-      const [s, p, o, l, r] = await Promise.all([
+      const [s, p, o, l, r, rt] = await Promise.all([
         authed.get("/admin/stats"), authed.get("/products"),
         authed.get("/admin/orders"), authed.get("/admin/leads"), authed.get("/reviews"),
+        authed.get("/admin/returns"),
       ]);
-      setStats(s.data); setProducts(p.data); setOrders(o.data); setLeads(l.data); setReviews(r.data);
+      setStats(s.data); setProducts(p.data); setOrders(o.data); setLeads(l.data); setReviews(r.data); setReturns(rt.data);
     } catch (err) {
       if (err?.response?.status === 401) { localStorage.removeItem(TOKEN_KEY); setToken(""); }
     }
@@ -130,9 +132,20 @@ export default function AdminPage() {
     { key: "dashboard", label: "Dashboard", icon: LayoutGrid },
     { key: "products", label: "Products", icon: Package },
     { key: "orders", label: "Orders", icon: ShoppingBag },
+    { key: "returns", label: "Returns", icon: RotateCcw },
     { key: "leads", label: "B2B Leads", icon: Users },
     { key: "reviews", label: "Reviews", icon: Star },
   ];
+
+  const updateReturnStatus = async (id, patch) => {
+    try {
+      await authed.patch(`/admin/returns/${id}`, patch);
+      toast.success("Return updated");
+      reload();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Update failed");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-ink-950 text-cream flex">
@@ -243,9 +256,22 @@ export default function AdminPage() {
                       {["new","contacted","quoted","won","lost"].map(s=>(<option key={s} value={s}>{s}</option>))}
                     </select>
                   </div>
-                  {l.message && <div className="mt-3 text-sm text-cream/70">"{l.message}"</div>}
+                  {l.message && <div className="mt-3 text-sm text-cream/70">&ldquo;{l.message}&rdquo;</div>}
                   <div className="mt-2 text-xs text-cream/40">Dimensions: {l.dimensions || "—"} · Qty: {l.quantity || "—"}</div>
                 </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {tab === "returns" && (
+          <>
+            <h1 className="font-serif text-4xl">Returns</h1>
+            <div className="mt-2 text-xs text-cream/40">3-day strict window from delivery date · approve/reject with genuine assessment</div>
+            <div className="mt-6 grid gap-3">
+              {returns.length === 0 && <div className="text-cream/40 text-sm">No return requests yet.</div>}
+              {returns.map((r) => (
+                <ReturnRow key={r.id} r={r} onUpdate={updateReturnStatus} />
               ))}
             </div>
           </>
@@ -320,3 +346,112 @@ function ProductEditor({ initial, onCancel, onSave, saving }) {
 }
 const inp = "w-full bg-ink-950 border border-white/15 focus:border-gold focus:outline-none px-3 py-2 text-sm text-cream outline-none";
 const Fld = ({ label, children }) => (<label className="block"><span className="text-[10px] uppercase tracking-luxury text-cream/50">{label}</span><div className="mt-1.5">{children}</div></label>);
+
+function ReturnRow({ r, onUpdate }) {
+  const [notes, setNotes] = useState(r.admin_notes || "");
+  const [genuine, setGenuine] = useState(r.is_genuine === null || r.is_genuine === undefined ? "" : String(r.is_genuine));
+  const isFinal = ["approved", "rejected", "refunded"].includes(r.status);
+  const daysSinceDelivery = r.order_delivered_at
+    ? Math.floor((Date.now() - new Date(r.order_delivered_at).getTime()) / 86400000)
+    : null;
+  return (
+    <div className="hairline p-5" data-testid={`admin-return-${r.id}`}>
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="min-w-[180px]">
+          <div className="text-gold font-mono text-sm">{r.order_number}</div>
+          <div className="text-xs text-cream/50 mt-0.5">{r.order_customer_name || r.user_email}</div>
+          {r.order_customer_phone && <div className="text-xs text-cream/40">{r.order_customer_phone}</div>}
+          <div className="text-xs text-cream/40 mt-1">Requested {new Date(r.created_at).toLocaleDateString()}</div>
+          {daysSinceDelivery !== null && (
+            <div className={`text-[10px] uppercase tracking-luxury mt-1 ${daysSinceDelivery <= 3 ? "text-emerald-400/70" : "text-red-400/70"}`}>
+              {daysSinceDelivery}d since delivery
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-[220px]">
+          <div className="text-sm text-cream"><span className="text-cream/50">Reason:</span> {r.reason}</div>
+          {r.details && <div className="mt-1 text-xs text-cream/60 italic">&ldquo;{r.details}&rdquo;</div>}
+          {r.damage_image_url && (
+            <a href={r.damage_image_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-gold border-b border-gold/40" data-testid={`admin-return-evidence-${r.id}`}>
+              View damage evidence →
+            </a>
+          )}
+          {r.packaging_confirmed ? (
+            <div className="mt-2 text-[10px] uppercase tracking-luxury text-emerald-400/70">Packaging confirmed by customer</div>
+          ) : (
+            <div className="mt-2 text-[10px] uppercase tracking-luxury text-red-400/70">Packaging NOT confirmed</div>
+          )}
+        </div>
+
+        <div className={`text-xs uppercase tracking-luxury px-3 py-1.5 border ${
+          r.status === "approved" ? "border-emerald-400/30 text-emerald-400" :
+          r.status === "rejected" ? "border-red-400/30 text-red-400" :
+          r.status === "refunded" ? "border-gold/40 text-gold" :
+          "border-yellow-400/30 text-yellow-400"
+        }`}>{r.status}</div>
+      </div>
+
+      {!isFinal && (
+        <div className="mt-4 grid md:grid-cols-[1fr_auto_auto] gap-3 items-start border-t border-white/5 pt-4">
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-luxury text-cream/50">Assessment</span>
+              <select
+                data-testid={`admin-return-genuine-${r.id}`}
+                value={genuine}
+                onChange={(e) => setGenuine(e.target.value)}
+                className={`mt-1.5 ${inp}`}
+              >
+                <option value="">— Select —</option>
+                <option value="true">Genuine claim</option>
+                <option value="false">Not genuine / fees apply</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-luxury text-cream/50">Notes to customer</span>
+              <input
+                data-testid={`admin-return-notes-${r.id}`}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Visible on customer's Returns tab"
+                className={`mt-1.5 ${inp}`}
+              />
+            </label>
+          </div>
+          <button
+            data-testid={`admin-return-reject-${r.id}`}
+            onClick={() => onUpdate(r.id, { status: "rejected", is_genuine: genuine === "" ? null : genuine === "true", admin_notes: notes || null })}
+            className="px-4 py-2.5 border border-red-400/30 text-red-400 hover:bg-red-400/10 text-xs uppercase tracking-luxury"
+          >
+            Reject
+          </button>
+          <button
+            data-testid={`admin-return-approve-${r.id}`}
+            onClick={() => onUpdate(r.id, { status: "approved", is_genuine: genuine === "" ? null : genuine === "true", admin_notes: notes || null })}
+            className="px-4 py-2.5 bg-gold text-ink-950 hover:bg-cream text-xs uppercase tracking-luxury"
+          >
+            Approve
+          </button>
+        </div>
+      )}
+
+      {isFinal && (
+        <div className="mt-4 border-t border-white/5 pt-3 text-xs text-cream/60 space-y-1">
+          {r.is_genuine === true && <div className="text-emerald-400/80">✓ Marked genuine · full refund eligible</div>}
+          {r.is_genuine === false && <div className="text-red-400/80">✗ Marked non-genuine · restocking / repair fees apply</div>}
+          {r.admin_notes && <div>Note to customer: <span className="text-cream/80">{r.admin_notes}</span></div>}
+          {r.status === "approved" && (
+            <button
+              data-testid={`admin-return-refund-${r.id}`}
+              onClick={() => onUpdate(r.id, { status: "refunded" })}
+              className="mt-2 px-3 py-1.5 border border-gold/40 text-gold hover:bg-gold/10 text-[10px] uppercase tracking-luxury"
+            >
+              Mark refunded
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

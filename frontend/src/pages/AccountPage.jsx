@@ -11,6 +11,8 @@ const formatINR = (n) => `₹${(n || 0).toLocaleString("en-IN")}`;
 const statusColor = (s) => ({
   pending_payment: "text-yellow-400", confirmed: "text-blue-300", packed: "text-blue-300",
   shipped: "text-purple-300", delivered: "text-gold", cancelled: "text-red-400", payment_failed: "text-red-400",
+  requested: "text-yellow-400", approved: "text-emerald-400", rejected: "text-red-400",
+  received: "text-blue-300", refunded: "text-gold",
 }[s] || "text-cream");
 
 export default function AccountPage() {
@@ -55,10 +57,10 @@ export default function AccountPage() {
     { key: "profile", label: "Profile", icon: User },
   ];
 
-  const submitReturn = async (order_number, reason, details) => {
+  const submitReturn = async (order_number, payload) => {
     try {
       const a = authedApi();
-      const { data } = await a.post("/me/returns", { order_number, reason, details });
+      const { data } = await a.post("/me/returns", { order_number, ...payload });
       setReturns([data, ...returns]);
       setReturnFor(null);
       toast.success("Return requested. Our atelier will contact you within 24h.");
@@ -105,9 +107,23 @@ export default function AccountPage() {
                     <div className="font-serif text-2xl text-cream">{formatINR(o.total_inr)}</div>
                   </div>
                   <div className="mt-3 text-xs text-cream/50">{o.items.length} item(s) · {o.customer.city}, {o.customer.pincode}</div>
-                  {(o.status === "delivered" || o.status === "shipped") && (
-                    <button data-testid={`return-${o.order_number}`} onClick={() => setReturnFor(o)} className="mt-4 text-xs uppercase tracking-luxury text-gold border-b border-gold/40 pb-0.5">Request return</button>
-                  )}
+                  {o.status === "delivered" && (() => {
+                    const deliveredAt = o.delivered_at ? new Date(o.delivered_at) : null;
+                    const daysSince = deliveredAt ? Math.floor((Date.now() - deliveredAt.getTime()) / 86400000) : null;
+                    const withinWindow = daysSince !== null && daysSince <= 3;
+                    if (withinWindow) {
+                      return (
+                        <button data-testid={`return-${o.order_number}`} onClick={() => setReturnFor(o)} className="mt-4 text-xs uppercase tracking-luxury text-gold border-b border-gold/40 pb-0.5">
+                          Request return · {3 - daysSince} day{3 - daysSince === 1 ? "" : "s"} left
+                        </button>
+                      );
+                    }
+                    return (
+                      <div className="mt-4 text-xs uppercase tracking-luxury text-cream/30">
+                        Return window closed ({daysSince}+ days since delivery)
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -117,13 +133,33 @@ export default function AccountPage() {
             <div className="grid gap-4">
               {returns.length === 0 && <div className="hairline p-10 text-center text-cream/40">No return requests.</div>}
               {returns.map((r) => (
-                <div key={r.id} className="hairline p-6">
-                  <div className="flex items-center gap-4">
+                <div key={r.id} className="hairline p-6" data-testid={`account-return-${r.id}`}>
+                  <div className="flex items-center gap-4 flex-wrap">
                     <div className="text-gold font-mono text-sm">{r.order_number}</div>
+                    <div className="text-xs text-cream/40">{new Date(r.created_at).toLocaleDateString()}</div>
                     <div className={`text-xs uppercase tracking-luxury ml-auto ${statusColor(r.status)}`}>{r.status}</div>
                   </div>
-                  <div className="mt-2 text-sm"><span className="text-cream/50">Reason:</span> {r.reason}</div>
-                  {r.details && <div className="mt-1 text-sm text-cream/70">"{r.details}"</div>}
+                  <div className="mt-3 text-sm"><span className="text-cream/50">Reason:</span> {r.reason}</div>
+                  {r.details && <div className="mt-1 text-sm text-cream/70 italic">&ldquo;{r.details}&rdquo;</div>}
+                  {r.damage_image_url && (
+                    <div className="mt-2 text-xs">
+                      <a href={r.damage_image_url} target="_blank" rel="noreferrer" className="text-gold hover:text-cream underline underline-offset-2">
+                        View damage evidence →
+                      </a>
+                    </div>
+                  )}
+                  {r.is_genuine === false && (
+                    <div className="mt-3 text-xs uppercase tracking-luxury text-red-400/80">Marked non-genuine — restocking fees may apply</div>
+                  )}
+                  {r.is_genuine === true && (
+                    <div className="mt-3 text-xs uppercase tracking-luxury text-emerald-400/80">Verified genuine — full refund eligible</div>
+                  )}
+                  {r.admin_notes && (
+                    <div className="mt-3 border-t border-white/5 pt-3 text-sm text-cream/70">
+                      <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-1">From atelier</div>
+                      {r.admin_notes}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -154,26 +190,74 @@ function Info({ label, value }) {
 function ReturnDialog({ order, onCancel, onSubmit }) {
   const [reason, setReason] = useState("Product damaged in transit");
   const [details, setDetails] = useState("");
+  const [damageImageUrl, setDamageImageUrl] = useState("");
+  const [packagingConfirmed, setPackagingConfirmed] = useState(false);
+  const deliveredAt = order.delivered_at ? new Date(order.delivered_at) : null;
+  const daysLeft = deliveredAt ? 3 - Math.floor((Date.now() - deliveredAt.getTime()) / 86400000) : 3;
+
+  const canSubmit = packagingConfirmed && reason && (reason !== "Product damaged in transit" || damageImageUrl.trim().length > 0);
+
   return (
     <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onCancel}>
-      <div className="bg-ink-900 border border-white/10 w-[min(500px,95vw)] p-8" onClick={(e)=>e.stopPropagation()}>
+      <div className="bg-ink-900 border border-white/10 w-[min(560px,95vw)] max-h-[90vh] overflow-y-auto p-8" onClick={(e)=>e.stopPropagation()} data-testid="return-dialog">
         <h3 className="font-serif text-2xl">Request return</h3>
-        <div className="mt-1 text-xs text-cream/50">Order {order.order_number}</div>
+        <div className="mt-1 text-xs text-cream/50">Order {order.order_number} · <span className="text-gold">{daysLeft} day{daysLeft === 1 ? "" : "s"} left</span> in return window</div>
+
+        <div className="mt-5 border border-red-500/30 bg-red-500/5 p-4 text-xs leading-relaxed text-cream/80">
+          <div className="text-red-300 uppercase tracking-luxury text-[10px] mb-2 font-medium">Important — Packaging notice</div>
+          The piece must be returned in <span className="text-cream font-medium">its original box, foam and outer wrap, exactly as received.</span> Any damage caused by improper repacking (chipped resin, cracked mirror, bent border) will be assessed by our atelier and repair/restocking fees will be deducted from your refund. Returns must be raised within <span className="text-cream font-medium">3 days of delivery.</span>
+        </div>
+
         <div className="mt-6 space-y-4">
           <label className="block">
             <span className="text-[10px] uppercase tracking-luxury text-cream/50">Reason</span>
-            <select value={reason} onChange={(e)=>setReason(e.target.value)} className="mt-1.5 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2.5 text-sm text-cream outline-none">
+            <select data-testid="return-reason" value={reason} onChange={(e)=>setReason(e.target.value)} className="mt-1.5 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2.5 text-sm text-cream outline-none">
               {["Product damaged in transit","Not as described","Changed my mind","Wrong colour delivered","Other"].map(r=>(<option key={r} value={r} className="bg-ink-900">{r}</option>))}
             </select>
           </label>
+
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-luxury text-cream/50">
+              Damage evidence — image URL {reason === "Product damaged in transit" && <span className="text-red-300">*</span>}
+            </span>
+            <input
+              data-testid="return-damage-url"
+              type="url"
+              placeholder="https://... (upload to Drive/Imgur then paste link)"
+              value={damageImageUrl}
+              onChange={(e)=>setDamageImageUrl(e.target.value)}
+              className="mt-1.5 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2.5 text-sm text-cream outline-none"
+            />
+            <span className="mt-1 block text-[10px] text-cream/40">Please upload photos to Google Drive/Imgur/Dropbox and paste the shareable link. Include packaging and product angles.</span>
+          </label>
+
           <label className="block">
             <span className="text-[10px] uppercase tracking-luxury text-cream/50">Details</span>
-            <textarea rows={4} value={details} onChange={(e)=>setDetails(e.target.value)} className="mt-1.5 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2.5 text-sm text-cream outline-none" />
+            <textarea data-testid="return-details" rows={4} value={details} onChange={(e)=>setDetails(e.target.value)} placeholder="Tell us what happened, where the damage is, etc." className="mt-1.5 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2.5 text-sm text-cream outline-none" />
+          </label>
+
+          <label className="flex items-start gap-3 text-xs text-cream/70 cursor-pointer" data-testid="return-packaging-label">
+            <input
+              data-testid="return-packaging-checkbox"
+              type="checkbox"
+              checked={packagingConfirmed}
+              onChange={(e)=>setPackagingConfirmed(e.target.checked)}
+              className="mt-0.5 accent-gold"
+            />
+            <span>I confirm the piece is still in its <span className="text-cream">original packaging</span> and I understand that fees will be deducted if it is returned damaged due to improper repacking.</span>
           </label>
         </div>
+
         <div className="mt-6 flex gap-3">
-          <button onClick={onCancel} className="flex-1 py-3 border border-white/15 text-xs uppercase tracking-luxury">Cancel</button>
-          <button onClick={()=>onSubmit(order.order_number, reason, details)} className="flex-1 bg-gold text-ink-950 py-3 text-xs uppercase tracking-luxury">Submit</button>
+          <button onClick={onCancel} data-testid="return-cancel" className="flex-1 py-3 border border-white/15 text-xs uppercase tracking-luxury">Cancel</button>
+          <button
+            data-testid="return-submit"
+            disabled={!canSubmit}
+            onClick={()=>onSubmit(order.order_number, { reason, details, damage_image_url: damageImageUrl || null, packaging_confirmed: packagingConfirmed })}
+            className="flex-1 bg-gold text-ink-950 py-3 text-xs uppercase tracking-luxury disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Submit request
+          </button>
         </div>
       </div>
     </div>

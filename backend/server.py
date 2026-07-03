@@ -79,6 +79,7 @@ class Order(BaseModel):
     status: str = "pending_payment"  # pending_payment | confirmed | packed | shipped | delivered | cancelled
     razorpay_order_id: Optional[str] = None
     razorpay_payment_id: Optional[str] = None
+    delivered_at: Optional[str] = None
     created_at: str = Field(default_factory=now_iso)
 
 class Review(BaseModel):
@@ -143,13 +144,29 @@ class ReturnRequestIn(BaseModel):
     order_number: str
     reason: str
     details: Optional[str] = None
+    damage_image_url: Optional[str] = None
+    packaging_confirmed: bool = False
 
 
 class ReturnRequest(ReturnRequestIn):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_email: str
     status: str = "requested"  # requested | approved | rejected | received | refunded
+    is_genuine: Optional[bool] = None
+    admin_notes: Optional[str] = None
+    reviewed_at: Optional[str] = None
+    reviewed_by: Optional[str] = None
     created_at: str = Field(default_factory=now_iso)
+
+
+class ReturnStatusUpdate(BaseModel):
+    status: str  # approved | rejected | received | refunded
+    is_genuine: Optional[bool] = None
+    admin_notes: Optional[str] = None
+
+
+# Strict return window enforced from delivery date
+RETURN_WINDOW_DAYS = 3
 
 
 # ---------- SEED ---------- #
@@ -346,7 +363,10 @@ async def admin_list_orders(admin=Depends(get_current_admin)):
 
 @api_router.patch("/admin/orders/{order_number}")
 async def admin_update_order(order_number: str, payload: OrderStatusUpdate, admin=Depends(get_current_admin)):
-    res = await db.orders.update_one({"order_number": order_number}, {"$set": {"status": payload.status}})
+    update = {"status": payload.status}
+    if payload.status == "delivered":
+        update["delivered_at"] = now_iso()
+    res = await db.orders.update_one({"order_number": order_number}, {"$set": update})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return {"ok": True}
@@ -378,6 +398,44 @@ async def admin_delete_review(review_id: str, admin=Depends(get_current_admin)):
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return {"deleted": True}
+
+
+@api_router.get("/admin/returns")
+async def admin_list_returns(admin=Depends(get_current_admin)):
+    returns = await db.returns.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    # Enrich with basic order info
+    for r in returns:
+        order = await db.orders.find_one(
+            {"order_number": r["order_number"]},
+            {"_id": 0, "customer.name": 1, "customer.phone": 1, "total_inr": 1, "delivered_at": 1, "status": 1},
+        )
+        if order:
+            r["order_customer_name"] = order.get("customer", {}).get("name")
+            r["order_customer_phone"] = order.get("customer", {}).get("phone")
+            r["order_total_inr"] = order.get("total_inr")
+            r["order_delivered_at"] = order.get("delivered_at")
+            r["order_status"] = order.get("status")
+    return returns
+
+
+@api_router.patch("/admin/returns/{return_id}")
+async def admin_update_return(return_id: str, payload: ReturnStatusUpdate, admin=Depends(get_current_admin)):
+    allowed = {"approved", "rejected", "received", "refunded"}
+    if payload.status not in allowed:
+        raise HTTPException(status_code=400, detail=f"Status must be one of {sorted(allowed)}")
+    update = {
+        "status": payload.status,
+        "reviewed_at": now_iso(),
+        "reviewed_by": admin["email"],
+    }
+    if payload.is_genuine is not None:
+        update["is_genuine"] = payload.is_genuine
+    if payload.admin_notes is not None:
+        update["admin_notes"] = payload.admin_notes
+    res = await db.returns.update_one({"id": return_id}, {"$set": update})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Return not found")
+    return {"ok": True}
 
 
 # ---------- USER (CUSTOMER) ROUTES ---------- #
@@ -438,8 +496,32 @@ async def request_return(payload: ReturnRequestIn, user=Depends(get_current_user
     order = await db.orders.find_one({"order_number": payload.order_number, "customer.email": user["email"]})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    if order.get("status") not in ("delivered", "shipped"):
-        raise HTTPException(status_code=400, detail="Return only for shipped/delivered orders")
+    if order.get("status") != "delivered":
+        raise HTTPException(status_code=400, detail="Returns can only be requested for delivered orders.")
+    # Enforce 3-day return window from delivery date
+    delivered_iso = order.get("delivered_at") or order.get("created_at")
+    try:
+        delivered_dt = datetime.fromisoformat(delivered_iso)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Order delivery date unavailable.")
+    if delivered_dt.tzinfo is None:
+        delivered_dt = delivered_dt.replace(tzinfo=timezone.utc)
+    days_since = (datetime.now(timezone.utc) - delivered_dt).days
+    if days_since > RETURN_WINDOW_DAYS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Return window closed. Requests must be raised within {RETURN_WINDOW_DAYS} days of delivery (yours was {days_since} days ago).",
+        )
+    if not payload.packaging_confirmed:
+        raise HTTPException(status_code=400, detail="Please confirm you can return the piece in its original packaging.")
+    # Prevent duplicate open returns for same order
+    existing = await db.returns.find_one({
+        "order_number": payload.order_number,
+        "user_email": user["email"],
+        "status": {"$in": ["requested", "approved", "received"]},
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="A return request is already open for this order.")
     rr = ReturnRequest(**payload.model_dump(), user_email=user["email"])
     await db.returns.insert_one(rr.model_dump())
     return rr

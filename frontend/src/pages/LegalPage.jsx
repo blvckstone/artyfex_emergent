@@ -7,11 +7,11 @@ const CONTENT = {
   privacy: {
     title: "Privacy Policy",
     sections: [
-      ["Data we collect", "When you place an order or create an account, we collect your name, contact details, delivery address and order history. Payment card data is never stored on our servers — it is processed directly by Razorpay under PCI-DSS Level 1 compliance."],
-      ["How we use it", "We use your information to fulfil orders, communicate delivery updates, respond to B2B enquiries, and personalise your experience. We do not sell your data to third parties, ever."],
+      ["Data we collect", "When you place an order or create an account, we collect your name, contact details, delivery address and order history. If you raise a return, any evidence links (e.g. Google Drive/Imgur URLs) you provide are stored alongside your return request. Payment card data is never stored on our servers — it is processed directly by Razorpay under PCI-DSS Level 1 compliance."],
+      ["How we use it", "We use your information to fulfil orders, communicate delivery updates, evaluate return requests, respond to B2B enquiries, and personalise your experience. We do not sell your data to third parties, ever."],
       ["Cookies", "We use minimal, first-party cookies to keep your session logged in and remember your cart. Analytics cookies (privacy-preserving) may be used to understand aggregate site performance."],
       ["Your rights", "You may request access to, correction of, or deletion of your personal data at any time by writing to artyfex@artyfex.in. We will respond within 30 days."],
-      ["Retention", "Order records are retained for 7 years for tax and warranty purposes. Account data is deleted within 30 days of account deletion request."],
+      ["Retention", "Order records — including any return requests, admin notes and damage-evidence links — are retained for 7 years for tax, warranty and dispute-resolution purposes. Account data is deleted within 30 days of an account deletion request, except where retention is legally required."],
       ["Security", "All connections are encrypted over TLS 1.3. Passwords are stored using bcrypt. Access to production data is restricted to authorised personnel."],
     ],
   },
@@ -30,10 +30,11 @@ const CONTENT = {
   refund: {
     title: "Returns & Refunds",
     sections: [
-      ["Eligibility", "Returns are accepted within 7 days of delivery for pieces damaged in transit or manifestly not as described. Made-to-order and custom commissions are non-returnable."],
-      ["Process", "Sign in to your account → Orders → Request return. Our atelier will respond within 24 hours with a reverse-pickup slot."],
-      ["Refunds", "Approved refunds are credited to the original payment method within 7–10 business days after we receive and inspect the returned piece."],
-      ["Damaged in transit", "Please email photos of the packaging and damaged product to artyfex@artyfex.in within 48 hours of delivery for expedited replacement."],
+      ["3-day return window", "Return requests must be raised within 3 days of delivery (72 hours from the timestamp your parcel is marked delivered). Requests submitted after this window will be automatically declined and are not eligible for refund. This strict window allows us to investigate transit damage while the courier's insurance is still valid."],
+      ["Eligibility", "Returns are considered only for pieces that arrive damaged in transit or are manifestly not as described. Made-to-order, bespoke commissions and B2B batch orders are non-returnable once poured. Change-of-mind returns are at our sole discretion and, if approved, will incur a restocking fee."],
+      ["Original packaging is mandatory", "The piece must be returned in its original box, foam inserts and outer wrap, exactly as received. Improper repacking that causes damage — chipped resin, cracked mirror, bent border, torn foam — will be assessed by our atelier during inspection. Repair and restocking fees will be deducted from your refund at our sole discretion, and in cases of severe damage the return may be rejected entirely."],
+      ["How to request", "Sign in to your account → Orders → Request return (visible only within the 3-day window). You must confirm the packaging condition, upload a shareable image link (Google Drive / Imgur / Dropbox) showing the damage, and describe the issue. Our atelier will approve or reject the request and mark it as genuine or non-genuine after review."],
+      ["Assessment & refunds", "Approved genuine claims are refunded in full to the original payment method within 7–10 business days after we receive and inspect the returned piece. Non-genuine or partially damaged returns will be refunded net of restocking and repair fees. Rejection decisions are communicated with a written note on your Returns tab."],
       ["Non-returnable items", "Custom commissions, bespoke dimensions and B2B batch orders are non-returnable once poured."],
     ],
   },
@@ -44,7 +45,7 @@ const CONTENT = {
       ["Made-to-order", "Custom and B2B orders take 4–6 weeks depending on dimensions and finish. You'll receive weekly progress updates and moodboard proofs."],
       ["Coverage", "We ship pan-India. International shipping is available on request — please email artyfex@artyfex.in for a quote."],
       ["Charges", "Complimentary shipping on orders ₹25,000 and above. Below that, a flat ₹1,499 handling fee applies."],
-      ["Insurance", "Every piece is fully insured in transit. In the unlikely event of transit damage, we replace at no additional cost."],
+      ["Insurance", "Every piece is fully insured in transit. In the unlikely event of transit damage, please raise a return request within the 3-day window with photo evidence — we replace or refund at no additional cost."],
     ],
   },
 };
