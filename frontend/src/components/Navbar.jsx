@@ -58,9 +58,8 @@ export const Navbar = () => {
     if (location.pathname !== "/") {
       nav(`/#${hash}`);
     } else {
-      scrollToId(hash);
-      // Keep URL clean but reflect hash for shareability
-      window.history.replaceState({}, "", `/#${hash}`);
+      // Use navigate to trigger location change and useEffect
+      nav(`/#${hash}`, { replace: true });
     }
   };
 
@@ -139,6 +138,7 @@ export const Navbar = () => {
             </AnimatePresence>
           </button>
           <button
+            data-testid="nav-toggle"
             onClick={() => setMobileOpen((v) => !v)}
             className="lg:hidden p-2.5 border border-white/10 text-cream"
             aria-label="Menu"
