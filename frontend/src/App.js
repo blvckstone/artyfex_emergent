@@ -66,7 +66,10 @@ function Home() {
           "description": "Mumbai atelier of 100% handmade resin & crystal stone mirrors.",
           "founder": { "@type": "Person", "name": "Maloni" },
           "sameAs": ["https://www.instagram.com/artyfex", "https://www.facebook.com/artyfex"],
-          "contactPoint": { "@type": "ContactPoint", "email": "artyfex@artyfex.in", "contactType": "customer service", "areaServed": "IN" },
+          "contactPoint": [
+            { "@type": "ContactPoint", "email": "artyfex@artyfex.in", "telephone": "+91-99701-07760", "contactType": "customer service", "areaServed": "IN" },
+            { "@type": "ContactPoint", "email": "artyfex.in@gmail.com", "contactType": "customer service", "areaServed": "IN" },
+          ],
         }}
       />
       <Navbar />

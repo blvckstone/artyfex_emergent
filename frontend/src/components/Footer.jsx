@@ -65,6 +65,7 @@ export const Footer = () => {
             <span className="text-cream/70">Maloni Mahada</span>
             <span className="text-cream/50">Mumbai 400095</span>
             <a href="mailto:artyfex@artyfex.in" className="text-cream/70 hover:text-gold">artyfex@artyfex.in</a>
+            <a href="mailto:artyfex.in@gmail.com" className="text-cream/70 hover:text-gold">artyfex.in@gmail.com</a>
             <a href="tel:+919970107760" className="text-cream/70 hover:text-gold">+91 99701 07760 · WhatsApp</a>
           </FooterCol>
         </div>

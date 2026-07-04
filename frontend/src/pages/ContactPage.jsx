@@ -17,6 +17,7 @@ const jsonLd = {
     "name": "ArtyFex",
     "url": "https://www.artyfex.in",
     "email": "artyfex@artyfex.in",
+    "telephone": "+91-99701-07760",
     "address": {
       "@type": "PostalAddress",
       "addressLocality": "Mumbai",
@@ -97,10 +98,15 @@ export default function ContactPage() {
                 <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Email</div>
               </div>
               <div className="mt-4 font-serif text-xl text-cream group-hover:text-gold transition-colors">artyfex@artyfex.in</div>
+              <a
+                href="mailto:artyfex.in@gmail.com"
+                onClick={(e) => e.stopPropagation()}
+                className="mt-1 block font-serif text-lg text-cream/80 hover:text-gold transition-colors"
+              >artyfex.in@gmail.com</a>
               <div className="mt-1 text-xs text-cream/50">For all enquiries · Replies within 24h</div>
             </a>
             <a
-              href="tel:+919876543210"
+              href="tel:+919970107760"
               className="block hairline p-6 hover:border-gold/40 transition-colors group"
               data-testid="contact-phone-card"
             >
@@ -108,7 +114,7 @@ export default function ContactPage() {
                 <div className="p-2.5 border border-gold/30"><Phone className="w-4 h-4 text-gold" /></div>
                 <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Phone / WhatsApp</div>
               </div>
-              <div className="mt-4 font-serif text-xl text-cream group-hover:text-gold transition-colors">+91 98765 43210</div>
+              <div className="mt-4 font-serif text-xl text-cream group-hover:text-gold transition-colors">+91 99701 07760</div>
               <div className="mt-1 text-xs text-cream/50">Mon–Sat · 10 am – 7 pm IST</div>
             </a>
             <div className="hairline p-6">
