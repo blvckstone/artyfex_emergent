@@ -21,10 +21,13 @@ import AdminPage from "@/pages/AdminPage";
 import ShopPage from "@/pages/ShopPage";
 import AccountPage from "@/pages/AccountPage";
 import LegalPage from "@/pages/LegalPage";
+import AboutPage from "@/pages/AboutPage";
+import ContactPage from "@/pages/ContactPage";
 import ProductPage from "@/pages/ProductPage";
 import AuthCallback from "@/pages/AuthCallback";
 import ReviewPromptBanner from "@/components/ReviewPromptBanner";
 import ReviewPromptModal from "@/components/ReviewPromptModal";
+import SEO from "@/components/SEO";
 import { ReviewPromptProvider } from "@/context/ReviewPromptContext";
 
 function Home() {
@@ -50,6 +53,22 @@ function Home() {
   }
   return (
     <>
+      <SEO
+        title="ArtyFex — Handmade Resin & Crystal Mirrors | Mumbai Atelier"
+        description="ArtyFex is a Mumbai atelier of 100% handmade resin art & crystal stone mirrors. Statement 2×3 ft geode mirrors and companion pieces for luxury interiors."
+        path="/"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          "name": "ArtyFex",
+          "url": "https://www.artyfex.in",
+          "logo": "https://www.artyfex.in/brand/logo.svg",
+          "description": "Mumbai atelier of 100% handmade resin & crystal stone mirrors.",
+          "founder": { "@type": "Person", "name": "Maloni" },
+          "sameAs": ["https://www.instagram.com/artyfex", "https://www.facebook.com/artyfex"],
+          "contactPoint": { "@type": "ContactPoint", "email": "artyfex@artyfex.in", "contactType": "customer service", "areaServed": "IN" },
+        }}
+      />
       <Navbar />
       <main>
         <Hero />
@@ -75,8 +94,12 @@ function StoreShell() {
         <Route path="/" element={<Home />} />
         <Route path="/shop" element={<ShopPage />} />
         <Route path="/product/:slug" element={<ProductPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="/policies/:slug" element={<LegalPage />} />
+        <Route path="/terms" element={<LegalPage />} />
+        <Route path="/privacy" element={<LegalPage />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
       </Routes>
       <CartSheet onCheckout={openCheckout} />

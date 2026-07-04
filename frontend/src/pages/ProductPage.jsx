@@ -6,6 +6,7 @@ import { ShoppingBag, Check, Heart, Share2, Copy, Instagram, MessageCircle, Arro
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ProductGallery from "@/components/ProductGallery";
+import SEO from "@/components/SEO";
 import { api } from "@/lib/api";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
@@ -143,6 +144,32 @@ export default function ProductPage() {
 
   return (
     <div className="min-h-screen bg-ink-950 text-cream" data-testid="product-page">
+      <SEO
+        title={`${product.name} — ${effectiveSize} | ArtyFex`}
+        description={`${product.tagline} ${product.description}`.slice(0, 175)}
+        path={`/product/${product.slug}`}
+        image={product.hero_image}
+        type="product"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "Product",
+          "name": product.name,
+          "description": product.description,
+          "image": [product.hero_image, ...(product.gallery || [])].filter(Boolean),
+          "sku": product.slug,
+          "brand": { "@type": "Brand", "name": "ArtyFex" },
+          "offers": {
+            "@type": "Offer",
+            "url": `https://www.artyfex.in/product/${product.slug}`,
+            "priceCurrency": "INR",
+            "price": effectivePrice,
+            "availability": outOfStock
+              ? "https://schema.org/OutOfStock"
+              : "https://schema.org/InStock",
+            "itemCondition": "https://schema.org/NewCondition",
+          },
+        }}
+      />
       <Navbar />
       <div className="max-w-[1440px] mx-auto px-6 md:px-12 lg:px-16 pt-28 pb-24">
         <button onClick={() => nav(-1)} className="inline-flex items-center gap-2 text-xs uppercase tracking-luxury text-cream/50 hover:text-gold mb-8">

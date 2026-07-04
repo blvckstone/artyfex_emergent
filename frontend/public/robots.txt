@@ -1,0 +1,9 @@
+# ArtyFex — robots.txt
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /account
+Disallow: /auth/callback
+Disallow: /api/
+
+Sitemap: https://www.artyfex.in/sitemap.xml

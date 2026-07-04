@@ -103,6 +103,96 @@
 #====================================================================================================
 
 user_problem_statement: |
+  Phase D — SEO & Pages + Bug Fixes:
+  1) BUG: Mobile Navbar links "The Craft", "Reviews", "Trade / B2B" do not navigate to their sections (works on desktop only).
+  2) BUG: Shop page shows only 1 product per row on mobile — needs 2 side-by-side tiles like a real e-commerce site.
+  3) FEATURE: SEO-friendly structured pages — About Us, Contact, plus enhanced Terms & Privacy — with proper meta tags, canonical URLs, OG/Twitter cards, JSON-LD schema, sitemap.xml + robots.txt.
+
+frontend:
+  - task: "Fix mobile Navbar hash-links (The Craft / Reviews / Trade B2B)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/Navbar.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Root cause: mobile menu used raw <a href='/#craft'> which does not always trigger scroll on SPAs when the pathname is already '/' (browsers may only push the hash without scrolling), and when on any other route the hash href alone did not scroll after navigation.
+          Fix: Replaced the flat href with programmatic handleHashClick() — uses useNavigate to first navigate to '/' if not on home, then a scrollToId(id) with a 72px offset for the fixed navbar. On '/', it uses smooth-scroll directly. Also added a useEffect that watches location.hash on '/' and re-runs the scroll after 120ms and 500ms (handles Hero image load reflow). Applied to both desktop nav AND mobile drawer. Added -mobile testid suffix for mobile menu links. Closes drawer on click.
+
+  - task: "ShopPage 2-column grid on mobile (was 1 col)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/ShopPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Root cause: grid classes were `grid md:grid-cols-2 xl:grid-cols-3` — no base grid-cols on mobile means single column (Tailwind default).
+          Fix: `grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6 lg:gap-8`. Card content also tuned for tighter mobile: p-3 sm:p-6, smaller font sizes, hidden tagline paragraph on mobile, wrap-safe pricing/action row, smaller icons.
+
+  - task: "SEO helper component + About + Contact pages + JSON-LD + sitemap + robots"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/SEO.jsx, frontend/src/pages/AboutPage.jsx, frontend/src/pages/ContactPage.jsx, frontend/src/pages/LegalPage.jsx, frontend/src/pages/ShopPage.jsx, frontend/src/pages/ProductPage.jsx, frontend/src/App.js, frontend/src/components/Footer.jsx, frontend/public/robots.txt, frontend/public/sitemap.xml"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          - New <SEO> component (zero-dep): sets document.title + canonical link + description + robots + full OG (title/description/url/type/image/site_name) + Twitter (summary_large_image) + JSON-LD via script tag with stable id (replaces on route change).
+          - AboutPage (/about): hero + story + 4-pillar grid (100% Handmade, Crystal Sourcing, 24-Month Warranty, 48-120 Hours Each) + CTA. JSON-LD: AboutPage + Organization with founder + sameAs Instagram/Facebook.
+          - ContactPage (/contact): 4 info cards (email/phone/address/social) + contact form that POSTs to existing /api/b2b/leads with [CONTACT — subject] prefix. Success state with 'Send another' reset. Schema.org ContactPage + Organization with contactPoint + PostalAddress.
+          - LegalPage upgraded: added SEO_META for privacy/terms/refund/shipping + JSON-LD WebPage + supports short-link routes /terms and /privacy in addition to /policies/:slug (via useLocation).
+          - ShopPage: SEO tag with CollectionPage schema; description escaped via string literal.
+          - ProductPage: SEO tag with full Product schema (name, description, image[], sku=slug, brand, offer.price, offer.priceCurrency=INR, availability, itemCondition).
+          - Home (App.js Home component): SEO with Organization schema (founder, sameAs, contactPoint).
+          - Footer: 'Contact Atelier' → /contact; 'About Us' added at top of Atelier column; Support column now uses proper Links (was #-hash placeholders).
+          - New static files: /public/robots.txt (allows all, disallow /admin, /account, /auth/callback, /api/, references sitemap), /public/sitemap.xml (Home + Shop + About + Contact + all 4 policy pages + 2 seeded products with priorities).
+          - New routes: /about, /contact, /terms, /privacy (both /terms and /privacy map to LegalPage with correct slug via useLocation).
+
+metadata:
+  created_by: "main_agent"
+  version: "1.3"
+  test_sequence: 5
+  run_ui: true
+
+test_plan:
+  current_focus:
+    - "Fix mobile Navbar hash-links (The Craft / Reviews / Trade B2B)"
+    - "ShopPage 2-column grid on mobile (was 1 col)"
+    - "SEO helper component + About + Contact pages + JSON-LD + sitemap + robots"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Phase D UI-only fixes + new pages ready. Testing focus:
+      1) Mobile Navbar (viewport 390x844):
+         - Open /, tap the hamburger, tap 'The Craft' → URL becomes /#craft and page scrolls to element#craft (Craftsmanship section).
+         - Same for '#reviews' and '#b2b'.
+         - Then from /shop, tap hamburger → 'The Craft' → should navigate to / and scroll to #craft.
+      2) Mobile Shop grid (viewport 390x844): /shop → verify product cards are laid out 2-per-row (grid-cols-2). Count elements matching [data-testid^='shop-card-']; check computed style shows 2 columns.
+      3) SEO:
+         - Load / → document.title contains 'ArtyFex — Handmade Resin & Crystal Mirrors'; meta[name=description] present; meta[property='og:title'] present; script#seo-jsonld exists with @type Organization.
+         - Load /about (200 OK) → document.title contains 'About ArtyFex'; page shows 'Handmade, in Mumbai'; JSON-LD AboutPage present.
+         - Load /contact (200 OK) → shows form; testids contact-form, contact-email, contact-submit exist. (Do NOT actually submit unless quick.)
+         - Load /policies/terms → document.title contains 'Terms & Conditions'.
+         - Curl /robots.txt returns 200 with "Sitemap:" line.
+         - Curl /sitemap.xml returns 200 XML.
+      4) Footer: /about and /contact links visible.
+
+user_problem_statement_phase_c: |
   Phase C — Backend Integration, User Accounts & Retention:
   1) Emergent Google Auth Integration ("Continue with Google") alongside existing email/password.
   2) Customer dashboard: rename Messages tab → Updates.

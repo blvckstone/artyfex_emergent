@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import SEO from "@/components/SEO";
 import { fetchProducts } from "@/lib/api";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
@@ -163,6 +164,18 @@ export default function ShopPage() {
 
   return (
     <div className="min-h-screen bg-ink-950 text-cream">
+      <SEO
+        title="Shop Handmade Resin & Crystal Mirrors | ArtyFex"
+        description={'Browse the ArtyFex atelier — signature 2×3 ft geode statement mirrors, 24" round mirrors and companion pieces. 100% handmade in Mumbai. Insured white-glove delivery.'}
+        path="/shop"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "CollectionPage",
+          "name": "ArtyFex Collection",
+          "url": "https://www.artyfex.in/shop",
+          "description": "Every handmade resin and crystal mirror we pour.",
+        }}
+      />
       <Navbar />
       <div className="max-w-[1440px] mx-auto px-6 md:px-12 lg:px-16 pt-32 pb-16">
         <div className="flex items-center gap-3 mb-6">
@@ -355,7 +368,7 @@ export default function ShopPage() {
                 </button>
               </div>
             ) : (
-              <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6 lg:gap-8">
+              <div className="grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6 lg:gap-8">
                 {filtered.map((p, i) => {
                   const inWish = has(p.id);
                   const lowStock = p.stock > 0 && p.stock <= 3;
@@ -385,19 +398,19 @@ export default function ShopPage() {
                           </button>
                         </div>
                       </Link>
-                      <div className="p-6">
-                        <div className="text-[10px] uppercase tracking-luxury text-gold-soft">{p.size}</div>
+                      <div className="p-3 sm:p-6">
+                        <div className="text-[9px] sm:text-[10px] uppercase tracking-luxury text-gold-soft truncate">{p.size}</div>
                         <Link to={`/product/${p.slug}`} className="block">
-                          <h3 className="mt-3 font-serif text-2xl leading-tight hover:text-gold transition-colors">{p.name.split(" — ")[0]}</h3>
+                          <h3 className="mt-2 sm:mt-3 font-serif text-base sm:text-2xl leading-tight hover:text-gold transition-colors line-clamp-2">{p.name.split(" — ")[0]}</h3>
                         </Link>
-                        <p className="mt-2 text-sm text-cream/50 italic font-serif">{p.tagline}</p>
-                        <div className="mt-5 flex items-center justify-between">
-                          <div>
-                            <div className="font-serif text-2xl">
+                        <p className="hidden sm:block mt-2 text-sm text-cream/50 italic font-serif">{p.tagline}</p>
+                        <div className="mt-3 sm:mt-5 flex items-center justify-between gap-2 flex-wrap">
+                          <div className="min-w-0">
+                            <div className="font-serif text-base sm:text-2xl">
                               {showRange ? `${formatINR(pMin)} – ${formatINR(pMax)}` : formatINR(p.price_inr)}
                             </div>
                             {p.mrp_inr > p.price_inr && !showRange && (
-                              <div className="text-[10px] text-cream/40">
+                              <div className="text-[9px] sm:text-[10px] text-cream/40">
                                 <span className="line-through">{formatINR(p.mrp_inr)}</span>
                                 <span className="ml-2 text-gold">{Math.round(((p.mrp_inr - p.price_inr)/p.mrp_inr)*100)}% off</span>
                               </div>
@@ -406,8 +419,8 @@ export default function ShopPage() {
                           <button data-testid={`shop-add-${p.slug}`}
                             disabled={out}
                             onClick={() => addItem(p, p.variants[0].key, 1)}
-                            className="inline-flex items-center gap-2 text-[10px] uppercase tracking-luxury text-gold hover:text-cream disabled:opacity-40 disabled:cursor-not-allowed">
-                            {out ? "Sold out" : (<>Add <ArrowUpRight className="w-3.5 h-3.5" /></>)}
+                            className="inline-flex items-center gap-1 sm:gap-2 text-[9px] sm:text-[10px] uppercase tracking-luxury text-gold hover:text-cream disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
+                            {out ? "Sold out" : (<>Add <ArrowUpRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" /></>)}
                           </button>
                         </div>
                         <div className="mt-4 flex gap-2">

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShoppingBag, Menu, X, User } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { IDS } from "@/constants/testIds";
@@ -9,15 +9,29 @@ import BrandLogo from "@/components/BrandLogo";
 
 const links = [
   { id: IDS.nav.collection, label: "Shop", href: "/shop", route: true },
-  { id: IDS.nav.craft, label: "The Craft", href: "/#craft" },
-  { id: IDS.nav.reviews, label: "Reviews", href: "/#reviews" },
-  { id: IDS.nav.b2b, label: "Trade / B2B", href: "/#b2b" },
+  { id: IDS.nav.craft, label: "The Craft", hash: "craft" },
+  { id: IDS.nav.reviews, label: "Reviews", hash: "reviews" },
+  { id: IDS.nav.b2b, label: "Trade / B2B", hash: "b2b" },
 ];
+
+/**
+ * Scroll to a section by id. If we are on another route, navigate to '/' first
+ * and defer scrolling until after the home page mounts.
+ */
+function scrollToId(id) {
+  const el = document.getElementById(id);
+  if (!el) return false;
+  // Account for the fixed 80px navbar
+  const y = el.getBoundingClientRect().top + window.pageYOffset - 72;
+  window.scrollTo({ top: y, behavior: "smooth" });
+  return true;
+}
 
 export const Navbar = () => {
   const { setIsOpen, count } = useCart();
   const { user, openAuth } = useAuth();
   const nav = useNavigate();
+  const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -26,6 +40,29 @@ export const Navbar = () => {
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // On route change to '/', if we have a pending hash, scroll to it after mount
+  useEffect(() => {
+    if (location.pathname === "/" && location.hash) {
+      const id = location.hash.replace(/^#/, "");
+      // Wait a beat for sections to render / images to lay out
+      const t1 = setTimeout(() => scrollToId(id), 120);
+      const t2 = setTimeout(() => scrollToId(id), 500);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    }
+  }, [location.pathname, location.hash]);
+
+  const handleHashClick = (e, hash) => {
+    e.preventDefault();
+    setMobileOpen(false);
+    if (location.pathname !== "/") {
+      nav(`/#${hash}`);
+    } else {
+      scrollToId(hash);
+      // Keep URL clean but reflect hash for shareability
+      window.history.replaceState({}, "", `/#${hash}`);
+    }
+  };
 
   return (
     <motion.header
@@ -59,10 +96,11 @@ export const Navbar = () => {
               </Link>
             ) : (
               <a
-                key={l.href}
-                href={l.href}
+                key={l.hash}
+                href={`/#${l.hash}`}
+                onClick={(e) => handleHashClick(e, l.hash)}
                 data-testid={l.id}
-                className="text-xs uppercase tracking-luxury text-cream/70 hover:text-gold transition-colors duration-300"
+                className="text-xs uppercase tracking-luxury text-cream/70 hover:text-gold transition-colors duration-300 cursor-pointer"
               >
                 {l.label}
               </a>
@@ -125,16 +163,18 @@ export const Navbar = () => {
                     key={l.href}
                     to={l.href}
                     onClick={() => setMobileOpen(false)}
+                    data-testid={`${l.id}-mobile`}
                     className="text-sm uppercase tracking-luxury text-cream/80 hover:text-gold"
                   >
                     {l.label}
                   </Link>
                 ) : (
                   <a
-                    key={l.href}
-                    href={l.href}
-                    onClick={() => setMobileOpen(false)}
-                    className="text-sm uppercase tracking-luxury text-cream/80 hover:text-gold"
+                    key={l.hash}
+                    href={`/#${l.hash}`}
+                    onClick={(e) => handleHashClick(e, l.hash)}
+                    data-testid={`${l.id}-mobile`}
+                    className="text-sm uppercase tracking-luxury text-cream/80 hover:text-gold cursor-pointer"
                   >
                     {l.label}
                   </a>

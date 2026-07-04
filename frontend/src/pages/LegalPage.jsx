@@ -1,7 +1,27 @@
 import React from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import SEO from "@/components/SEO";
+
+const SEO_META = {
+  privacy: {
+    title: "Privacy Policy | ArtyFex — Handmade Resin & Crystal Mirrors",
+    description: "How ArtyFex collects, uses and protects your personal data. GDPR-friendly, PCI-DSS compliant checkout via Razorpay. Read our full privacy policy.",
+  },
+  terms: {
+    title: "Terms & Conditions | ArtyFex",
+    description: "Terms of purchase, warranty, care and intellectual-property rights for ArtyFex handmade mirrors. Governed by Indian law.",
+  },
+  refund: {
+    title: "Returns & Refunds Policy | ArtyFex",
+    description: "3-day return window, insured white-glove transit, and how to raise a return request for your handmade ArtyFex mirror.",
+  },
+  shipping: {
+    title: "Shipping Policy | ArtyFex",
+    description: "Pan-India insured white-glove shipping, made-to-order timelines and complimentary delivery on orders above ₹25,000.",
+  },
+};
 
 const CONTENT = {
   privacy: {
@@ -52,10 +72,29 @@ const CONTENT = {
 };
 
 export default function LegalPage() {
-  const { slug } = useParams();
+  const { slug: routeSlug } = useParams();
+  const { pathname } = useLocation();
+  // Support short-link routes /terms and /privacy in addition to /policies/:slug
+  const inferredSlug = pathname === "/terms" ? "terms" : pathname === "/privacy" ? "privacy" : routeSlug;
+  const slug = inferredSlug || "privacy";
   const doc = CONTENT[slug] || CONTENT.privacy;
+  const seo = SEO_META[slug] || SEO_META.privacy;
   return (
     <div className="min-h-screen bg-ink-950 text-cream">
+      <SEO
+        title={seo.title}
+        description={seo.description}
+        path={`/policies/${slug}`}
+        type="article"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "WebPage",
+          "name": doc.title,
+          "description": seo.description,
+          "url": `https://www.artyfex.in/policies/${slug}`,
+          "publisher": { "@type": "Organization", "name": "ArtyFex", "url": "https://www.artyfex.in" },
+        }}
+      />
       <Navbar />
       <div className="max-w-3xl mx-auto px-6 md:px-12 pt-32 pb-24">
         <div className="text-[10px] uppercase tracking-luxury text-gold-soft">ArtyFex Atelier</div>

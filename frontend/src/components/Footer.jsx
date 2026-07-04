@@ -39,6 +39,7 @@ export const Footer = () => {
           </div>
 
           <FooterCol title="Atelier">
+            <Link to="/about">About Us</Link>
             <a href="/#craft">The Craft</a>
             <Link to="/shop">The Collection</Link>
             <a href="/#reviews">Collectors</a>
@@ -47,10 +48,10 @@ export const Footer = () => {
           </FooterCol>
 
           <FooterCol title="Support">
-            <a href="#">Order Tracking</a>
-            <a href="#">Care Guide</a>
-            <a href="#">Shipping & Returns</a>
-            <a href="#">Contact Atelier</a>
+            <Link to="/contact">Contact Atelier</Link>
+            <Link to="/policies/shipping">Shipping & Returns</Link>
+            <Link to="/policies/refund">Care Guide</Link>
+            <Link to="/account">Order Tracking</Link>
           </FooterCol>
 
           <FooterCol title="Legal">
