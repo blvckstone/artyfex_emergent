@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Shield, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { X, Shield, CheckCircle2, Loader2, XCircle, AlertTriangle, RefreshCw, Mail } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { api } from "@/lib/api";
 import { IDS } from "@/constants/testIds";
 
-const formatINR = (n) => `₹${n.toLocaleString("en-IN")}`;
+const formatINR = (n) => `₹${(n || 0).toLocaleString("en-IN")}`;
 
 const loadRazorpay = () =>
   new Promise((resolve) => {
@@ -17,11 +17,17 @@ const loadRazorpay = () =>
     document.body.appendChild(s);
   });
 
+const MAX_RETRIES = 3;
+
 export const CheckoutDialog = ({ open, onClose }) => {
-  const { items, subtotal, shipping, total, clear } = useCart();
+  const { items, subtotal, shipping, total, coupon, discount, clear } = useCart();
   const [step, setStep] = useState("form"); // form | processing | success | error
   const [orderNumber, setOrderNumber] = useState("");
+  const [errorTitle, setErrorTitle] = useState("Payment could not be completed");
   const [errorMsg, setErrorMsg] = useState("");
+  const [errorCode, setErrorCode] = useState("");
+  const [attempts, setAttempts] = useState(0);
+  const [lastOrderPayload, setLastOrderPayload] = useState(null);
 
   const [form, setForm] = useState({
     name: "", email: "", phone: "", address: "", city: "", pincode: "",
@@ -36,21 +42,50 @@ export const CheckoutDialog = ({ open, onClose }) => {
     return null;
   };
 
-  const startPayment = async (e) => {
-    e.preventDefault();
-    const err = validate();
-    if (err) { setStep("error"); setErrorMsg(err); return; }
+  const logFailure = async (payload) => {
+    try {
+      await api.post("/payments/failed", payload);
+    } catch { /* silent — logging failure must not block UX */ }
+  };
+
+  const failWith = ({ title, description, code, source, step: stepName, reason, order_number, rzp_order_id, rzp_payment_id }) => {
+    setStep("error");
+    setErrorTitle(title || "Payment could not be completed");
+    setErrorMsg(description || "Please try again or use a different method.");
+    setErrorCode(code || "");
+    // Fire-and-forget log to backend
+    logFailure({
+      order_number: order_number || null,
+      razorpay_order_id: rzp_order_id || null,
+      razorpay_payment_id: rzp_payment_id || null,
+      error_code: code || null,
+      error_description: description || null,
+      error_source: source || null,
+      error_step: stepName || null,
+      error_reason: reason || null,
+      amount_inr: total || 0,
+      customer_email: form.email || null,
+      customer_name: form.name || null,
+      customer_phone: form.phone || null,
+      attempt: attempts + 1,
+    });
+  };
+
+  const initiateCheckout = async (payload) => {
     setStep("processing");
+    setAttempts((a) => a + 1);
     try {
       const ok = await loadRazorpay();
-      if (!ok) throw new Error("Razorpay could not be loaded. Check your connection.");
+      if (!ok) {
+        return failWith({
+          title: "Payment gateway unavailable",
+          description: "Razorpay could not be reached. Please check your internet connection and try again.",
+          code: "RZP_LOAD_FAILED",
+          source: "client",
+        });
+      }
 
-      const res = await api.post("/orders", {
-        customer: form,
-        items: items.map((i) => ({ product_id: i.product_id, variant_key: i.variant_key, quantity: i.quantity })),
-        payment_method: "razorpay",
-        subtotal_inr: subtotal, shipping_inr: shipping, total_inr: total,
-      });
+      const res = await api.post("/orders", payload);
       const { order, razorpay_key_id } = res.data;
       setOrderNumber(order.order_number);
 
@@ -73,27 +108,93 @@ export const CheckoutDialog = ({ open, onClose }) => {
             });
             setStep("success");
             clear();
-          } catch {
-            setStep("error");
-            setErrorMsg("Payment succeeded but verification failed. Please contact atelier@artyfex.in.");
+          } catch (verr) {
+            failWith({
+              title: "Payment received — verification failed",
+              description: "Your payment was captured but our system could not verify it. Please save this order number and email atelier@artyfex.in — no charge will be lost.",
+              code: verr?.response?.data?.detail || "VERIFY_FAILED",
+              source: "backend",
+              order_number: order.order_number,
+              rzp_order_id: response.razorpay_order_id,
+              rzp_payment_id: response.razorpay_payment_id,
+            });
           }
         },
         modal: {
-          ondismiss: () => { setStep("form"); },
+          ondismiss: () => {
+            // User closed the Razorpay modal without paying — offer retry
+            failWith({
+              title: "Payment window closed",
+              description: "You closed the payment window before completing the transaction. Your cart is still saved — retry when you're ready.",
+              code: "USER_CANCELLED",
+              source: "user",
+              order_number: order.order_number,
+              rzp_order_id: order.razorpay_order_id,
+            });
+          },
         },
       });
       rzp.on("payment.failed", (resp) => {
-        setStep("error");
-        setErrorMsg(resp.error?.description || "Payment failed. Please try again.");
+        const err = resp.error || {};
+        failWith({
+          title: "Payment declined",
+          description: err.description || "Your payment was declined by the bank. Try a different card, UPI, or netbanking.",
+          code: err.code || "PAYMENT_FAILED",
+          source: err.source || "gateway",
+          stepName: err.step || null,
+          reason: err.reason || null,
+          order_number: order.order_number,
+          rzp_order_id: err.metadata?.order_id || order.razorpay_order_id,
+          rzp_payment_id: err.metadata?.payment_id,
+        });
       });
       rzp.open();
     } catch (err) {
-      setStep("error");
-      setErrorMsg(err?.response?.data?.detail || err.message || "Unable to start checkout.");
+      failWith({
+        title: "Could not start checkout",
+        description: err?.response?.data?.detail || err?.message || "An unexpected error occurred. Please try again.",
+        code: err?.response?.status ? `HTTP_${err.response.status}` : "UNKNOWN",
+        source: "backend",
+      });
     }
   };
 
-  const close = () => { setStep("form"); setErrorMsg(""); onClose(); };
+  const startPayment = async (e) => {
+    e.preventDefault();
+    const err = validate();
+    if (err) {
+      setStep("error");
+      setErrorTitle("Please review your details");
+      setErrorMsg(err);
+      setErrorCode("VALIDATION");
+      return;
+    }
+    const payload = {
+      customer: form,
+      items: items.map((i) => ({ product_id: i.product_id, variant_key: i.variant_key, quantity: i.quantity })),
+      payment_method: "razorpay",
+      subtotal_inr: subtotal,
+      shipping_inr: shipping,
+      total_inr: total,
+      coupon_code: coupon?.code || null,
+      discount_inr: discount || 0,
+    };
+    setLastOrderPayload(payload);
+    initiateCheckout(payload);
+  };
+
+  const retryPayment = () => {
+    if (!lastOrderPayload) { setStep("form"); return; }
+    initiateCheckout(lastOrderPayload);
+  };
+
+  const close = () => {
+    setStep("form"); setErrorMsg(""); setErrorTitle("Payment could not be completed"); setErrorCode("");
+    setAttempts(0); setLastOrderPayload(null);
+    onClose();
+  };
+
+  const tooManyAttempts = attempts >= MAX_RETRIES;
 
   return (
     <AnimatePresence>
@@ -140,7 +241,9 @@ export const CheckoutDialog = ({ open, onClose }) => {
                         </div>
                         <div className="flex-1 text-sm">
                           <div className="text-cream font-serif leading-tight">{it.product_name.split(" — ")[0]}</div>
-                          <div className="text-[10px] uppercase tracking-luxury text-cream/40">{it.variant_label} · × {it.quantity}</div>
+                          <div className="text-[10px] uppercase tracking-luxury text-cream/40">
+                            {it.variant_label}{it.variant_size ? ` · ${it.variant_size}` : ""} · × {it.quantity}
+                          </div>
                         </div>
                         <div className="text-sm text-cream">{formatINR(it.price_inr * it.quantity)}</div>
                       </div>
@@ -148,6 +251,12 @@ export const CheckoutDialog = ({ open, onClose }) => {
                   </div>
                   <div className="mt-8 space-y-2 text-sm">
                     <div className="flex justify-between"><span className="text-cream/50">Subtotal</span><span className="text-cream">{formatINR(subtotal)}</span></div>
+                    {discount > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-cream/50">Discount {coupon?.code ? `(${coupon.code})` : ""}</span>
+                        <span className="text-gold">- {formatINR(discount)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between"><span className="text-cream/50">Shipping</span><span className={shipping === 0 ? "text-gold" : "text-cream"}>{shipping === 0 ? "Free" : formatINR(shipping)}</span></div>
                     <div className="pt-4 border-t border-white/5 flex items-baseline justify-between">
                       <span className="text-[10px] uppercase tracking-luxury text-cream/50">Total</span>
@@ -184,11 +293,69 @@ export const CheckoutDialog = ({ open, onClose }) => {
             )}
 
             {step === "error" && (
-              <div className="p-12 text-center max-w-lg mx-auto">
-                <div className="inline-flex p-4 border border-red-500/40"><XCircle className="w-8 h-8 text-red-400" /></div>
-                <div className="mt-6 font-serif text-3xl text-cream">Payment could not be completed</div>
-                <p data-testid={IDS.checkout.error} className="mt-3 text-sm text-cream/60">{errorMsg}</p>
-                <button onClick={() => { setStep("form"); setErrorMsg(""); }} className="mt-8 text-xs uppercase tracking-luxury text-gold border-b border-gold/40 pb-1">Try again</button>
+              <div data-testid="checkout-error-state" className="p-8 md:p-12 max-w-2xl mx-auto">
+                {/* Prominent error banner */}
+                <div className="border-l-4 border-red-500 bg-red-500/5 p-5 flex items-start gap-4">
+                  <div className="p-2 border border-red-500/40 shrink-0">
+                    <AlertTriangle className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-serif text-2xl text-cream leading-tight">{errorTitle}</div>
+                    <p data-testid={IDS.checkout.error} className="mt-2 text-sm text-cream/70 leading-relaxed">{errorMsg}</p>
+                    {errorCode && (
+                      <div className="mt-3 text-[10px] uppercase tracking-luxury text-cream/40">
+                        Reference · <span className="text-cream/60 font-mono normal-case tracking-normal">{errorCode}</span>
+                        {orderNumber ? <> · Order <span className="text-cream/60 font-mono normal-case tracking-normal">{orderNumber}</span></> : null}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Attempts / guidance */}
+                {attempts > 0 && (
+                  <div className="mt-4 text-[11px] text-cream/50 flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1">
+                      <XCircle className="w-3 h-3" /> Attempt {attempts} of {MAX_RETRIES}
+                    </span>
+                    {tooManyAttempts && (
+                      <span className="text-yellow-400">· Please try a different method or contact us.</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                  {!tooManyAttempts && lastOrderPayload && (
+                    <button
+                      data-testid="checkout-retry"
+                      onClick={retryPayment}
+                      className="inline-flex items-center justify-center gap-2 bg-gold text-ink-950 px-6 py-4 text-xs uppercase tracking-luxury hover:bg-cream transition-colors"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Retry payment
+                    </button>
+                  )}
+                  <button
+                    data-testid="checkout-edit-details"
+                    onClick={() => { setStep("form"); setErrorMsg(""); setErrorCode(""); }}
+                    className="inline-flex items-center justify-center gap-2 border border-white/15 text-cream/80 px-6 py-4 text-xs uppercase tracking-luxury hover:border-gold/40 hover:text-gold transition-colors"
+                  >
+                    Edit details
+                  </button>
+                  {tooManyAttempts && (
+                    <a
+                      href={`mailto:atelier@artyfex.in?subject=Payment%20assistance%20-%20${encodeURIComponent(orderNumber || "New order")}&body=${encodeURIComponent("Hi ArtyFex, I need help completing my payment.\nOrder: " + (orderNumber || "N/A") + "\nError code: " + errorCode)}`}
+                      data-testid="checkout-contact-support"
+                      className="inline-flex items-center justify-center gap-2 border border-gold/40 text-gold px-6 py-4 text-xs uppercase tracking-luxury hover:bg-gold hover:text-ink-950 transition-colors"
+                    >
+                      <Mail className="w-3.5 h-3.5" /> Contact atelier
+                    </a>
+                  )}
+                </div>
+
+                <p className="mt-6 text-[11px] text-cream/40 leading-relaxed">
+                  If your bank account was debited but the order still shows failed, do not worry — no double charge will occur.
+                  Contact <a href="mailto:atelier@artyfex.in" className="text-gold hover:text-cream">atelier@artyfex.in</a> with the reference above and we will resolve within 24 hours.
+                </p>
               </div>
             )}
           </motion.div>

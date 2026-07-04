@@ -40,6 +40,43 @@ export default function ProductPage() {
     [variantKey, product],
   );
 
+  // Effective per-variant fields (fall back to product-level)
+  const effectivePrice = activeVariant?.price_inr ?? product?.price_inr ?? 0;
+  const effectiveMrp = activeVariant?.mrp_inr ?? product?.mrp_inr ?? 0;
+  const effectiveStock = activeVariant?.stock ?? product?.stock ?? 0;
+  const effectiveSize = activeVariant?.size || product?.size || "";
+
+  // Group variants by "colour" (colour = variant.hex + base label prefix).
+  // A variant with size means the product supports multi-size — we then split the picker into two axes.
+  const hasSizeAxis = useMemo(
+    () => Boolean(product?.variants?.some((v) => v?.size)),
+    [product],
+  );
+
+  // Colours = unique { hex, label (before size), representative variant }
+  const colourOptions = useMemo(() => {
+    if (!product) return [];
+    const map = new Map();
+    product.variants.forEach((v) => {
+      // If a size axis exists, group by hex (colour), else keep per-key
+      const groupKey = hasSizeAxis ? v.hex : v.key;
+      if (!map.has(groupKey)) {
+        // Prefer the label part before " · " if present (e.g., "Signature Gold · 24\"" -> "Signature Gold")
+        const cleanLabel = (v.label || "").split("·")[0].trim();
+        map.set(groupKey, { hex: v.hex, key: v.key, label: cleanLabel, sample: v });
+      }
+    });
+    return [...map.values()];
+  }, [product, hasSizeAxis]);
+
+  // Sizes available for the currently selected colour
+  const sizeOptionsForColour = useMemo(() => {
+    if (!product || !hasSizeAxis || !activeVariant) return [];
+    return product.variants
+      .filter((v) => v.hex === activeVariant.hex && v.size)
+      .map((v) => ({ key: v.key, size: v.size, stock: v.stock ?? product.stock, price_inr: v.price_inr ?? product.price_inr }));
+  }, [product, activeVariant, hasSizeAxis]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-ink-950 text-cream">
@@ -63,12 +100,12 @@ export default function ProductPage() {
 
   const inWishlist = has(product.id);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/product/${product.slug}` : "";
-  const savings = product.mrp_inr - product.price_inr;
-  const savingsPct = product.mrp_inr > 0 ? Math.round((savings / product.mrp_inr) * 100) : 0;
-  const lowStock = product.stock > 0 && product.stock <= 3;
-  const outOfStock = product.stock <= 0;
+  const savings = effectiveMrp - effectivePrice;
+  const savingsPct = effectiveMrp > 0 ? Math.round((savings / effectiveMrp) * 100) : 0;
+  const lowStock = effectiveStock > 0 && effectiveStock <= 3;
+  const outOfStock = effectiveStock <= 0;
 
-  const waMessage = `Hi ArtyFex, I'm interested in the ${product.name} (${product.size}) — ${formatINR(product.price_inr)}. Colour: ${activeVariant?.label}. Link: ${shareUrl}`;
+  const waMessage = `Hi ArtyFex, I'm interested in the ${product.name} (${effectiveSize}) — ${formatINR(effectivePrice)}. Colour: ${activeVariant?.label}. Link: ${shareUrl}`;
   const waHref = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(waMessage)}`;
 
   const handleAdd = () => {
@@ -118,7 +155,7 @@ export default function ProductPage() {
 
           {/* Details */}
           <div>
-            <div className="text-[10px] uppercase tracking-luxury text-gold-soft">{product.size}</div>
+            <div className="text-[10px] uppercase tracking-luxury text-gold-soft">{effectiveSize}</div>
             <h1 className="mt-3 font-serif text-4xl md:text-5xl leading-[1.05] text-cream text-balance" data-testid="product-name">
               {product.name.split(" — ")[0]}
             </h1>
@@ -126,10 +163,10 @@ export default function ProductPage() {
 
             {/* Pricing */}
             <div className="mt-8 flex items-baseline gap-4 flex-wrap" data-testid="product-price-block">
-              <span className="font-serif text-4xl text-cream" data-testid="product-price">{formatINR(product.price_inr)}</span>
-              {product.mrp_inr > product.price_inr && (
+              <span className="font-serif text-4xl text-cream" data-testid="product-price">{formatINR(effectivePrice)}</span>
+              {effectiveMrp > effectivePrice && (
                 <>
-                  <span className="text-base text-cream/40 line-through" data-testid="product-mrp">{formatINR(product.mrp_inr)}</span>
+                  <span className="text-base text-cream/40 line-through" data-testid="product-mrp">{formatINR(effectiveMrp)}</span>
                   <span className="text-xs uppercase tracking-luxury text-gold">Save {formatINR(savings)} · {savingsPct}% off</span>
                 </>
               )}
@@ -144,7 +181,7 @@ export default function ProductPage() {
                 </span>
               ) : lowStock ? (
                 <span className="inline-flex items-center gap-2 text-xs uppercase tracking-luxury text-yellow-400 animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" /> Only {product.stock} left · Low stock
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" /> Only {effectiveStock} left · Low stock
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-2 text-xs uppercase tracking-luxury text-emerald-400/80">
@@ -156,27 +193,75 @@ export default function ProductPage() {
             <p className="mt-8 text-base text-cream/70 leading-relaxed font-light">{product.description}</p>
 
             {/* Variants */}
-            {product.variants.length > 0 && (
+            {colourOptions.length > 0 && (
               <div className="mt-10">
                 <div className="flex items-center justify-between mb-4">
                   <div className="text-[10px] uppercase tracking-luxury text-cream/50">Colourway</div>
-                  <div className="text-xs text-gold-soft italic font-serif">{activeVariant?.label}</div>
+                  <div className="text-xs text-gold-soft italic font-serif">
+                    {hasSizeAxis
+                      ? (colourOptions.find((c) => c.hex === activeVariant?.hex)?.label || activeVariant?.label)
+                      : activeVariant?.label}
+                  </div>
                 </div>
-                <div className="flex gap-3">
-                  {product.variants.map((v) => (
-                    <button
-                      key={v.key}
-                      data-testid={`product-variant-${v.key}`}
-                      onClick={() => setVariantKey(v.key)}
-                      className={`group relative w-12 h-12 rounded-full transition-all ${
-                        variantKey === v.key ? "ring-2 ring-offset-4 ring-offset-ink-950 ring-gold" : "ring-1 ring-white/20"
-                      }`}
-                      style={{ background: `radial-gradient(circle at 30% 30%, ${v.hex}, #0a0a0a 80%)` }}
-                      aria-label={v.label}
-                    >
-                      <span className="absolute inset-0 rounded-full ring-1 ring-inset ring-white/10" />
-                    </button>
-                  ))}
+                <div className="flex gap-3 flex-wrap">
+                  {colourOptions.map((c) => {
+                    const isActive = hasSizeAxis ? c.hex === activeVariant?.hex : c.key === variantKey;
+                    return (
+                      <button
+                        key={c.hex + c.key}
+                        data-testid={`product-variant-${c.key}`}
+                        onClick={() => {
+                          if (!hasSizeAxis) { setVariantKey(c.key); return; }
+                          // Switch colour — keep current size if the new colour offers it, else pick first
+                          const currentSize = activeVariant?.size;
+                          const match = product.variants.find((v) => v.hex === c.hex && v.size === currentSize);
+                          const next = match || product.variants.find((v) => v.hex === c.hex);
+                          if (next) setVariantKey(next.key);
+                        }}
+                        className={`group relative w-12 h-12 rounded-full transition-all ${
+                          isActive ? "ring-2 ring-offset-4 ring-offset-ink-950 ring-gold" : "ring-1 ring-white/20"
+                        }`}
+                        style={{ background: `radial-gradient(circle at 30% 30%, ${c.hex}, #0a0a0a 80%)` }}
+                        aria-label={c.label}
+                      >
+                        <span className="absolute inset-0 rounded-full ring-1 ring-inset ring-white/10" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Size selector — only when the product has variants with size defined */}
+            {hasSizeAxis && sizeOptionsForColour.length > 0 && (
+              <div className="mt-8" data-testid="product-size-selector">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-[10px] uppercase tracking-luxury text-cream/50">Size</div>
+                  <div className="text-xs text-gold-soft italic font-serif">{activeVariant?.size}</div>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {sizeOptionsForColour.map((s) => {
+                    const isActive = s.key === variantKey;
+                    const soldOut = (s.stock ?? 0) <= 0;
+                    return (
+                      <button
+                        key={s.key}
+                        data-testid={`product-size-${s.key}`}
+                        onClick={() => setVariantKey(s.key)}
+                        disabled={soldOut}
+                        className={`px-4 py-2.5 text-xs uppercase tracking-luxury border transition-all ${
+                          isActive
+                            ? "border-gold text-gold bg-gold/5"
+                            : "border-white/15 text-cream/80 hover:border-gold/40 hover:text-gold"
+                        } ${soldOut ? "opacity-40 line-through cursor-not-allowed" : ""}`}
+                      >
+                        {s.size}
+                        {s.price_inr !== effectivePrice && !soldOut && (
+                          <span className="ml-2 text-[10px] text-cream/50 normal-case tracking-normal">{formatINR(s.price_inr)}</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -264,7 +349,7 @@ export default function ProductPage() {
                 ))}
               </ul>
               <div className="mt-5 pt-5 border-t border-white/5 flex flex-wrap gap-6 text-xs text-cream/60">
-                <div><span className="text-cream/40">Dimensions:</span> <span className="text-cream">{product.size}</span></div>
+                <div><span className="text-cream/40">Dimensions:</span> <span className="text-cream">{effectiveSize}</span></div>
                 <div><span className="text-cream/40">Craft time:</span> <span className="text-cream">{product.craft_hours} hours</span></div>
                 <div><span className="text-cream/40">Origin:</span> <span className="text-cream">Handmade in Mumbai</span></div>
               </div>

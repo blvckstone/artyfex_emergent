@@ -112,7 +112,13 @@ def now_iso():
 
 # ---------- MODELS ---------- #
 class Variant(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     key: str; label: str; hex: str; image: str
+    # Optional per-variant overrides for size / stock / price
+    size: Optional[str] = None
+    stock: Optional[int] = None
+    price_inr: Optional[int] = None
+    mrp_inr: Optional[int] = None
 
 class Product(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -140,6 +146,8 @@ class OrderIn(BaseModel):
     customer: OrderCustomer; items: List[OrderItem]
     payment_method: str  # razorpay | cod
     subtotal_inr: int; shipping_inr: int; total_inr: int
+    coupon_code: Optional[str] = None
+    discount_inr: int = 0
 
 class Order(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -148,7 +156,9 @@ class Order(BaseModel):
     customer: OrderCustomer; items: List[OrderItem]
     payment_method: str
     subtotal_inr: int; shipping_inr: int; total_inr: int
-    status: str = "pending_payment"  # pending_payment | confirmed | packed | shipped | delivered | cancelled
+    coupon_code: Optional[str] = None
+    discount_inr: int = 0
+    status: str = "pending_payment"  # pending_payment | confirmed | packed | shipped | delivered | cancelled | payment_failed
     razorpay_order_id: Optional[str] = None
     razorpay_payment_id: Optional[str] = None
     delivered_at: Optional[str] = None
@@ -256,12 +266,57 @@ class AdminMessage(AdminMessageIn):
     read_at: Optional[str] = None
 
 
+# ---------- COUPONS ----------
+class CouponIn(BaseModel):
+    code: str
+    type: str  # "percentage" | "flat"
+    value: float  # percentage (0-100) or flat amount (INR)
+    min_cart_inr: int = 0
+    max_uses: Optional[int] = None
+    expires_at: Optional[str] = None  # ISO string
+    active: bool = True
+    description: Optional[str] = None
+
+
+class Coupon(CouponIn):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    used_count: int = 0
+    created_at: str = Field(default_factory=now_iso)
+
+
+class CouponValidateIn(BaseModel):
+    code: str
+    cart_total_inr: int
+
+
+# ---------- FAILED PAYMENTS ----------
+class FailedPaymentIn(BaseModel):
+    order_number: Optional[str] = None
+    razorpay_order_id: Optional[str] = None
+    razorpay_payment_id: Optional[str] = None
+    error_code: Optional[str] = None
+    error_description: Optional[str] = None
+    error_source: Optional[str] = None
+    error_step: Optional[str] = None
+    error_reason: Optional[str] = None
+    amount_inr: int = 0
+    customer_email: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    attempt: int = 1
+
+
+class FailedPayment(FailedPaymentIn):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: str = Field(default_factory=now_iso)
+
+
 # Strict return window enforced from delivery date
 RETURN_WINDOW_DAYS = 3
 
 
 # ---------- SEED ---------- #
-from server_seed import SEED_PRODUCTS, SEED_REVIEWS  # noqa: E402
+from server_seed import SEED_PRODUCTS, SEED_REVIEWS, SEED_COUPONS  # noqa: E402
 
 
 async def seed_if_empty():
@@ -271,6 +326,9 @@ async def seed_if_empty():
     if await db.reviews.count_documents({}) == 0:
         await db.reviews.insert_many([Review(**r).model_dump() for r in SEED_REVIEWS])
         logging.info(f"Seeded {len(SEED_REVIEWS)} reviews")
+    if await db.coupons.count_documents({}) == 0:
+        await db.coupons.insert_many([Coupon(**c).model_dump() for c in SEED_COUPONS])
+        logging.info(f"Seeded {len(SEED_COUPONS)} coupons")
     # Seed admin (idempotent)
     if not await db.admins.find_one({"email": ADMIN_EMAIL}):
         pw_hash = bcrypt.hashpw(ADMIN_PASSWORD.encode(), bcrypt.gensalt()).decode()
@@ -320,6 +378,74 @@ async def root():
     return {"brand": "ArtyFex"}
 
 
+# ---------- COUPON HELPERS ----------
+def _coupon_availability_error(coupon: dict, cart_total_inr: int) -> Optional[str]:
+    """Return an error message string if the coupon can NOT be applied, else None."""
+    if not coupon.get("active", True):
+        return "This coupon is no longer active."
+    if coupon.get("expires_at"):
+        try:
+            exp = datetime.fromisoformat(coupon["expires_at"].replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) > exp:
+                return "This coupon has expired."
+        except Exception:
+            pass
+    max_uses = coupon.get("max_uses")
+    if max_uses is not None and coupon.get("used_count", 0) >= max_uses:
+        return "This coupon has reached its usage limit."
+    min_cart = coupon.get("min_cart_inr", 0) or 0
+    if cart_total_inr < min_cart:
+        return f"Minimum cart value ₹{min_cart:,} required for this code."
+    return None
+
+
+def _coupon_discount_inr(coupon: dict, cart_total_inr: int) -> int:
+    """Compute the discount amount (INR, integer, floored) for a given cart total."""
+    t = coupon.get("type", "flat")
+    v = float(coupon.get("value", 0))
+    if t == "percentage":
+        raw = cart_total_inr * (v / 100.0)
+    else:
+        raw = v
+    # Cap discount at cart_total (never negative totals)
+    return int(max(0, min(raw, cart_total_inr)))
+
+
+@api_router.post("/coupons/validate")
+async def validate_coupon(payload: CouponValidateIn):
+    code = (payload.code or "").upper().strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="Please enter a coupon code.")
+    coupon = await db.coupons.find_one({"code": code}, {"_id": 0})
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Coupon not found.")
+    err = _coupon_availability_error(coupon, payload.cart_total_inr)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    discount = _coupon_discount_inr(coupon, payload.cart_total_inr)
+    return {
+        "valid": True,
+        "code": coupon["code"],
+        "type": coupon["type"],
+        "value": coupon["value"],
+        "discount_inr": discount,
+        "description": coupon.get("description"),
+    }
+
+
+@api_router.post("/payments/failed", response_model=FailedPayment)
+async def log_failed_payment(payload: FailedPaymentIn):
+    fp = FailedPayment(**payload.model_dump())
+    await db.failed_payments.insert_one(fp.model_dump())
+    # Also mark order as payment_failed if we have the order number
+    if payload.order_number:
+        await db.orders.update_one(
+            {"order_number": payload.order_number},
+            {"$set": {"status": "payment_failed"}},
+        )
+    return fp
+
+
 @api_router.get("/products", response_model=List[Product])
 async def list_products():
     return await db.products.find({}, {"_id": 0}).to_list(200)
@@ -340,7 +466,17 @@ async def list_reviews():
 
 @api_router.post("/orders", response_model=dict)
 async def create_order(payload: OrderIn):
+    # If coupon provided, validate on server too (defence in depth)
+    if payload.coupon_code:
+        coupon = await db.coupons.find_one({"code": payload.coupon_code.upper().strip(), "active": True}, {"_id": 0})
+        if not coupon:
+            raise HTTPException(status_code=400, detail="Invalid coupon code.")
+        _err = _coupon_availability_error(coupon, payload.subtotal_inr)
+        if _err:
+            raise HTTPException(status_code=400, detail=_err)
     order = Order(**payload.model_dump())
+    if payload.coupon_code:
+        order.coupon_code = payload.coupon_code.upper().strip()
     if payload.payment_method == "razorpay":
         if not rzp_client:
             raise HTTPException(status_code=500, detail="Razorpay not configured")
@@ -375,6 +511,9 @@ async def verify_order(payload: RzpVerify):
         {"order_number": payload.order_number},
         {"$set": {"status": "confirmed", "razorpay_payment_id": payload.razorpay_payment_id}},
     )
+    # Increment coupon usage counter on successful verification
+    if order.get("coupon_code"):
+        await db.coupons.update_one({"code": order["coupon_code"]}, {"$inc": {"used_count": 1}})
     return {"status": "confirmed", "order_number": payload.order_number}
 
 
@@ -770,6 +909,69 @@ async def admin_delete_message(msg_id: str, admin=Depends(get_current_admin)):
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return {"deleted": True}
+
+
+# ---------- ADMIN: COUPONS ----------
+@api_router.get("/admin/coupons", response_model=List[Coupon])
+async def admin_list_coupons(admin=Depends(get_current_admin)):
+    return await db.coupons.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api_router.post("/admin/coupons", response_model=Coupon)
+async def admin_create_coupon(payload: CouponIn, admin=Depends(get_current_admin)):
+    code = (payload.code or "").upper().strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="Code is required.")
+    if payload.type not in ("percentage", "flat"):
+        raise HTTPException(status_code=400, detail="Type must be 'percentage' or 'flat'.")
+    if payload.value <= 0:
+        raise HTTPException(status_code=400, detail="Value must be greater than zero.")
+    if payload.type == "percentage" and payload.value > 100:
+        raise HTTPException(status_code=400, detail="Percentage cannot exceed 100.")
+    if await db.coupons.find_one({"code": code}):
+        raise HTTPException(status_code=409, detail=f"Coupon '{code}' already exists.")
+    data = payload.model_dump()
+    data["code"] = code
+    coupon = Coupon(**data)
+    await db.coupons.insert_one(coupon.model_dump())
+    return coupon
+
+
+@api_router.patch("/admin/coupons/{coupon_id}", response_model=Coupon)
+async def admin_update_coupon(coupon_id: str, payload: CouponIn, admin=Depends(get_current_admin)):
+    existing = await db.coupons.find_one({"id": coupon_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Coupon not found")
+    code = (payload.code or "").upper().strip()
+    if payload.type not in ("percentage", "flat"):
+        raise HTTPException(status_code=400, detail="Type must be 'percentage' or 'flat'.")
+    if payload.value <= 0:
+        raise HTTPException(status_code=400, detail="Value must be greater than zero.")
+    if payload.type == "percentage" and payload.value > 100:
+        raise HTTPException(status_code=400, detail="Percentage cannot exceed 100.")
+    # If code changed, ensure new code isn't taken
+    if code and code != existing["code"]:
+        if await db.coupons.find_one({"code": code}):
+            raise HTTPException(status_code=409, detail=f"Coupon '{code}' already exists.")
+    update = payload.model_dump()
+    update["code"] = code or existing["code"]
+    await db.coupons.update_one({"id": coupon_id}, {"$set": update})
+    merged = {**existing, **update}
+    return Coupon(**merged)
+
+
+@api_router.delete("/admin/coupons/{coupon_id}")
+async def admin_delete_coupon(coupon_id: str, admin=Depends(get_current_admin)):
+    res = await db.coupons.delete_one({"id": coupon_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Coupon not found")
+    return {"deleted": True}
+
+
+# ---------- ADMIN: FAILED PAYMENTS ----------
+@api_router.get("/admin/failed-payments", response_model=List[FailedPayment])
+async def admin_list_failed_payments(admin=Depends(get_current_admin)):
+    return await db.failed_payments.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
 
 
 app.include_router(api_router)

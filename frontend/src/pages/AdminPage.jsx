@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast, Toaster } from "sonner";
-import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search } from "lucide-react";
+import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2 } from "lucide-react";
 
 const TOKEN_KEY = "artyfex_admin_token";
 
@@ -56,7 +56,7 @@ function useAuthedApi(token) {
   }, [token]);
 }
 
-const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: '[{"key":"gold","label":"Gold","hex":"#D4AF37","image":""}]', stock: 5, is_hero: false };
+const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: '[\n  {"key":"gold-standard","label":"Gold · Standard","hex":"#D4AF37","image":"","size":"","stock":5,"price_inr":null,"mrp_inr":null}\n]', stock: 5, is_hero: false };
 
 export default function AdminPage() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
@@ -70,6 +70,9 @@ export default function AdminPage() {
   const [users, setUsers] = useState([]);
   const [userSearch, setUserSearch] = useState("");
   const [userDetail, setUserDetail] = useState(null);
+  const [coupons, setCoupons] = useState([]);
+  const [failedPayments, setFailedPayments] = useState([]);
+  const [couponEditing, setCouponEditing] = useState(null); // null | coupon obj | "new"
   const [editing, setEditing] = useState(null); // null | product obj | "new"
   const [saving, setSaving] = useState(false);
 
@@ -78,12 +81,15 @@ export default function AdminPage() {
   const reload = React.useCallback(async () => {
     if (!token) return;
     try {
-      const [s, p, o, l, r, rt, u] = await Promise.all([
+      const [s, p, o, l, r, rt, u, c, fp] = await Promise.all([
         authed.get("/admin/stats"), authed.get("/products"),
         authed.get("/admin/orders"), authed.get("/admin/leads"), authed.get("/reviews"),
         authed.get("/admin/returns"), authed.get("/admin/users"),
+        authed.get("/admin/coupons"), authed.get("/admin/failed-payments"),
       ]);
-      setStats(s.data); setProducts(p.data); setOrders(o.data); setLeads(l.data); setReviews(r.data); setReturns(rt.data); setUsers(u.data);
+      setStats(s.data); setProducts(p.data); setOrders(o.data); setLeads(l.data);
+      setReviews(r.data); setReturns(rt.data); setUsers(u.data);
+      setCoupons(c.data); setFailedPayments(fp.data);
     } catch (err) {
       if (err?.response?.status === 401) { localStorage.removeItem(TOKEN_KEY); setToken(""); }
     }
@@ -139,7 +145,46 @@ export default function AdminPage() {
     { key: "users", label: "Customers", icon: UserCircle },
     { key: "leads", label: "B2B Leads", icon: Users },
     { key: "reviews", label: "Reviews", icon: Star },
+    { key: "coupons", label: "Coupons", icon: Tag },
+    { key: "failed", label: "Failed Payments", icon: AlertTriangle },
   ];
+
+  const saveCoupon = async (form) => {
+    setSaving(true);
+    try {
+      const payload = {
+        code: (form.code || "").toUpperCase().trim(),
+        type: form.type,
+        value: Number(form.value),
+        min_cart_inr: Number(form.min_cart_inr || 0),
+        max_uses: form.max_uses === "" || form.max_uses === null || form.max_uses === undefined ? null : Number(form.max_uses),
+        expires_at: form.expires_at || null,
+        active: !!form.active,
+        description: form.description || null,
+      };
+      if (form.id) {
+        await authed.patch(`/admin/coupons/${form.id}`, payload);
+      } else {
+        await authed.post("/admin/coupons", payload);
+      }
+      toast.success(form.id ? "Coupon updated" : "Coupon created");
+      setCouponEditing(null);
+      reload();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Save failed");
+    } finally { setSaving(false); }
+  };
+
+  const deleteCoupon = async (id) => {
+    if (!window.confirm("Delete this coupon? Existing orders keep their discount.")) return;
+    try {
+      await authed.delete(`/admin/coupons/${id}`);
+      toast.success("Coupon deleted");
+      reload();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Delete failed");
+    }
+  };
 
   const openUserDetail = async (email) => {
     try {
@@ -400,6 +445,102 @@ export default function AdminPage() {
             </div>
           </>
         )}
+
+        {tab === "coupons" && (
+          <>
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="font-serif text-4xl">Coupons</h1>
+              <button data-testid="admin-add-coupon" onClick={()=>setCouponEditing({ code: "", type: "percentage", value: 10, min_cart_inr: 0, max_uses: "", expires_at: "", active: true, description: "" })} className="inline-flex items-center gap-2 bg-gold text-ink-950 px-4 py-2.5 text-xs uppercase tracking-luxury">
+                <Plus className="w-3.5 h-3.5" /> New coupon
+              </button>
+            </div>
+            {coupons.length === 0 ? (
+              <div className="hairline p-8 text-center text-cream/50">No coupons yet. Create one to give customers a discount at checkout.</div>
+            ) : (
+              <div className="grid gap-3">
+                {coupons.map((c) => {
+                  const expired = c.expires_at && new Date(c.expires_at) < new Date();
+                  const exhausted = c.max_uses !== null && c.max_uses !== undefined && c.used_count >= c.max_uses;
+                  return (
+                    <div key={c.id} data-testid={`admin-coupon-${c.code}`} className="hairline p-4 flex flex-wrap items-center gap-4">
+                      <div className="flex-1 min-w-[220px]">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-gold text-lg tracking-wider">{c.code}</span>
+                          {!c.active && <span className="text-[10px] uppercase tracking-luxury text-red-400 border border-red-400/40 px-2 py-0.5">Disabled</span>}
+                          {expired && <span className="text-[10px] uppercase tracking-luxury text-yellow-400 border border-yellow-400/40 px-2 py-0.5">Expired</span>}
+                          {exhausted && <span className="text-[10px] uppercase tracking-luxury text-yellow-400 border border-yellow-400/40 px-2 py-0.5">Sold out</span>}
+                        </div>
+                        <div className="text-xs text-cream/60 mt-1">
+                          {c.type === "percentage" ? `${c.value}% off` : `${formatINR(c.value)} off`}
+                          {c.min_cart_inr > 0 ? ` · min cart ${formatINR(c.min_cart_inr)}` : ""}
+                          {c.max_uses !== null && c.max_uses !== undefined ? ` · ${c.used_count}/${c.max_uses} used` : ` · ${c.used_count} used`}
+                          {c.expires_at ? ` · expires ${new Date(c.expires_at).toLocaleDateString()}` : ""}
+                        </div>
+                        {c.description && <div className="text-xs text-cream/40 mt-1 italic">{c.description}</div>}
+                      </div>
+                      <button
+                        data-testid={`admin-coupon-edit-${c.code}`}
+                        onClick={() => setCouponEditing({ ...c, expires_at: c.expires_at ? c.expires_at.split("T")[0] : "", max_uses: c.max_uses ?? "" })}
+                        className="text-xs text-gold hover:text-cream border border-gold/30 px-3 py-1.5 inline-flex items-center gap-1.5"
+                      ><Edit2 className="w-3 h-3" /> Edit</button>
+                      <button data-testid={`admin-coupon-delete-${c.code}`} onClick={()=>deleteCoupon(c.id)} className="text-red-400 hover:text-red-300 p-2"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {couponEditing && <CouponEditor initial={couponEditing} onCancel={()=>setCouponEditing(null)} onSave={saveCoupon} saving={saving} />}
+          </>
+        )}
+
+        {tab === "failed" && (
+          <>
+            <h1 className="font-serif text-4xl">Failed Payments</h1>
+            <p className="mt-2 text-sm text-cream/50">Every failed Razorpay attempt is logged here so you can proactively reach out to customers who abandoned checkout.</p>
+            {failedPayments.length === 0 ? (
+              <div className="mt-8 hairline p-8 text-center text-cream/50">No failed payments logged. ✨</div>
+            ) : (
+              <div className="mt-6 grid gap-3">
+                {failedPayments.map((f) => (
+                  <div key={f.id} data-testid={`admin-failed-${f.id}`} className="hairline p-4">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <div className="min-w-[180px]">
+                        <div className="text-red-400 text-xs uppercase tracking-luxury flex items-center gap-1.5">
+                          <AlertTriangle className="w-3 h-3" /> {f.error_code || "PAYMENT_FAILED"}
+                        </div>
+                        <div className="text-[11px] text-cream/40 mt-1">
+                          {new Date(f.created_at).toLocaleString()}
+                          {f.attempt > 1 ? ` · attempt ${f.attempt}` : ""}
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-[240px]">
+                        <div className="text-sm text-cream/80">{f.error_description || "No description"}</div>
+                        <div className="text-xs text-cream/50 mt-1">
+                          {f.customer_name || "Unknown"}
+                          {f.customer_email ? ` · ${f.customer_email}` : ""}
+                          {f.customer_phone ? ` · ${f.customer_phone}` : ""}
+                        </div>
+                        {f.order_number && (
+                          <div className="text-[10px] uppercase tracking-luxury text-cream/40 mt-1">
+                            Order · <span className="font-mono normal-case tracking-normal text-cream/60">{f.order_number}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-cream font-serif text-lg">{formatINR(f.amount_inr)}</div>
+                      {f.customer_email && (
+                        <a
+                          data-testid={`admin-failed-contact-${f.id}`}
+                          href={`mailto:${f.customer_email}?subject=${encodeURIComponent("Your ArtyFex order")}&body=${encodeURIComponent("Hi " + (f.customer_name || "") + ",\nWe noticed your payment did not go through. Would you like our help completing it?")}`}
+                          className="text-xs text-gold hover:text-cream border border-gold/30 px-3 py-1.5"
+                        >Contact</a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </main>
       <Toaster theme="dark" position="bottom-center" />
     </div>
@@ -439,7 +580,7 @@ function ProductEditor({ initial, onCancel, onSave, saving }) {
           <div className="sm:col-span-2"><Fld label="Description"><textarea rows={3} value={f.description} onChange={upd("description")} className={inp} /></Fld></div>
           <div className="sm:col-span-2"><Fld label="Materials (one per line)"><textarea rows={4} value={f.materials} onChange={upd("materials")} className={inp} /></Fld></div>
           <div className="sm:col-span-2"><Fld label="Gallery URLs (one per line)"><textarea rows={3} value={f.gallery} onChange={upd("gallery")} className={inp} /></Fld></div>
-          <div className="sm:col-span-2"><Fld label="Variants JSON"><textarea rows={4} value={f.variants} onChange={upd("variants")} className={`${inp} font-mono text-xs`} /></Fld></div>
+          <div className="sm:col-span-2"><Fld label='Variants JSON — supports size/stock/price_inr/mrp_inr per variant (Shopify-style)'><textarea rows={6} value={f.variants} onChange={upd("variants")} className={`${inp} font-mono text-xs`} /></Fld></div>
           <label className="flex items-center gap-2 text-sm text-cream/70"><input type="checkbox" checked={!!f.is_hero} onChange={upd("is_hero")} /> Mark as hero product</label>
         </div>
         <button disabled={saving} onClick={()=>onSave(f)} className="mt-8 w-full bg-gold text-ink-950 py-4 text-xs uppercase tracking-luxury hover:bg-cream disabled:opacity-60">
@@ -449,6 +590,62 @@ function ProductEditor({ initial, onCancel, onSave, saving }) {
     </div>
   );
 }
+
+function CouponEditor({ initial, onCancel, onSave, saving }) {
+  const [f, setF] = useState(initial);
+  const upd = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+  const submit = (e) => {
+    e.preventDefault();
+    onSave(f);
+  };
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onCancel}>
+      <form onSubmit={submit} className="bg-ink-900 border border-white/10 w-[min(560px,95vw)] max-h-[90vh] overflow-y-auto p-8" onClick={(e)=>e.stopPropagation()} data-testid="admin-coupon-editor">
+        <div className="flex justify-between items-center">
+          <h3 className="font-serif text-2xl">{f.id ? "Edit coupon" : "New coupon"}</h3>
+          <button type="button" onClick={onCancel} className="text-cream/50 hover:text-cream text-sm">Cancel</button>
+        </div>
+        <div className="mt-6 grid sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <Fld label="Code (uppercase, unique)">
+              <input data-testid="admin-coupon-code" value={f.code} onChange={upd("code")} className={`${inp} font-mono uppercase tracking-wider`} required placeholder="WELCOME10" />
+            </Fld>
+          </div>
+          <Fld label="Type">
+            <select data-testid="admin-coupon-type" value={f.type} onChange={upd("type")} className={inp}>
+              <option value="percentage">Percentage (%)</option>
+              <option value="flat">Flat (₹)</option>
+            </select>
+          </Fld>
+          <Fld label={f.type === "percentage" ? "Value (%)" : "Value (₹)"}>
+            <input data-testid="admin-coupon-value" type="number" min="0" step={f.type === "percentage" ? "1" : "50"} value={f.value} onChange={upd("value")} className={inp} required />
+          </Fld>
+          <Fld label="Min cart (₹, optional)">
+            <input data-testid="admin-coupon-min" type="number" min="0" step="500" value={f.min_cart_inr} onChange={upd("min_cart_inr")} className={inp} />
+          </Fld>
+          <Fld label="Max uses (blank = unlimited)">
+            <input data-testid="admin-coupon-max" type="number" min="0" value={f.max_uses ?? ""} onChange={upd("max_uses")} className={inp} placeholder="Unlimited" />
+          </Fld>
+          <Fld label="Expires on (optional)">
+            <input data-testid="admin-coupon-expires" type="date" value={f.expires_at || ""} onChange={upd("expires_at")} className={inp} />
+          </Fld>
+          <label className="flex items-center gap-2 text-sm text-cream/70 mt-6">
+            <input data-testid="admin-coupon-active" type="checkbox" checked={!!f.active} onChange={upd("active")} className="accent-gold" /> Active
+          </label>
+          <div className="sm:col-span-2">
+            <Fld label="Description (shown to customer)">
+              <input data-testid="admin-coupon-description" value={f.description || ""} onChange={upd("description")} className={inp} placeholder="10% off for new collectors." />
+            </Fld>
+          </div>
+        </div>
+        <button data-testid="admin-coupon-save" disabled={saving} className="mt-8 w-full bg-gold text-ink-950 py-4 text-xs uppercase tracking-luxury hover:bg-cream disabled:opacity-60">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin inline" /> : (f.id ? "Save changes" : "Create coupon")}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function ReturnRow({ r, onUpdate }) {
   const [notes, setNotes] = useState(r.admin_notes || "");
   const [genuine, setGenuine] = useState(r.is_genuine === null || r.is_genuine === undefined ? "" : String(r.is_genuine));

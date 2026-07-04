@@ -1,13 +1,47 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Minus, Trash2, ShoppingBag } from "lucide-react";
+import { X, Plus, Minus, Trash2, ShoppingBag, Tag, Check, Loader2 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { api } from "@/lib/api";
 import { IDS } from "@/constants/testIds";
 
-const formatINR = (n) => `₹${n.toLocaleString("en-IN")}`;
+const formatINR = (n) => `₹${(n || 0).toLocaleString("en-IN")}`;
 
 export const CartSheet = ({ onCheckout }) => {
-  const { isOpen, setIsOpen, items, updateQty, removeItem, subtotal, shipping, total } = useCart();
+  const {
+    isOpen, setIsOpen, items,
+    updateQty, removeItem,
+    subtotal, shipping, total,
+    coupon, discount, applyCoupon, clearCoupon,
+  } = useCart();
+
+  const [codeInput, setCodeInput] = useState("");
+  const [applying, setApplying] = useState(false);
+  const [couponError, setCouponError] = useState("");
+
+  const submitCoupon = async (e) => {
+    e?.preventDefault?.();
+    setCouponError("");
+    const code = codeInput.trim().toUpperCase();
+    if (!code) return;
+    setApplying(true);
+    try {
+      const { data } = await api.post("/coupons/validate", { code, cart_total_inr: subtotal });
+      applyCoupon({
+        code: data.code,
+        type: data.type,
+        value: data.value,
+        discount_inr: data.discount_inr,
+        description: data.description,
+        min_cart_inr: 0, // server already validated once; client uses discount as-is
+      });
+      setCodeInput("");
+    } catch (err) {
+      setCouponError(err?.response?.data?.detail || "Could not apply coupon.");
+    } finally {
+      setApplying(false);
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -22,7 +56,7 @@ export const CartSheet = ({ onCheckout }) => {
             data-testid={IDS.cart.sheet}
             initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 240 }}
-            className="fixed top-0 right-0 h-full w-full sm:w-[440px] z-[80] bg-ink-900 border-l border-white/10 flex flex-col"
+            className="fixed top-0 right-0 h-full w-full sm:w-[460px] z-[80] bg-ink-900 border-l border-white/10 flex flex-col"
           >
             <div className="flex items-center justify-between p-6 border-b border-white/5">
               <div>
@@ -57,7 +91,9 @@ export const CartSheet = ({ onCheckout }) => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-serif text-lg text-cream leading-tight truncate">{it.product_name.split(" — ")[0]}</div>
-                          <div className="text-[10px] uppercase tracking-luxury text-cream/40 mt-1">{it.variant_label}</div>
+                          <div className="text-[10px] uppercase tracking-luxury text-cream/40 mt-1">
+                            {it.variant_label}{it.variant_size ? ` · ${it.variant_size}` : ""}
+                          </div>
                           <div className="mt-3 font-serif text-cream">{formatINR(it.price_inr)}</div>
                           <div className="mt-3 flex items-center justify-between">
                             <div className="inline-flex items-center border border-white/10">
@@ -80,7 +116,64 @@ export const CartSheet = ({ onCheckout }) => {
                 </div>
 
                 <div className="p-6 border-t border-white/5 space-y-3">
+                  {/* Coupon row */}
+                  {coupon ? (
+                    <div data-testid="cart-coupon-applied" className="flex items-center justify-between gap-3 bg-gold/5 border border-gold/30 px-3 py-2.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Check className="w-4 h-4 text-gold shrink-0" />
+                        <div className="min-w-0">
+                          <div className="text-xs text-gold font-medium truncate">{coupon.code}</div>
+                          <div className="text-[10px] text-cream/50 truncate">
+                            {coupon.type === "percentage" ? `${coupon.value}% off` : `${formatINR(coupon.value)} off`}
+                            {coupon.description ? ` · ${coupon.description}` : ""}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        data-testid="cart-coupon-remove"
+                        onClick={() => { clearCoupon(); setCouponError(""); }}
+                        className="text-[10px] uppercase tracking-luxury text-cream/50 hover:text-red-400 shrink-0"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <form onSubmit={submitCoupon} className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-cream/40" />
+                          <input
+                            data-testid="cart-coupon-input"
+                            value={codeInput}
+                            onChange={(e) => { setCodeInput(e.target.value); setCouponError(""); }}
+                            placeholder="Discount code"
+                            className="w-full bg-ink-950 border border-white/10 focus:border-gold outline-none pl-9 pr-3 py-2.5 text-sm text-cream placeholder-cream/30 uppercase tracking-wider"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          data-testid="cart-coupon-apply"
+                          disabled={applying || !codeInput.trim()}
+                          className="px-4 py-2.5 border border-gold/50 text-gold text-[10px] uppercase tracking-luxury hover:bg-gold hover:text-ink-950 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gold"
+                        >
+                          {applying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Apply"}
+                        </button>
+                      </div>
+                      {couponError && (
+                        <div data-testid="cart-coupon-error" className="text-[11px] text-red-400 leading-tight">{couponError}</div>
+                      )}
+                    </form>
+                  )}
+
                   <Row label="Subtotal" value={formatINR(subtotal)} testid={IDS.cart.subtotal} />
+                  {discount > 0 && (
+                    <Row
+                      label={`Discount${coupon ? ` (${coupon.code})` : ""}`}
+                      value={`- ${formatINR(discount)}`}
+                      testid="cart-discount"
+                      accent
+                    />
+                  )}
                   <Row
                     label="Shipping"
                     value={shipping === 0 ? "Complimentary" : formatINR(shipping)}
@@ -99,7 +192,7 @@ export const CartSheet = ({ onCheckout }) => {
                     Secure Checkout
                   </button>
                   <p className="text-[10px] text-center text-cream/40 uppercase tracking-luxury">
-                    Stripe · Razorpay · UPI · Cards
+                    Razorpay · UPI · Cards · Netbanking · Wallets
                   </p>
                 </div>
               </>

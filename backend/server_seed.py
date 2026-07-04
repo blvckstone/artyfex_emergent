@@ -43,10 +43,12 @@ SEED_PRODUCTS = [
             "https://images.pexels.com/photos/8068653/pexels-photo-8068653.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
         ],
         "variants": [
-            {"key": "gold", "label": "Signature Gold", "hex": "#D4AF37", "image": "https://images.pexels.com/photos/18325786/pexels-photo-18325786.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"},
-            {"key": "silver", "label": "Silver Frost", "hex": "#C0C0C0", "image": "https://images.pexels.com/photos/8068653/pexels-photo-8068653.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"},
+            {"key": "gold-24", "label": "Signature Gold · 24\"", "hex": "#D4AF37", "image": "https://images.pexels.com/photos/18325786/pexels-photo-18325786.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", "size": "24\" diameter", "stock": 6, "price_inr": 18999, "mrp_inr": 28999},
+            {"key": "gold-30", "label": "Signature Gold · 30\"", "hex": "#D4AF37", "image": "https://images.pexels.com/photos/18325786/pexels-photo-18325786.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", "size": "30\" diameter", "stock": 4, "price_inr": 24999, "mrp_inr": 36999},
+            {"key": "silver-24", "label": "Silver Frost · 24\"", "hex": "#C0C0C0", "image": "https://images.pexels.com/photos/8068653/pexels-photo-8068653.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", "size": "24\" diameter", "stock": 5, "price_inr": 18999, "mrp_inr": 28999},
+            {"key": "silver-30", "label": "Silver Frost · 30\"", "hex": "#C0C0C0", "image": "https://images.pexels.com/photos/8068653/pexels-photo-8068653.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", "size": "30\" diameter", "stock": 3, "price_inr": 24999, "mrp_inr": 36999},
         ],
-        "stock": 6,
+        "stock": 18,
     },
     {
         "slug": "rose-geode-oval",
@@ -107,4 +109,38 @@ SEED_REVIEWS = [
     {"author": "Meera & Arjun Bhatia", "location": "Golf Links, New Delhi", "rating": 5, "title": "Custom dimensions, flawless execution.",
      "body": "We asked for a non-standard 3×4 ft variant for our foyer. Maloni personally sent us three moodboards before pouring. The finished piece is a work of art.",
      "image": None},
+]
+
+
+SEED_COUPONS = [
+    {
+        "code": "WELCOME10",
+        "type": "percentage",
+        "value": 10,
+        "min_cart_inr": 0,
+        "max_uses": None,
+        "expires_at": None,
+        "active": True,
+        "description": "10% off for new collectors. No minimum spend.",
+    },
+    {
+        "code": "ATELIER500",
+        "type": "flat",
+        "value": 500,
+        "min_cart_inr": 10000,
+        "max_uses": 100,
+        "expires_at": None,
+        "active": True,
+        "description": "Flat ₹500 off on carts above ₹10,000.",
+    },
+    {
+        "code": "SIGNATURE15",
+        "type": "percentage",
+        "value": 15,
+        "min_cart_inr": 25000,
+        "max_uses": 50,
+        "expires_at": None,
+        "active": True,
+        "description": "15% off signature pieces (min. cart ₹25,000).",
+    },
 ]
