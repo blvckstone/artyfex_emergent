@@ -19,7 +19,7 @@ export const Footer = () => {
               <br />in Mumbai.
             </h3>
             <p className="mt-8 max-w-md text-cream/50 font-light leading-relaxed">
-              ArtyFex is a Mumbai-based atelier of handmade resin art & crystal stone mirrors.
+              ArtyFex is a Mumbai-based atelier of 100% handmade resin art — statement mirrors, watches, tables and bespoke furniture.
               Trademark № 6432 · Class 20. Serving collectors, designers & luxury properties across India.
             </p>
             <div className="mt-8 flex gap-4">
@@ -32,7 +32,7 @@ export const Footer = () => {
                   <Icon className="w-4 h-4" />
                 </a>
               ))}
-              <a href="https://wa.me/919970107760?text=Hi%20ArtyFex%20—%20I%27m%20interested%20in%20your%20mirrors" target="_blank" rel="noreferrer" aria-label="WhatsApp" className="p-3 border border-gold/40 text-gold hover:bg-gold hover:text-ink-950 transition-colors">
+              <a href="https://wa.me/919970107760?text=Hi%20ArtyFex%20—%20I%27m%20interested%20in%20your%20resin%20art" target="_blank" rel="noreferrer" aria-label="WhatsApp" className="p-3 border border-gold/40 text-gold hover:bg-gold hover:text-ink-950 transition-colors">
                 <WhatsAppIcon className="w-4 h-4" />
               </a>
             </div>
@@ -63,7 +63,7 @@ export const Footer = () => {
 
           <FooterCol title="Contact">
             <span className="text-cream/70">Maloni Mahada</span>
-            <span className="text-cream/50">Mumbai 400095</span>
+            <span className="text-cream/50">Malad West, Mumbai 400095</span>
             <a href="mailto:artyfex@artyfex.in" className="text-cream/70 hover:text-gold">artyfex@artyfex.in</a>
             <a href="mailto:artyfex.in@gmail.com" className="text-cream/70 hover:text-gold">artyfex.in@gmail.com</a>
             <a href="tel:+919970107760" className="text-cream/70 hover:text-gold">+91 99701 07760 · WhatsApp</a>
@@ -72,7 +72,7 @@ export const Footer = () => {
 
         <div className="mt-16 pt-6 border-t border-white/5 text-xs text-cream/40 font-light leading-relaxed max-w-3xl">
           <span className="uppercase tracking-luxury text-gold-soft">Important note · </span>
-          No inbuilt LED lighting is included with any ArtyFex mirror. Ambient light shown in
+          No inbuilt LED lighting is included with any ArtyFex piece. Ambient light shown in
           product and lifestyle imagery is for styling visualisation only. Every piece is 100% handmade
           and one of one — subtle organic variations in resin currents and crystal placement are the
           signature of the atelier.

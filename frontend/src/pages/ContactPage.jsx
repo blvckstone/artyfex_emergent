@@ -20,7 +20,9 @@ const jsonLd = {
     "telephone": "+91-99701-07760",
     "address": {
       "@type": "PostalAddress",
+      "streetAddress": "Malad West",
       "addressLocality": "Mumbai",
+      "postalCode": "400095",
       "addressRegion": "Maharashtra",
       "addressCountry": "IN",
     },
@@ -81,8 +83,9 @@ export default function ContactPage() {
           Let's <span className="italic text-gold">talk</span>.
         </h1>
         <p className="mt-6 text-lg text-cream/70 font-light max-w-xl">
-          Bespoke commission, B2B project, press enquiry or a simple hello — we read every message
-          and reply personally within 24 hours (Mon–Sat).
+          Bespoke resin art commissions — mirrors, watches, tables, furniture — B2B projects,
+          press enquiries or a simple hello. We read every message and reply personally within
+          24 hours (Mon–Sat).
         </p>
 
         <div className="mt-14 grid lg:grid-cols-[420px_1fr] gap-10">
@@ -123,7 +126,8 @@ export default function ContactPage() {
                 <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Atelier · Studio visits by appointment</div>
               </div>
               <div className="mt-4 font-serif text-lg text-cream leading-tight">
-                Andheri West, Mumbai — 400058<br />
+                Maloni Mahada<br />
+                Malad West, Mumbai — 400095<br />
                 Maharashtra, India
               </div>
             </div>

@@ -54,8 +54,8 @@ function Home() {
   return (
     <>
       <SEO
-        title="ArtyFex — Handmade Resin & Crystal Mirrors | Mumbai Atelier"
-        description="ArtyFex is a Mumbai atelier of 100% handmade resin art & crystal stone mirrors. Statement 2×3 ft geode mirrors and companion pieces for luxury interiors."
+        title="ArtyFex — Handmade Resin Art · Mirrors, Watches, Tables & Furniture | Mumbai"
+        description="ArtyFex is a Mumbai atelier of 100% handmade resin art — statement mirrors, watches, tables and bespoke furniture. One-of-one pieces for luxury interiors."
         path="/"
         jsonLd={{
           "@context": "https://schema.org",
@@ -63,8 +63,16 @@ function Home() {
           "name": "ArtyFex",
           "url": "https://www.artyfex.in",
           "logo": "https://www.artyfex.in/brand/logo.svg",
-          "description": "Mumbai atelier of 100% handmade resin & crystal stone mirrors.",
-          "founder": { "@type": "Person", "name": "Maloni" },
+          "description": "Mumbai atelier of 100% handmade resin art — mirrors, watches, tables and bespoke furniture.",
+          "founder": { "@type": "Person", "name": "Maloni Mahada" },
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "Malad West",
+            "addressLocality": "Mumbai",
+            "postalCode": "400095",
+            "addressRegion": "Maharashtra",
+            "addressCountry": "IN",
+          },
           "sameAs": ["https://www.instagram.com/artyfex", "https://www.facebook.com/artyfex"],
           "contactPoint": [
             { "@type": "ContactPoint", "email": "artyfex@artyfex.in", "telephone": "+91-99701-07760", "contactType": "customer service", "areaServed": "IN" },

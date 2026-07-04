@@ -14,14 +14,14 @@ const jsonLd = {
   "@type": "AboutPage",
   "name": "About ArtyFex",
   "description":
-    "ArtyFex is a Mumbai atelier of 100% handmade resin & crystal stone mirrors. Founded by Maloni, each piece is hand-poured for luxury interiors.",
+    "ArtyFex is a Mumbai atelier of 100% handmade resin art — statement mirrors, watches, tables and bespoke furniture. Founded by Maloni Mahada, each piece is hand-poured for luxury interiors.",
   "url": "https://www.artyfex.in/about",
   "publisher": {
     "@type": "Organization",
     "name": "ArtyFex",
     "url": "https://www.artyfex.in",
     "logo": "https://www.artyfex.in/brand/logo.svg",
-    "founder": { "@type": "Person", "name": "Maloni" },
+    "founder": { "@type": "Person", "name": "Maloni Mahada" },
     "sameAs": ["https://www.instagram.com/artyfex", "https://www.facebook.com/artyfex"],
   },
 };
@@ -30,8 +30,8 @@ export default function AboutPage() {
   return (
     <div className="min-h-screen bg-ink-950 text-cream">
       <SEO
-        title="About ArtyFex — Mumbai Atelier of Handmade Resin & Crystal Mirrors"
-        description="ArtyFex is a Mumbai-based atelier crafting 100% handmade resin art & crystal stone mirrors. Discover the craft, the founder, and the ethos behind every one-of-one piece."
+        title="About ArtyFex — Mumbai Atelier of Handmade Resin Art"
+        description="ArtyFex is a Mumbai-based atelier crafting 100% handmade resin art — mirrors, watches, tables and bespoke furniture. Discover the craft, the founder, and the ethos behind every one-of-one piece."
         path="/about"
         jsonLd={jsonLd}
       />
@@ -54,7 +54,8 @@ export default function AboutPage() {
               </h1>
               <p className="mt-6 text-lg md:text-xl text-cream/70 leading-relaxed font-light max-w-lg">
                 ArtyFex is a small atelier of two — a founder and her senior artisan — pouring
-                statement resin mirrors by hand. Every piece is inspected by us before it leaves.
+                statement resin art by hand: mirrors, watches, tables, and bespoke furniture.
+                Every piece is inspected by us before it leaves.
               </p>
             </motion.div>
             <motion.div
@@ -73,19 +74,20 @@ export default function AboutPage() {
           <div className="max-w-3xl mx-auto px-6 md:px-12 space-y-8 text-cream/80 leading-relaxed font-light text-lg">
             <h2 className="font-serif text-4xl md:text-5xl text-cream text-center mb-10">Our story</h2>
             <p>
-              ArtyFex began at a single kitchen table in Andheri, Mumbai — a founder obsessed with the way
+              ArtyFex began at a single kitchen table in Malad West, Mumbai — a founder obsessed with the way
               light moves through crushed crystal and translucent epoxy. What began as a hobby quickly
               became a craft: three years of prototyping, forty-eight failed pours, and thousands of hours
               learning how resin breathes as it cures.
             </p>
             <p>
               Today ArtyFex serves collectors, designers and boutique hotels who want a piece that is
-              <em className="text-cream">&nbsp;theirs alone</em>. No two mirrors are ever identical.
-              We refuse mass production. We are, and will remain, an atelier — not a factory.
+              <em className="text-cream">&nbsp;theirs alone</em>. We work primarily in resin — statement
+              mirrors, timepieces (watches), dining and coffee tables, and one-off furniture. No two
+              pieces are ever identical. We refuse mass production. We are, and will remain, an atelier — not a factory.
             </p>
             <p>
-              Every commission — from a 24" round for a Bandra penthouse to a 6×4 ft statement wall for
-              a Golf Links foyer — is poured by the founder herself, with our senior artisan of six years.
+              Every commission — from a 24" round mirror for a Bandra penthouse to a resin dining table
+              for a Golf Links foyer — is poured by the founder herself, with our senior artisan of six years.
             </p>
           </div>
         </section>
@@ -102,7 +104,7 @@ export default function AboutPage() {
                 { icon: Palette, title: "100% Handmade", body: "Every pour, every cure, every polish — done in-atelier. No outsourcing, ever." },
                 { icon: Sparkles, title: "Crystal Sourcing", body: "5–10 mm crystals sourced ethically from Rajasthan and Gujarat mines." },
                 { icon: Award, title: "24-Month Warranty", body: "Structural warranty on every piece. Because heirlooms should last generations." },
-                { icon: Clock, title: "48–120 Hours Each", body: "A single 2×3 ft mirror takes 100+ artisan hours to complete. There is no shortcut." },
+                { icon: Clock, title: "48–120 Hours Each", body: "A single statement piece — mirror, table or watch — takes 100+ artisan hours to complete. There is no shortcut." },
               ].map((p) => (
                 <div key={p.title} className="p-8 border border-white/5 bg-ink-950">
                   <p.icon className="w-6 h-6 text-gold" />
