@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { IDS } from "@/constants/testIds";
+import BrandLogo from "@/components/BrandLogo";
 
 const links = [
   { id: IDS.nav.collection, label: "Shop", href: "/shop", route: true },
@@ -39,9 +40,10 @@ export const Navbar = () => {
         <Link
           to="/"
           data-testid={IDS.nav.logo}
-          className="font-serif text-2xl md:text-3xl tracking-tight text-cream flex items-baseline gap-1"
+          className="flex items-center"
+          aria-label="ArtyFex home"
         >
-          Arty<span className="italic text-gold">Fex</span>
+          <BrandLogo />
         </Link>
 
         <nav className="hidden lg:flex items-center gap-10">

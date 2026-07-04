@@ -16,7 +16,6 @@ export const ProductShowcase = ({ product }) => {
   const { user, openAuth } = useAuth();
   const [variantKey, setVariantKey] = useState(product.variants[0].key);
   const [qty, setQty] = useState(1);
-  const [galleryIdx, setGalleryIdx] = useState(0);
   const [added, setAdded] = useState(false);
 
   const activeVariant = useMemo(
@@ -24,7 +23,31 @@ export const ProductShowcase = ({ product }) => {
     [variantKey, product.variants],
   );
 
-  const mainImage = activeVariant.image || product.gallery[galleryIdx] || product.hero_image;
+  // Combined image list: variant images (deduped) + gallery images, unique
+  const allImages = useMemo(() => {
+    const seen = new Set();
+    const arr = [];
+    (product.variants || []).forEach((v) => {
+      if (v.image && !seen.has(v.image)) { seen.add(v.image); arr.push(v.image); }
+    });
+    (product.gallery || []).forEach((g) => {
+      if (g && !seen.has(g)) { seen.add(g); arr.push(g); }
+    });
+    if (!arr.length && product.hero_image) arr.push(product.hero_image);
+    return arr;
+  }, [product]);
+
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  // When variant changes, snap main image to that variant's image if it exists in allImages
+  React.useEffect(() => {
+    if (activeVariant?.image) {
+      const idx = allImages.indexOf(activeVariant.image);
+      if (idx >= 0) setActiveIdx(idx);
+    }
+  }, [activeVariant, allImages]);
+
+  const mainImage = allImages[activeIdx] || product.hero_image;
   const inWishlist = has(product.id);
   const lowStock = product.stock > 0 && product.stock <= 3;
 
@@ -53,30 +76,45 @@ export const ProductShowcase = ({ product }) => {
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-24 items-start">
           {/* Gallery */}
           <div className="lg:sticky lg:top-28">
-            <motion.div
-              key={mainImage}
-              initial={{ opacity: 0, scale: 1.02 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-              className="relative aspect-[4/5] w-full overflow-hidden border border-white/10"
-              data-testid={IDS.product.galleryMain}
+            <Link
+              to={`/product/${product.slug}`}
+              data-testid="hero-image-link"
+              aria-label={`View ${product.name}`}
+              className="block group/hero"
             >
-              <img src={mainImage} alt={product.name} className="w-full h-full object-cover" />
-              <div className="absolute top-4 left-4 glass px-3 py-1.5 text-[10px] uppercase tracking-luxury text-gold-soft">
-                Edition · 1 of 1
-              </div>
-              <div className="absolute bottom-4 right-4 glass-gold px-4 py-2 text-[10px] uppercase tracking-luxury text-gold">
-                {product.craft_hours} artisan hours
-              </div>
-            </motion.div>
+              <motion.div
+                key={mainImage}
+                initial={{ opacity: 0, scale: 1.02 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+                className="relative aspect-[4/5] w-full overflow-hidden border border-white/10 cursor-pointer"
+                data-testid={IDS.product.galleryMain}
+              >
+                <img
+                  src={mainImage}
+                  alt={product.name}
+                  className="w-full h-full object-cover transition-transform duration-[1200ms] group-hover/hero:scale-[1.03]"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover/hero:opacity-100 transition-opacity duration-500" />
+                <div className="absolute top-4 left-4 glass px-3 py-1.5 text-[10px] uppercase tracking-luxury text-gold-soft">
+                  Edition · 1 of 1
+                </div>
+                <div className="absolute bottom-4 right-4 glass-gold px-4 py-2 text-[10px] uppercase tracking-luxury text-gold">
+                  {product.craft_hours} artisan hours
+                </div>
+                <div className="absolute bottom-4 left-4 opacity-0 group-hover/hero:opacity-100 translate-y-2 group-hover/hero:translate-y-0 transition-all duration-500 glass px-3 py-1.5 text-[10px] uppercase tracking-luxury text-cream inline-flex items-center gap-2">
+                  View full details <ArrowUpRight className="w-3 h-3" />
+                </div>
+              </motion.div>
+            </Link>
             <div className="mt-4 grid grid-cols-4 gap-3">
-              {product.gallery.slice(0, 4).map((g, i) => (
+              {allImages.slice(0, 4).map((g, i) => (
                 <button
                   key={g + i}
                   data-testid={IDS.product.thumb(i)}
-                  onClick={() => setGalleryIdx(i)}
+                  onClick={() => setActiveIdx(i)}
                   className={`aspect-square overflow-hidden border transition-all ${
-                    galleryIdx === i && !activeVariant.image ? "border-gold" : "border-white/10 hover:border-white/30"
+                    activeIdx === i ? "border-gold" : "border-white/10 hover:border-white/30"
                   }`}
                 >
                   <img src={g} alt="" className="w-full h-full object-cover" />

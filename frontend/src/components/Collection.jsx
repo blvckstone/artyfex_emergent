@@ -1,5 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { IDS } from "@/constants/testIds";
@@ -39,16 +40,35 @@ export const Collection = ({ products = [] }) => {
               transition={{ duration: 0.8, delay: i * 0.08 }}
               className="group relative bg-ink-900 border border-white/5 hover:border-gold/30 transition-colors"
             >
-              <div className="aspect-[4/5] overflow-hidden">
+              <Link
+                to={`/product/${p.slug}`}
+                data-testid={`collection-image-link-${p.slug}`}
+                aria-label={`View ${p.name}`}
+                className="block aspect-[4/5] overflow-hidden relative group/img"
+              >
                 <img
                   src={p.hero_image}
                   alt={p.name}
                   className="w-full h-full object-cover transition-transform duration-[1200ms] group-hover:scale-105"
                 />
-              </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-500" />
+                <div className="absolute bottom-4 right-4 opacity-0 group-hover/img:opacity-100 translate-y-2 group-hover/img:translate-y-0 transition-all duration-500">
+                  <span className="inline-flex items-center gap-2 glass-gold px-3 py-1.5 text-[10px] uppercase tracking-luxury text-gold">
+                    View piece <ArrowUpRight className="w-3 h-3" />
+                  </span>
+                </div>
+              </Link>
               <div className="p-6">
                 <div className="text-[10px] uppercase tracking-luxury text-gold-soft">{p.size}</div>
-                <h3 className="mt-3 font-serif text-2xl text-cream leading-tight">{p.name.split(" — ")[0]}</h3>
+                <Link
+                  to={`/product/${p.slug}`}
+                  data-testid={`collection-title-link-${p.slug}`}
+                  className="block mt-3 group/title"
+                >
+                  <h3 className="font-serif text-2xl text-cream leading-tight group-hover/title:text-gold transition-colors">
+                    {p.name.split(" — ")[0]}
+                  </h3>
+                </Link>
                 <p className="mt-2 text-sm text-cream/50 italic font-serif">{p.tagline}</p>
                 <div className="mt-5 flex items-center justify-between">
                   <span className="font-serif text-2xl text-cream">{formatINR(p.price_inr)}</span>

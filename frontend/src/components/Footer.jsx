@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Instagram, Facebook } from "lucide-react";
+import BrandLogo from "@/components/BrandLogo";
 
 export const Footer = () => {
   return (
@@ -8,6 +9,11 @@ export const Footer = () => {
       <div className="max-w-[1440px] mx-auto px-6 md:px-12 lg:px-16 pt-24 pb-10">
         <div className="grid lg:grid-cols-12 gap-16">
           <div className="lg:col-span-6">
+            <BrandLogo
+              imgClassName="h-10 md:h-14 w-auto object-contain mb-8"
+              textClassName="font-serif text-3xl md:text-4xl tracking-tight text-cream flex items-baseline gap-1 mb-8"
+              className="mb-2"
+            />
             <h3 className="font-serif text-5xl md:text-6xl lg:text-7xl leading-[0.9] text-cream">
               Poured <span className="italic font-display text-gold">by hand</span>
               <br />in Mumbai.

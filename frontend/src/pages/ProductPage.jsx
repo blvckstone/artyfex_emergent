@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { ShoppingBag, Check, Heart, Share2, Copy, Instagram, MessageCircle, ArrowLeft, Plus, Minus } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import ProductGallery from "@/components/ProductGallery";
 import { api } from "@/lib/api";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
@@ -23,7 +24,6 @@ export default function ProductPage() {
   const [loading, setLoading] = useState(true);
   const [variantKey, setVariantKey] = useState("");
   const [qty, setQty] = useState(1);
-  const [galleryIdx, setGalleryIdx] = useState(0);
   const [added, setAdded] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
 
@@ -61,7 +61,6 @@ export default function ProductPage() {
     );
   }
 
-  const mainImage = activeVariant?.image || product.gallery[galleryIdx] || product.hero_image;
   const inWishlist = has(product.id);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/product/${product.slug}` : "";
   const savings = product.mrp_inr - product.price_inr;
@@ -115,41 +114,7 @@ export default function ProductPage() {
 
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-start">
           {/* Gallery */}
-          <div className="lg:sticky lg:top-28">
-            <motion.div
-              key={mainImage}
-              initial={{ opacity: 0, scale: 1.02 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-              className="relative aspect-[4/5] w-full overflow-hidden border border-white/10 bg-ink-900"
-            >
-              <img src={mainImage} alt={product.name} className="w-full h-full object-cover" data-testid="product-hero-image" />
-              {product.is_hero && (
-                <div className="absolute top-4 left-4 glass-gold px-3 py-1.5 text-[10px] uppercase tracking-luxury text-gold">
-                  Signature edition
-                </div>
-              )}
-              <div className="absolute bottom-4 right-4 glass px-4 py-2 text-[10px] uppercase tracking-luxury text-cream/70">
-                {product.craft_hours} artisan hours
-              </div>
-            </motion.div>
-            {product.gallery.length > 1 && (
-              <div className="mt-4 grid grid-cols-4 gap-3">
-                {product.gallery.slice(0, 4).map((g, i) => (
-                  <button
-                    key={g + i}
-                    data-testid={`product-thumb-${i}`}
-                    onClick={() => setGalleryIdx(i)}
-                    className={`aspect-square overflow-hidden border transition-all ${
-                      galleryIdx === i && !activeVariant?.image ? "border-gold" : "border-white/10 hover:border-white/30"
-                    }`}
-                  >
-                    <img src={g} alt="" className="w-full h-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <ProductGallery product={product} variantImage={activeVariant?.image} />
 
           {/* Details */}
           <div>
