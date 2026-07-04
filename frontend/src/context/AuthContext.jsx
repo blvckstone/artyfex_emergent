@@ -32,6 +32,15 @@ export const AuthProvider = ({ children }) => {
   const logout = () => { localStorage.removeItem(TOKEN_KEY); setToken(""); setUser(null); };
   const openAuth = (mode = "login") => { setDialogMode(mode); setDialogOpen(true); };
 
+  // Called by AuthCallback route after successful Emergent Google session exchange
+  const applyGoogleSession = (newToken, newUser) => {
+    if (!newToken) return;
+    localStorage.setItem(TOKEN_KEY, newToken);
+    setToken(newToken);
+    setUser(newUser || null);
+    setDialogOpen(false);
+  };
+
   const authedApi = () => {
     const inst = api.create ? api.create() : api;
     if (token) inst.defaults.headers.common["Authorization"] = `Bearer ${token}`;
@@ -46,7 +55,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ token, user, ready, login, signup, logout, updateProfile, dialogOpen, setDialogOpen, dialogMode, openAuth, authedApi }}>
+    <AuthContext.Provider value={{ token, user, ready, login, signup, logout, updateProfile, dialogOpen, setDialogOpen, dialogMode, openAuth, authedApi, applyGoogleSession }}>
       {children}
     </AuthContext.Provider>
   );

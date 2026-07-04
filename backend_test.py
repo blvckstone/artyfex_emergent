@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """
-ArtyFex Phase B Backend Testing Suite
-Tests coupon validation, admin coupon CRUD, order creation with coupons, and failed payment logging.
+ArtyFex Phase C Backend Testing - Comprehensive Test Suite
+Tests Google Auth error paths, Admin settings, Review prompts, and Regression
 """
 
 import requests
 import json
-import sys
-from typing import Dict, Any, Optional
+import time
+from datetime import datetime, timezone, timedelta
+from pymongo import MongoClient
+import uuid
+import os
 
-# Backend URL from frontend/.env
-BASE_URL = "https://repo-digest-8.preview.emergentagent.com/api"
+# Configuration
+BACKEND_URL = "https://repo-digest-8.preview.emergentagent.com/api"
+MONGO_URL = "mongodb://localhost:27017"
+DB_NAME = "artyfex"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@artyfex.in"
@@ -18,774 +23,663 @@ ADMIN_PASSWORD = "ArtyFex@2026"
 
 # Test results tracking
 test_results = []
+test_user_email = None
+test_user_token = None
 admin_token = None
+test_orders = []
+test_reviews = []
 
 
-def log_test(name: str, passed: bool, details: str = ""):
+def log_test(section, test_name, passed, details=""):
     """Log test result"""
     status = "✅ PASS" if passed else "❌ FAIL"
-    test_results.append({"name": name, "passed": passed, "details": details})
-    print(f"{status} | {name}")
+    result = {
+        "section": section,
+        "test": test_name,
+        "passed": passed,
+        "details": details,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    test_results.append(result)
+    print(f"{status} | {section} | {test_name}")
     if details and not passed:
         print(f"   Details: {details}")
 
 
-def admin_login() -> Optional[str]:
-    """Login as admin and return JWT token"""
-    try:
-        resp = requests.post(
-            f"{BASE_URL}/admin/login",
-            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
-            timeout=10
-        )
-        if resp.status_code == 200:
-            token = resp.json().get("token")
-            log_test("Admin login", True, f"Token obtained")
-            return token
-        else:
-            log_test("Admin login", False, f"Status {resp.status_code}: {resp.text}")
-            return None
-    except Exception as e:
-        log_test("Admin login", False, f"Exception: {str(e)}")
-        return None
+def print_section(title):
+    """Print section header"""
+    print(f"\n{'='*80}")
+    print(f"  {title}")
+    print(f"{'='*80}")
 
 
-def test_coupon_validation():
-    """Test POST /api/coupons/validate - public endpoint"""
-    print("\n=== Testing Coupon Validation (Public) ===")
-    
-    # Test 1: Happy path - WELCOME10 on ₹20,000 cart
+def admin_login():
+    """Login as admin and get token"""
+    global admin_token
+    print_section("ADMIN LOGIN")
     try:
-        resp = requests.post(
-            f"{BASE_URL}/coupons/validate",
-            json={"code": "WELCOME10", "cart_total_inr": 20000},
-            timeout=10
-        )
+        resp = requests.post(f"{BACKEND_URL}/admin/login", json={
+            "email": ADMIN_EMAIL,
+            "password": ADMIN_PASSWORD
+        }, timeout=10)
         if resp.status_code == 200:
-            data = resp.json()
-            expected_discount = 2000  # 10% of 20000
-            if (data.get("valid") == True and 
-                data.get("discount_inr") == expected_discount and
-                data.get("type") == "percentage" and
-                data.get("value") == 10 and
-                data.get("code") == "WELCOME10"):
-                log_test("Coupon validate: WELCOME10 on ₹20k", True)
-            else:
-                log_test("Coupon validate: WELCOME10 on ₹20k", False, 
-                        f"Response mismatch: {json.dumps(data)}")
+            admin_token = resp.json()["token"]
+            log_test("Setup", "Admin login", True, f"Token: {admin_token[:20]}...")
+            return True
         else:
-            log_test("Coupon validate: WELCOME10 on ₹20k", False, 
-                    f"Status {resp.status_code}: {resp.text}")
+            log_test("Setup", "Admin login", False, f"Status {resp.status_code}: {resp.text}")
+            return False
     except Exception as e:
-        log_test("Coupon validate: WELCOME10 on ₹20k", False, f"Exception: {str(e)}")
-    
-    # Test 2: Happy path - ATELIER500 on ₹15,000 cart
-    try:
-        resp = requests.post(
-            f"{BASE_URL}/coupons/validate",
-            json={"code": "ATELIER500", "cart_total_inr": 15000},
-            timeout=10
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get("discount_inr") == 500:
-                log_test("Coupon validate: ATELIER500 on ₹15k", True)
-            else:
-                log_test("Coupon validate: ATELIER500 on ₹15k", False, 
-                        f"Expected discount 500, got {data.get('discount_inr')}")
-        else:
-            log_test("Coupon validate: ATELIER500 on ₹15k", False, 
-                    f"Status {resp.status_code}: {resp.text}")
-    except Exception as e:
-        log_test("Coupon validate: ATELIER500 on ₹15k", False, f"Exception: {str(e)}")
-    
-    # Test 3: Min-cart failure - SIGNATURE15 on ₹10,000 (requires ₹25k)
-    try:
-        resp = requests.post(
-            f"{BASE_URL}/coupons/validate",
-            json={"code": "SIGNATURE15", "cart_total_inr": 10000},
-            timeout=10
-        )
-        if resp.status_code == 400:
-            detail = resp.json().get("detail", "")
-            if "Minimum cart" in detail or "minimum" in detail.lower():
-                log_test("Coupon validate: SIGNATURE15 min-cart failure", True)
-            else:
-                log_test("Coupon validate: SIGNATURE15 min-cart failure", False, 
-                        f"Expected 'Minimum cart' in detail, got: {detail}")
-        else:
-            log_test("Coupon validate: SIGNATURE15 min-cart failure", False, 
-                    f"Expected 400, got {resp.status_code}")
-    except Exception as e:
-        log_test("Coupon validate: SIGNATURE15 min-cart failure", False, f"Exception: {str(e)}")
-    
-    # Test 4: Not found - invalid code
-    try:
-        resp = requests.post(
-            f"{BASE_URL}/coupons/validate",
-            json={"code": "NOPE", "cart_total_inr": 20000},
-            timeout=10
-        )
-        if resp.status_code == 404:
-            log_test("Coupon validate: invalid code NOPE", True)
-        else:
-            log_test("Coupon validate: invalid code NOPE", False, 
-                    f"Expected 404, got {resp.status_code}")
-    except Exception as e:
-        log_test("Coupon validate: invalid code NOPE", False, f"Exception: {str(e)}")
-    
-    # Test 5: Empty code
-    try:
-        resp = requests.post(
-            f"{BASE_URL}/coupons/validate",
-            json={"code": "", "cart_total_inr": 20000},
-            timeout=10
-        )
-        if resp.status_code == 400:
-            log_test("Coupon validate: empty code", True)
-        else:
-            log_test("Coupon validate: empty code", False, 
-                    f"Expected 400, got {resp.status_code}")
-    except Exception as e:
-        log_test("Coupon validate: empty code", False, f"Exception: {str(e)}")
-    
-    # Test 6: Case insensitivity - lowercase "welcome10"
-    try:
-        resp = requests.post(
-            f"{BASE_URL}/coupons/validate",
-            json={"code": "welcome10", "cart_total_inr": 20000},
-            timeout=10
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get("code") == "WELCOME10":  # Server should uppercase
-                log_test("Coupon validate: case insensitivity", True)
-            else:
-                log_test("Coupon validate: case insensitivity", False, 
-                        f"Expected code 'WELCOME10', got {data.get('code')}")
-        else:
-            log_test("Coupon validate: case insensitivity", False, 
-                    f"Expected 200, got {resp.status_code}")
-    except Exception as e:
-        log_test("Coupon validate: case insensitivity", False, f"Exception: {str(e)}")
+        log_test("Setup", "Admin login", False, str(e))
+        return False
 
 
-def test_admin_coupon_crud():
-    """Test admin coupon CRUD endpoints"""
-    print("\n=== Testing Admin Coupon CRUD ===")
+def test_section_1_google_auth_errors():
+    """Section 1 - Emergent Google Auth error paths"""
+    print_section("SECTION 1: Google Auth Error Paths")
+    
+    # Test 1: Empty session_id string
+    try:
+        resp = requests.post(f"{BACKEND_URL}/auth/google/session", json={"session_id": ""}, timeout=10)
+        passed = resp.status_code == 400 and "session_id is required" in resp.text.lower()
+        log_test("Section 1", "Empty session_id → 400", passed, 
+                f"Status: {resp.status_code}, Body: {resp.text[:200]}")
+    except Exception as e:
+        log_test("Section 1", "Empty session_id → 400", False, str(e))
+    
+    # Test 2: Missing session_id field (empty body)
+    try:
+        resp = requests.post(f"{BACKEND_URL}/auth/google/session", json={}, timeout=10)
+        passed = resp.status_code in [400, 422]
+        log_test("Section 1", "Missing session_id → 400/422", passed,
+                f"Status: {resp.status_code}, Body: {resp.text[:200]}")
+    except Exception as e:
+        log_test("Section 1", "Missing session_id → 400/422", False, str(e))
+    
+    # Test 3: Invalid session_id
+    try:
+        resp = requests.post(f"{BACKEND_URL}/auth/google/session", 
+                           json={"session_id": "definitely-not-a-real-session-abc123"}, 
+                           timeout=15)
+        passed = resp.status_code in [401, 502] and len(resp.text) > 0
+        log_test("Section 1", "Invalid session_id → 401/502", passed,
+                f"Status: {resp.status_code}, Body: {resp.text[:200]}")
+    except Exception as e:
+        log_test("Section 1", "Invalid session_id → 401/502", False, str(e))
+
+
+def test_section_2_admin_settings():
+    """Section 2 - Admin settings CRUD"""
+    print_section("SECTION 2: Admin Settings")
     
     if not admin_token:
-        log_test("Admin coupon CRUD", False, "No admin token available")
+        log_test("Section 2", "Admin settings tests", False, "No admin token available")
         return
     
     headers = {"Authorization": f"Bearer {admin_token}"}
     
-    # Test 1: GET /api/admin/coupons - list coupons
+    # Test 1: GET settings with token
     try:
-        resp = requests.get(f"{BASE_URL}/admin/coupons", headers=headers, timeout=10)
+        resp = requests.get(f"{BACKEND_URL}/admin/settings", headers=headers, timeout=10)
         if resp.status_code == 200:
-            coupons = resp.json()
-            if isinstance(coupons, list) and len(coupons) >= 3:
-                codes = [c.get("code") for c in coupons]
-                if all(code in codes for code in ["WELCOME10", "ATELIER500", "SIGNATURE15"]):
-                    log_test("Admin GET coupons: list with seeded coupons", True)
-                else:
-                    log_test("Admin GET coupons: list with seeded coupons", False, 
-                            f"Missing seeded coupons. Found: {codes}")
-            else:
-                log_test("Admin GET coupons: list with seeded coupons", False, 
-                        f"Expected list with >=3 coupons, got {len(coupons) if isinstance(coupons, list) else 'not a list'}")
-        else:
-            log_test("Admin GET coupons: list with seeded coupons", False, 
-                    f"Status {resp.status_code}: {resp.text}")
-    except Exception as e:
-        log_test("Admin GET coupons: list with seeded coupons", False, f"Exception: {str(e)}")
-    
-    # Test 2: POST /api/admin/coupons - create new coupon
-    test_coupon_id = None
-    try:
-        resp = requests.post(
-            f"{BASE_URL}/admin/coupons",
-            headers=headers,
-            json={
-                "code": "TESTX",
-                "type": "percentage",
-                "value": 20,
-                "min_cart_inr": 0,
-                "max_uses": 5,
-                "active": True,
-                "description": "Test coupon"
-            },
-            timeout=10
-        )
-        if resp.status_code in (200, 201):
             data = resp.json()
-            test_coupon_id = data.get("id")
-            if data.get("code") == "TESTX":
-                log_test("Admin POST coupon: create TESTX", True)
-            else:
-                log_test("Admin POST coupon: create TESTX", False, 
-                        f"Expected code TESTX, got {data.get('code')}")
+            current_value = data.get("review_prompt_days")
+            passed = "review_prompt_days" in data
+            log_test("Section 2", "GET /admin/settings → 200", passed,
+                    f"Current value: {current_value}")
         else:
-            log_test("Admin POST coupon: create TESTX", False, 
-                    f"Status {resp.status_code}: {resp.text}")
+            log_test("Section 2", "GET /admin/settings → 200", False,
+                    f"Status: {resp.status_code}, Body: {resp.text[:200]}")
     except Exception as e:
-        log_test("Admin POST coupon: create TESTX", False, f"Exception: {str(e)}")
+        log_test("Section 2", "GET /admin/settings → 200", False, str(e))
     
-    # Test 3: POST duplicate - should return 409
+    # Test 2: PATCH settings to 10
     try:
-        resp = requests.post(
-            f"{BASE_URL}/admin/coupons",
-            headers=headers,
-            json={
-                "code": "TESTX",
-                "type": "percentage",
-                "value": 20,
-                "min_cart_inr": 0,
-                "max_uses": 5,
-                "active": True,
-                "description": "Duplicate"
-            },
-            timeout=10
-        )
-        if resp.status_code == 409:
-            log_test("Admin POST coupon: duplicate code 409", True)
-        else:
-            log_test("Admin POST coupon: duplicate code 409", False, 
-                    f"Expected 409, got {resp.status_code}")
+        resp = requests.patch(f"{BACKEND_URL}/admin/settings", 
+                            headers=headers,
+                            json={"review_prompt_days": 10},
+                            timeout=10)
+        passed = resp.status_code == 200 and resp.json().get("review_prompt_days") == 10
+        log_test("Section 2", "PATCH review_prompt_days=10 → 200", passed,
+                f"Response: {resp.json() if resp.status_code == 200 else resp.text[:200]}")
     except Exception as e:
-        log_test("Admin POST coupon: duplicate code 409", False, f"Exception: {str(e)}")
+        log_test("Section 2", "PATCH review_prompt_days=10 → 200", False, str(e))
     
-    # Test 4: POST invalid - percentage > 100
+    # Test 3: GET again to verify
     try:
-        resp = requests.post(
-            f"{BASE_URL}/admin/coupons",
-            headers=headers,
-            json={
-                "code": "BAD1",
-                "type": "percentage",
-                "value": 150,
-                "min_cart_inr": 0,
-                "active": True
-            },
-            timeout=10
-        )
-        if resp.status_code == 400:
-            log_test("Admin POST coupon: percentage > 100 validation", True)
-        else:
-            log_test("Admin POST coupon: percentage > 100 validation", False, 
-                    f"Expected 400, got {resp.status_code}")
+        resp = requests.get(f"{BACKEND_URL}/admin/settings", headers=headers, timeout=10)
+        passed = resp.status_code == 200 and resp.json().get("review_prompt_days") == 10
+        log_test("Section 2", "GET again → review_prompt_days=10", passed,
+                f"Value: {resp.json().get('review_prompt_days') if resp.status_code == 200 else 'N/A'}")
     except Exception as e:
-        log_test("Admin POST coupon: percentage > 100 validation", False, f"Exception: {str(e)}")
+        log_test("Section 2", "GET again → review_prompt_days=10", False, str(e))
     
-    # Test 5: POST invalid - value <= 0
+    # Test 4: PATCH with invalid value > 90
     try:
-        resp = requests.post(
-            f"{BASE_URL}/admin/coupons",
-            headers=headers,
-            json={
-                "code": "BAD2",
-                "type": "flat",
-                "value": -100,
-                "min_cart_inr": 0,
-                "active": True
-            },
-            timeout=10
-        )
-        if resp.status_code == 400:
-            log_test("Admin POST coupon: value <= 0 validation", True)
-        else:
-            log_test("Admin POST coupon: value <= 0 validation", False, 
-                    f"Expected 400, got {resp.status_code}")
+        resp = requests.patch(f"{BACKEND_URL}/admin/settings",
+                            headers=headers,
+                            json={"review_prompt_days": 200},
+                            timeout=10)
+        passed = resp.status_code == 422
+        log_test("Section 2", "PATCH review_prompt_days=200 → 422", passed,
+                f"Status: {resp.status_code}, Body: {resp.text[:200]}")
     except Exception as e:
-        log_test("Admin POST coupon: value <= 0 validation", False, f"Exception: {str(e)}")
+        log_test("Section 2", "PATCH review_prompt_days=200 → 422", False, str(e))
     
-    # Test 6: POST invalid type
+    # Test 5: PATCH with invalid value < 0
     try:
-        resp = requests.post(
-            f"{BASE_URL}/admin/coupons",
-            headers=headers,
-            json={
-                "code": "BAD3",
-                "type": "weird",
-                "value": 10,
-                "min_cart_inr": 0,
-                "active": True
-            },
-            timeout=10
-        )
-        if resp.status_code == 400:
-            log_test("Admin POST coupon: invalid type validation", True)
-        else:
-            log_test("Admin POST coupon: invalid type validation", False, 
-                    f"Expected 400, got {resp.status_code}")
+        resp = requests.patch(f"{BACKEND_URL}/admin/settings",
+                            headers=headers,
+                            json={"review_prompt_days": -1},
+                            timeout=10)
+        passed = resp.status_code == 422
+        log_test("Section 2", "PATCH review_prompt_days=-1 → 422", passed,
+                f"Status: {resp.status_code}, Body: {resp.text[:200]}")
     except Exception as e:
-        log_test("Admin POST coupon: invalid type validation", False, f"Exception: {str(e)}")
+        log_test("Section 2", "PATCH review_prompt_days=-1 → 422", False, str(e))
     
-    # Test 7: PATCH /api/admin/coupons/{id} - update description
-    if test_coupon_id:
-        try:
-            resp = requests.patch(
-                f"{BASE_URL}/admin/coupons/{test_coupon_id}",
-                headers=headers,
-                json={
-                    "code": "TESTX",
-                    "type": "percentage",
-                    "value": 20,
-                    "min_cart_inr": 0,
-                    "max_uses": 5,
-                    "active": True,
-                    "description": "Updated description"
-                },
-                timeout=10
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get("description") == "Updated description":
-                    log_test("Admin PATCH coupon: update description", True)
-                else:
-                    log_test("Admin PATCH coupon: update description", False, 
-                            f"Description not updated: {data.get('description')}")
-            else:
-                log_test("Admin PATCH coupon: update description", False, 
-                        f"Status {resp.status_code}: {resp.text}")
-        except Exception as e:
-            log_test("Admin PATCH coupon: update description", False, f"Exception: {str(e)}")
-    
-    # Test 8: DELETE /api/admin/coupons/{id}
-    if test_coupon_id:
-        try:
-            resp = requests.delete(
-                f"{BASE_URL}/admin/coupons/{test_coupon_id}",
-                headers=headers,
-                timeout=10
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get("deleted") == True:
-                    # Verify it's gone
-                    resp2 = requests.get(f"{BASE_URL}/admin/coupons", headers=headers, timeout=10)
-                    if resp2.status_code == 200:
-                        coupons = resp2.json()
-                        codes = [c.get("code") for c in coupons]
-                        if "TESTX" not in codes:
-                            log_test("Admin DELETE coupon: verify deleted", True)
-                        else:
-                            log_test("Admin DELETE coupon: verify deleted", False, 
-                                    "TESTX still in list after delete")
-                    else:
-                        log_test("Admin DELETE coupon: verify deleted", False, 
-                                "Could not verify deletion")
-                else:
-                    log_test("Admin DELETE coupon: verify deleted", False, 
-                            f"Expected deleted:true, got {data}")
-            else:
-                log_test("Admin DELETE coupon: verify deleted", False, 
-                        f"Status {resp.status_code}: {resp.text}")
-        except Exception as e:
-            log_test("Admin DELETE coupon: verify deleted", False, f"Exception: {str(e)}")
-    
-    # Test 9: Unauthorized access - no token
+    # Test 6: GET without token
     try:
-        resp = requests.get(f"{BASE_URL}/admin/coupons", timeout=10)
-        if resp.status_code == 401:
-            log_test("Admin coupon endpoint: 401 without token", True)
-        else:
-            log_test("Admin coupon endpoint: 401 without token", False, 
-                    f"Expected 401, got {resp.status_code}")
+        resp = requests.get(f"{BACKEND_URL}/admin/settings", timeout=10)
+        passed = resp.status_code == 401
+        log_test("Section 2", "GET without token → 401", passed,
+                f"Status: {resp.status_code}")
     except Exception as e:
-        log_test("Admin coupon endpoint: 401 without token", False, f"Exception: {str(e)}")
+        log_test("Section 2", "GET without token → 401", False, str(e))
+    
+    # Test 7: Restore to default (7)
+    try:
+        resp = requests.patch(f"{BACKEND_URL}/admin/settings",
+                            headers=headers,
+                            json={"review_prompt_days": 7},
+                            timeout=10)
+        passed = resp.status_code == 200 and resp.json().get("review_prompt_days") == 7
+        log_test("Section 2", "PATCH restore to 7 → 200", passed,
+                f"Response: {resp.json() if resp.status_code == 200 else resp.text[:200]}")
+    except Exception as e:
+        log_test("Section 2", "PATCH restore to 7 → 200", False, str(e))
 
 
-def test_order_with_coupon():
-    """Test order creation with coupon code"""
-    print("\n=== Testing Order Creation with Coupon ===")
+def test_section_3_review_prompts():
+    """Section 3 - Review prompts flow"""
+    print_section("SECTION 3: Review Prompts")
     
-    # First, get a product to order
+    global test_user_email, test_user_token, test_orders, test_reviews
+    
+    # Create fresh test user
+    timestamp = int(time.time())
+    test_user_email = f"reviewer_{timestamp}@example.com"
+    
     try:
-        resp = requests.get(f"{BASE_URL}/products", timeout=10)
-        if resp.status_code != 200:
-            log_test("Order with coupon: get products", False, 
-                    f"Could not fetch products: {resp.status_code}")
-            return
+        resp = requests.post(f"{BACKEND_URL}/auth/signup", json={
+            "name": "Review Tester",
+            "email": test_user_email,
+            "password": "TestPassword123",
+            "phone": "9999999999"
+        }, timeout=10)
         
+        if resp.status_code == 200:
+            test_user_token = resp.json()["token"]
+            log_test("Section 3", "Create test user", True, f"Email: {test_user_email}")
+        else:
+            log_test("Section 3", "Create test user", False, 
+                    f"Status: {resp.status_code}, Body: {resp.text[:200]}")
+            return
+    except Exception as e:
+        log_test("Section 3", "Create test user", False, str(e))
+        return
+    
+    user_headers = {"Authorization": f"Bearer {test_user_token}"}
+    
+    # Test 1: GET review-prompts (should be empty)
+    try:
+        resp = requests.get(f"{BACKEND_URL}/me/review-prompts", headers=user_headers, timeout=10)
+        passed = resp.status_code == 200 and resp.json() == []
+        log_test("Section 3", "GET /me/review-prompts → empty []", passed,
+                f"Response: {resp.json() if resp.status_code == 200 else resp.text[:200]}")
+    except Exception as e:
+        log_test("Section 3", "GET /me/review-prompts → empty []", False, str(e))
+    
+    # Get products to use in test order
+    try:
+        resp = requests.get(f"{BACKEND_URL}/products", timeout=10)
         products = resp.json()
         if not products:
-            log_test("Order with coupon: get products", False, "No products available")
+            log_test("Section 3", "Get products for test", False, "No products available")
             return
         
-        product = products[0]
-        product_id = product.get("id")
-        variant_key = product.get("variants", [{}])[0].get("key", "default")
+        test_product = products[0]
+        product_id = test_product["id"]
+        product_slug = test_product["slug"]
+        variant_key = test_product["variants"][0]["key"] if test_product.get("variants") else "default"
         
-        # Test 1: Create order with valid coupon WELCOME10
-        order_payload = {
+        log_test("Section 3", "Get products for test", True, 
+                f"Using product: {product_slug} (id: {product_id})")
+    except Exception as e:
+        log_test("Section 3", "Get products for test", False, str(e))
+        return
+    
+    # Insert backdated order via MongoDB
+    try:
+        client = MongoClient(MONGO_URL)
+        db = client[DB_NAME]
+        
+        order_id = str(uuid.uuid4())
+        order_number = f"TEST-REV-{timestamp}"
+        delivered_at = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+        created_at = (datetime.now(timezone.utc) - timedelta(days=12)).isoformat()
+        
+        order_doc = {
+            "id": order_id,
+            "order_number": order_number,
             "customer": {
-                "name": "Priya Sharma",
-                "email": "priya.test@example.com",
-                "phone": "9876543210",
-                "address": "123 Marine Drive",
+                "name": "Review Tester",
+                "email": test_user_email,
+                "phone": "9999999999",
+                "address": "1 A",
                 "city": "Mumbai",
-                "pincode": "400020"
+                "pincode": "400001"
             },
-            "items": [
-                {
-                    "product_id": product_id,
-                    "variant_key": variant_key,
-                    "quantity": 1
-                }
-            ],
+            "items": [{
+                "product_id": product_id,
+                "variant_key": variant_key,
+                "quantity": 1
+            }],
             "payment_method": "razorpay",
-            "subtotal_inr": 20000,
+            "subtotal_inr": 10000,
             "shipping_inr": 0,
-            "total_inr": 18000,
-            "coupon_code": "WELCOME10",
-            "discount_inr": 2000
+            "total_inr": 10000,
+            "discount_inr": 0,
+            "status": "delivered",
+            "delivered_at": delivered_at,
+            "created_at": created_at
         }
         
-        resp = requests.post(f"{BASE_URL}/orders", json=order_payload, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            order = data.get("order", {})
-            if (order.get("coupon_code") == "WELCOME10" and 
-                order.get("discount_inr") == 2000):
-                log_test("Order creation: with valid coupon WELCOME10", True)
-            else:
-                log_test("Order creation: with valid coupon WELCOME10", False, 
-                        f"Coupon data mismatch: {order.get('coupon_code')}, {order.get('discount_inr')}")
-        else:
-            log_test("Order creation: with valid coupon WELCOME10", False, 
-                    f"Status {resp.status_code}: {resp.text}")
+        db.orders.insert_one(order_doc)
+        test_orders.append(order_number)
         
-        # Test 2: Create order with invalid coupon
-        invalid_payload = order_payload.copy()
-        invalid_payload["coupon_code"] = "EXPIRED"
-        invalid_payload["customer"]["email"] = "test2@example.com"
+        log_test("Section 3", "Insert backdated order (10 days ago)", True,
+                f"Order: {order_number}, Product: {product_slug}")
         
-        resp = requests.post(f"{BASE_URL}/orders", json=invalid_payload, timeout=10)
-        if resp.status_code == 400:
-            log_test("Order creation: with invalid coupon", True)
-        else:
-            log_test("Order creation: with invalid coupon", False, 
-                    f"Expected 400, got {resp.status_code}")
-        
-        # Test 3: Create order with coupon not meeting min_cart
-        low_cart_payload = order_payload.copy()
-        low_cart_payload["coupon_code"] = "SIGNATURE15"
-        low_cart_payload["subtotal_inr"] = 5000
-        low_cart_payload["total_inr"] = 5000
-        low_cart_payload["discount_inr"] = 0
-        low_cart_payload["customer"]["email"] = "test3@example.com"
-        
-        resp = requests.post(f"{BASE_URL}/orders", json=low_cart_payload, timeout=10)
-        if resp.status_code == 400:
-            detail = resp.json().get("detail", "")
-            if "Minimum" in detail or "minimum" in detail.lower():
-                log_test("Order creation: coupon min_cart validation", True)
-            else:
-                log_test("Order creation: coupon min_cart validation", False, 
-                        f"Expected min_cart error, got: {detail}")
-        else:
-            log_test("Order creation: coupon min_cart validation", False, 
-                    f"Expected 400, got {resp.status_code}")
-        
+        client.close()
     except Exception as e:
-        log_test("Order with coupon tests", False, f"Exception: {str(e)}")
-
-
-def test_failed_payment_logging():
-    """Test failed payment logging endpoints"""
-    print("\n=== Testing Failed Payment Logging ===")
+        log_test("Section 3", "Insert backdated order (10 days ago)", False, str(e))
+        return
     
-    # Test 1: POST /api/payments/failed - basic logging
-    failed_payment_id = None
+    # Test 2: GET review-prompts (should have 1 item)
     try:
-        payload = {
-            "error_code": "BAD_CARD",
-            "error_description": "Card declined",
-            "amount_inr": 19999,
-            "customer_email": "failed@example.com",
-            "customer_name": "Test User"
+        resp = requests.get(f"{BACKEND_URL}/me/review-prompts", headers=user_headers, timeout=10)
+        if resp.status_code == 200:
+            prompts = resp.json()
+            passed = len(prompts) == 1
+            if passed and prompts:
+                prompt = prompts[0]
+                details = (f"Order: {prompt.get('order_number')}, "
+                          f"Product: {prompt.get('product_slug')}, "
+                          f"Days: {prompt.get('days_since_delivery')}")
+                # Verify structure
+                has_required = all(k in prompt for k in 
+                                 ['order_number', 'product_id', 'product_slug', 
+                                  'product_name', 'product_image', 'delivered_at', 'days_since_delivery'])
+                passed = passed and has_required and prompt['days_since_delivery'] >= 10
+            else:
+                details = f"Expected 1 prompt, got {len(prompts)}"
+            log_test("Section 3", "GET /me/review-prompts → 1 item", passed, details)
+        else:
+            log_test("Section 3", "GET /me/review-prompts → 1 item", False,
+                    f"Status: {resp.status_code}, Body: {resp.text[:200]}")
+    except Exception as e:
+        log_test("Section 3", "GET /me/review-prompts → 1 item", False, str(e))
+    
+    # Test 3: Submit review for the product
+    try:
+        resp = requests.post(f"{BACKEND_URL}/products/{product_slug}/reviews",
+                           headers=user_headers,
+                           json={
+                               "rating": 5,
+                               "title": "Test Review Title",
+                               "body": "This is a test review body content for automated testing."
+                           },
+                           timeout=10)
+        
+        if resp.status_code == 200:
+            review = resp.json()
+            # Track review for cleanup
+            if "id" in review:
+                test_reviews.append(review["id"])
+            passed = True
+            log_test("Section 3", "POST review → 200", passed,
+                    f"Review created for {product_slug}")
+        else:
+            log_test("Section 3", "POST review → 200", False,
+                    f"Status: {resp.status_code}, Body: {resp.text[:200]}")
+    except Exception as e:
+        log_test("Section 3", "POST review → 200", False, str(e))
+    
+    # Test 4: GET review-prompts again (should be empty)
+    try:
+        resp = requests.get(f"{BACKEND_URL}/me/review-prompts", headers=user_headers, timeout=10)
+        passed = resp.status_code == 200 and resp.json() == []
+        log_test("Section 3", "GET /me/review-prompts → empty [] after review", passed,
+                f"Response: {resp.json() if resp.status_code == 200 else resp.text[:200]}")
+    except Exception as e:
+        log_test("Section 3", "GET /me/review-prompts → empty [] after review", False, str(e))
+
+
+def test_section_4_threshold():
+    """Section 4 - Threshold adjustment"""
+    print_section("SECTION 4: Threshold Works")
+    
+    if not test_user_token or not admin_token:
+        log_test("Section 4", "Threshold tests", False, "Missing tokens")
+        return
+    
+    user_headers = {"Authorization": f"Bearer {test_user_token}"}
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    
+    # Get a different product for second order
+    try:
+        resp = requests.get(f"{BACKEND_URL}/products", timeout=10)
+        products = resp.json()
+        # Try to get second product, fallback to first
+        test_product = products[1] if len(products) > 1 else products[0]
+        product_id = test_product["id"]
+        product_slug = test_product["slug"]
+        variant_key = test_product["variants"][0]["key"] if test_product.get("variants") else "default"
+        
+        log_test("Section 4", "Get second product", True, f"Using: {product_slug}")
+    except Exception as e:
+        log_test("Section 4", "Get second product", False, str(e))
+        return
+    
+    # Insert order backdated 3 days
+    try:
+        client = MongoClient(MONGO_URL)
+        db = client[DB_NAME]
+        
+        timestamp = int(time.time())
+        order_id = str(uuid.uuid4())
+        order_number = f"TEST-REV-{timestamp}-3D"
+        delivered_at = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        created_at = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+        
+        order_doc = {
+            "id": order_id,
+            "order_number": order_number,
+            "customer": {
+                "name": "Review Tester",
+                "email": test_user_email,
+                "phone": "9999999999",
+                "address": "1 A",
+                "city": "Mumbai",
+                "pincode": "400001"
+            },
+            "items": [{
+                "product_id": product_id,
+                "variant_key": variant_key,
+                "quantity": 1
+            }],
+            "payment_method": "razorpay",
+            "subtotal_inr": 10000,
+            "shipping_inr": 0,
+            "total_inr": 10000,
+            "discount_inr": 0,
+            "status": "delivered",
+            "delivered_at": delivered_at,
+            "created_at": created_at
         }
         
-        resp = requests.post(f"{BASE_URL}/payments/failed", json=payload, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get("id") and data.get("created_at"):
-                failed_payment_id = data.get("id")
-                log_test("Failed payment: POST basic logging", True)
-            else:
-                log_test("Failed payment: POST basic logging", False, 
-                        f"Missing id or created_at: {data}")
-        else:
-            log_test("Failed payment: POST basic logging", False, 
-                    f"Status {resp.status_code}: {resp.text}")
+        db.orders.insert_one(order_doc)
+        test_orders.append(order_number)
+        
+        log_test("Section 4", "Insert order backdated 3 days", True,
+                f"Order: {order_number}")
+        
+        client.close()
     except Exception as e:
-        log_test("Failed payment: POST basic logging", False, f"Exception: {str(e)}")
+        log_test("Section 4", "Insert order backdated 3 days", False, str(e))
+        return
     
-    # Test 2: POST with order_number - should mark order as payment_failed
+    # Test 1: GET review-prompts (should be empty, 3 < 7)
     try:
-        # First create an order
-        resp = requests.get(f"{BASE_URL}/products", timeout=10)
-        if resp.status_code == 200:
-            products = resp.json()
-            if products:
-                product = products[0]
-                product_id = product.get("id")
-                variant_key = product.get("variants", [{}])[0].get("key", "default")
-                
-                order_payload = {
-                    "customer": {
-                        "name": "Failed Payment Test",
-                        "email": "failtest@example.com",
-                        "phone": "9999999999",
-                        "address": "1 Test Lane",
-                        "city": "Mumbai",
-                        "pincode": "400001"
-                    },
-                    "items": [{"product_id": product_id, "variant_key": variant_key, "quantity": 1}],
-                    "payment_method": "razorpay",
-                    "subtotal_inr": 20000,
-                    "shipping_inr": 0,
-                    "total_inr": 20000
-                }
-                
-                resp = requests.post(f"{BASE_URL}/orders", json=order_payload, timeout=10)
-                if resp.status_code == 200:
-                    order_number = resp.json().get("order", {}).get("order_number")
-                    
-                    # Now log a failed payment with this order_number
-                    fail_payload = {
-                        "order_number": order_number,
-                        "error_code": "PAYMENT_TIMEOUT",
-                        "error_description": "Payment timed out",
-                        "amount_inr": 20000,
-                        "customer_email": "failtest@example.com",
-                        "customer_name": "Failed Payment Test"
-                    }
-                    
-                    resp = requests.post(f"{BASE_URL}/payments/failed", json=fail_payload, timeout=10)
-                    if resp.status_code == 200:
-                        # Verify order status changed to payment_failed
-                        resp = requests.get(f"{BASE_URL}/orders/{order_number}", timeout=10)
-                        if resp.status_code == 200:
-                            order = resp.json()
-                            if order.get("status") == "payment_failed":
-                                log_test("Failed payment: order status update", True)
-                            else:
-                                log_test("Failed payment: order status update", False, 
-                                        f"Expected status 'payment_failed', got {order.get('status')}")
-                        else:
-                            log_test("Failed payment: order status update", False, 
-                                    f"Could not fetch order: {resp.status_code}")
-                    else:
-                        log_test("Failed payment: order status update", False, 
-                                f"Failed payment POST failed: {resp.status_code}")
-                else:
-                    log_test("Failed payment: order status update", False, 
-                            f"Could not create test order: {resp.status_code}")
+        resp = requests.get(f"{BACKEND_URL}/me/review-prompts", headers=user_headers, timeout=10)
+        passed = resp.status_code == 200 and resp.json() == []
+        log_test("Section 4", "GET prompts with 3-day order (threshold=7) → []", passed,
+                f"Response: {resp.json() if resp.status_code == 200 else resp.text[:200]}")
     except Exception as e:
-        log_test("Failed payment: order status update", False, f"Exception: {str(e)}")
+        log_test("Section 4", "GET prompts with 3-day order (threshold=7) → []", False, str(e))
     
-    # Test 3: GET /api/admin/failed-payments with admin token
-    if admin_token:
+    # Test 2: PATCH threshold to 2
+    try:
+        resp = requests.patch(f"{BACKEND_URL}/admin/settings",
+                            headers=admin_headers,
+                            json={"review_prompt_days": 2},
+                            timeout=10)
+        passed = resp.status_code == 200 and resp.json().get("review_prompt_days") == 2
+        log_test("Section 4", "PATCH review_prompt_days=2 → 200", passed,
+                f"Response: {resp.json() if resp.status_code == 200 else resp.text[:200]}")
+    except Exception as e:
+        log_test("Section 4", "PATCH review_prompt_days=2 → 200", False, str(e))
+    
+    # Test 3: GET review-prompts (should have 1 item, 3 > 2)
+    try:
+        resp = requests.get(f"{BACKEND_URL}/me/review-prompts", headers=user_headers, timeout=10)
+        if resp.status_code == 200:
+            prompts = resp.json()
+            passed = len(prompts) == 1
+            details = f"Expected 1 prompt, got {len(prompts)}"
+            if passed and prompts:
+                details = f"Product: {prompts[0].get('product_slug')}, Days: {prompts[0].get('days_since_delivery')}"
+            log_test("Section 4", "GET prompts with threshold=2 → 1 item", passed, details)
+        else:
+            log_test("Section 4", "GET prompts with threshold=2 → 1 item", False,
+                    f"Status: {resp.status_code}, Body: {resp.text[:200]}")
+    except Exception as e:
+        log_test("Section 4", "GET prompts with threshold=2 → 1 item", False, str(e))
+    
+    # Test 4: Restore threshold to 7
+    try:
+        resp = requests.patch(f"{BACKEND_URL}/admin/settings",
+                            headers=admin_headers,
+                            json={"review_prompt_days": 7},
+                            timeout=10)
+        passed = resp.status_code == 200 and resp.json().get("review_prompt_days") == 7
+        log_test("Section 4", "PATCH restore to 7 → 200", passed,
+                f"Response: {resp.json() if resp.status_code == 200 else resp.text[:200]}")
+    except Exception as e:
+        log_test("Section 4", "PATCH restore to 7 → 200", False, str(e))
+
+
+def test_section_5_regression():
+    """Section 5 - Regression tests"""
+    print_section("SECTION 5: Regression Tests")
+    
+    # Test 1: Signup fresh user
+    timestamp = int(time.time())
+    reg_email = f"regression_{timestamp}@example.com"
+    
+    try:
+        resp = requests.post(f"{BACKEND_URL}/auth/signup", json={
+            "name": "Regression Tester",
+            "email": reg_email,
+            "password": "RegTest123",
+            "phone": "8888888888"
+        }, timeout=10)
+        
+        passed = resp.status_code == 200 and "token" in resp.json()
+        reg_token = resp.json().get("token") if passed else None
+        log_test("Section 5", "POST /auth/signup → 200", passed,
+                f"Email: {reg_email}")
+    except Exception as e:
+        log_test("Section 5", "POST /auth/signup → 200", False, str(e))
+        reg_token = None
+    
+    # Test 2: Login with same creds
+    try:
+        resp = requests.post(f"{BACKEND_URL}/auth/login", json={
+            "email": reg_email,
+            "password": "RegTest123"
+        }, timeout=10)
+        
+        passed = resp.status_code == 200 and "token" in resp.json()
+        log_test("Section 5", "POST /auth/login → 200", passed,
+                f"Token received: {bool(passed)}")
+    except Exception as e:
+        log_test("Section 5", "POST /auth/login → 200", False, str(e))
+    
+    # Test 3: GET /auth/me
+    if reg_token:
         try:
-            headers = {"Authorization": f"Bearer {admin_token}"}
-            resp = requests.get(f"{BASE_URL}/admin/failed-payments", headers=headers, timeout=10)
+            resp = requests.get(f"{BACKEND_URL}/auth/me",
+                              headers={"Authorization": f"Bearer {reg_token}"},
+                              timeout=10)
+            
             if resp.status_code == 200:
                 data = resp.json()
-                if isinstance(data, list):
-                    # Check if our logged payment is in the list
-                    if failed_payment_id:
-                        ids = [fp.get("id") for fp in data]
-                        if failed_payment_id in ids:
-                            log_test("Admin GET failed-payments: list contains logged entry", True)
-                        else:
-                            log_test("Admin GET failed-payments: list contains logged entry", False, 
-                                    f"Failed payment {failed_payment_id} not in list")
-                    else:
-                        log_test("Admin GET failed-payments: returns list", True)
-                else:
-                    log_test("Admin GET failed-payments: returns list", False, 
-                            f"Expected list, got {type(data)}")
+                # picture should be null or omitted for email/password users
+                passed = "email" in data and data["email"] == reg_email
+                picture_status = f"picture: {data.get('picture', 'omitted')}"
+                log_test("Section 5", "GET /auth/me → 200", passed, picture_status)
             else:
-                log_test("Admin GET failed-payments: returns list", False, 
-                        f"Status {resp.status_code}: {resp.text}")
+                log_test("Section 5", "GET /auth/me → 200", False,
+                        f"Status: {resp.status_code}")
         except Exception as e:
-            log_test("Admin GET failed-payments: returns list", False, f"Exception: {str(e)}")
+            log_test("Section 5", "GET /auth/me → 200", False, str(e))
     
-    # Test 4: GET /api/admin/failed-payments without token - should be 401
+    # Test 4: GET /products
     try:
-        resp = requests.get(f"{BASE_URL}/admin/failed-payments", timeout=10)
-        if resp.status_code == 401:
-            log_test("Admin failed-payments: 401 without token", True)
-        else:
-            log_test("Admin failed-payments: 401 without token", False, 
-                    f"Expected 401, got {resp.status_code}")
+        resp = requests.get(f"{BACKEND_URL}/products", timeout=10)
+        passed = resp.status_code == 200 and len(resp.json()) == 4
+        log_test("Section 5", "GET /products → 4 products", passed,
+                f"Count: {len(resp.json()) if resp.status_code == 200 else 'N/A'}")
     except Exception as e:
-        log_test("Admin failed-payments: 401 without token", False, f"Exception: {str(e)}")
-
-
-def test_regression():
-    """Test that existing endpoints still work"""
-    print("\n=== Testing Regression (Existing Endpoints) ===")
+        log_test("Section 5", "GET /products → 4 products", False, str(e))
     
-    # Test 1: GET /api/products should return 4 products
+    # Test 5: POST /coupons/validate
     try:
-        resp = requests.get(f"{BASE_URL}/products", timeout=10)
-        if resp.status_code == 200:
-            products = resp.json()
-            if len(products) == 4:
-                log_test("Regression: GET /api/products returns 4 products", True)
-            else:
-                log_test("Regression: GET /api/products returns 4 products", False, 
-                        f"Expected 4 products, got {len(products)}")
-        else:
-            log_test("Regression: GET /api/products returns 4 products", False, 
-                    f"Status {resp.status_code}")
-    except Exception as e:
-        log_test("Regression: GET /api/products returns 4 products", False, f"Exception: {str(e)}")
-    
-    # Test 2: GET /api/products/moon-crystal-24 - check variants
-    try:
-        resp = requests.get(f"{BASE_URL}/products/moon-crystal-24", timeout=10)
-        if resp.status_code == 200:
-            product = resp.json()
-            variants = product.get("variants", [])
-            if len(variants) == 4:
-                # Check for distinct sizes
-                sizes = [v.get("size") for v in variants if v.get("size")]
-                size_24_count = sum(1 for s in sizes if "24" in str(s))
-                size_30_count = sum(1 for s in sizes if "30" in str(s))
-                
-                # Check for distinct prices
-                prices = [v.get("price_inr") for v in variants if v.get("price_inr")]
-                has_18999 = 18999 in prices
-                has_24999 = 24999 in prices
-                
-                if size_24_count == 2 and size_30_count == 2 and has_18999 and has_24999:
-                    log_test("Regression: moon-crystal-24 variants structure", True)
-                else:
-                    log_test("Regression: moon-crystal-24 variants structure", False, 
-                            f"Variant structure mismatch. Sizes: {sizes}, Prices: {prices}")
-            else:
-                log_test("Regression: moon-crystal-24 variants structure", False, 
-                        f"Expected 4 variants, got {len(variants)}")
-        else:
-            log_test("Regression: moon-crystal-24 variants structure", False, 
-                    f"Status {resp.status_code}")
-    except Exception as e:
-        log_test("Regression: moon-crystal-24 variants structure", False, f"Exception: {str(e)}")
-    
-    # Test 3: GET /api/reviews should return 6 reviews
-    try:
-        resp = requests.get(f"{BASE_URL}/reviews", timeout=10)
-        if resp.status_code == 200:
-            reviews = resp.json()
-            if len(reviews) == 6:
-                log_test("Regression: GET /api/reviews returns 6 reviews", True)
-            else:
-                log_test("Regression: GET /api/reviews returns 6 reviews", False, 
-                        f"Expected 6 reviews, got {len(reviews)}")
-        else:
-            log_test("Regression: GET /api/reviews returns 6 reviews", False, 
-                    f"Status {resp.status_code}")
-    except Exception as e:
-        log_test("Regression: GET /api/reviews returns 6 reviews", False, f"Exception: {str(e)}")
-    
-    # Test 4: POST /api/admin/login with correct creds
-    try:
-        resp = requests.post(
-            f"{BASE_URL}/admin/login",
-            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
-            timeout=10
-        )
+        resp = requests.post(f"{BACKEND_URL}/coupons/validate", json={
+            "code": "WELCOME10",
+            "cart_total_inr": 20000
+        }, timeout=10)
+        
         if resp.status_code == 200:
             data = resp.json()
-            if data.get("token"):
-                log_test("Regression: admin login returns token", True)
-            else:
-                log_test("Regression: admin login returns token", False, "No token in response")
+            passed = data.get("discount_inr") == 2000
+            log_test("Section 5", "POST /coupons/validate WELCOME10 → 2000", passed,
+                    f"Discount: {data.get('discount_inr')}")
         else:
-            log_test("Regression: admin login returns token", False, 
-                    f"Status {resp.status_code}")
+            log_test("Section 5", "POST /coupons/validate WELCOME10 → 2000", False,
+                    f"Status: {resp.status_code}")
     except Exception as e:
-        log_test("Regression: admin login returns token", False, f"Exception: {str(e)}")
+        log_test("Section 5", "POST /coupons/validate WELCOME10 → 2000", False, str(e))
+
+
+def cleanup():
+    """Cleanup test data"""
+    print_section("CLEANUP")
     
-    # Test 5: GET /api/admin/stats with token
-    if admin_token:
-        try:
-            headers = {"Authorization": f"Bearer {admin_token}"}
-            resp = requests.get(f"{BASE_URL}/admin/stats", headers=headers, timeout=10)
-            if resp.status_code == 200:
-                stats = resp.json()
-                required_keys = ["orders_total", "orders_confirmed", "revenue_inr", 
-                               "leads_new", "products_total", "reviews_total"]
-                if all(key in stats for key in required_keys):
-                    log_test("Regression: GET /api/admin/stats returns dashboard stats", True)
-                else:
-                    log_test("Regression: GET /api/admin/stats returns dashboard stats", False, 
-                            f"Missing keys. Got: {list(stats.keys())}")
-            else:
-                log_test("Regression: GET /api/admin/stats returns dashboard stats", False, 
-                        f"Status {resp.status_code}")
-        except Exception as e:
-            log_test("Regression: GET /api/admin/stats returns dashboard stats", False, 
-                    f"Exception: {str(e)}")
+    try:
+        client = MongoClient(MONGO_URL)
+        db = client[DB_NAME]
+        
+        # Delete test orders
+        if test_orders:
+            result = db.orders.delete_many({"order_number": {"$regex": "^TEST-REV-"}})
+            log_test("Cleanup", f"Delete test orders", True,
+                    f"Deleted {result.deleted_count} orders")
+        
+        # Delete test reviews
+        result = db.reviews.delete_many({"user_email": {"$regex": "^reviewer_"}})
+        log_test("Cleanup", f"Delete test reviews", True,
+                f"Deleted {result.deleted_count} reviews")
+        
+        # Verify review_prompt_days is set to 7
+        if admin_token:
+            resp = requests.patch(f"{BACKEND_URL}/admin/settings",
+                                headers={"Authorization": f"Bearer {admin_token}"},
+                                json={"review_prompt_days": 7},
+                                timeout=10)
+            log_test("Cleanup", "Restore review_prompt_days=7", 
+                    resp.status_code == 200,
+                    f"Status: {resp.status_code}")
+        
+        client.close()
+        
+    except Exception as e:
+        log_test("Cleanup", "Cleanup operations", False, str(e))
 
 
 def print_summary():
     """Print test summary"""
-    print("\n" + "="*70)
-    print("TEST SUMMARY")
-    print("="*70)
+    print_section("TEST SUMMARY")
     
-    passed = sum(1 for t in test_results if t["passed"])
-    failed = sum(1 for t in test_results if not t["passed"])
     total = len(test_results)
+    passed = sum(1 for r in test_results if r["passed"])
+    failed = total - passed
     
     print(f"\nTotal Tests: {total}")
     print(f"✅ Passed: {passed}")
     print(f"❌ Failed: {failed}")
+    print(f"Success Rate: {(passed/total*100):.1f}%\n")
     
     if failed > 0:
-        print("\n" + "="*70)
-        print("FAILED TESTS DETAILS")
-        print("="*70)
-        for t in test_results:
-            if not t["passed"]:
-                print(f"\n❌ {t['name']}")
-                if t["details"]:
-                    print(f"   {t['details']}")
+        print("FAILED TESTS:")
+        print("-" * 80)
+        for r in test_results:
+            if not r["passed"]:
+                print(f"❌ [{r['section']}] {r['test']}")
+                if r["details"]:
+                    print(f"   {r['details']}")
+        print()
     
-    print("\n" + "="*70)
-    return 0 if failed == 0 else 1
+    # Group by section
+    sections = {}
+    for r in test_results:
+        section = r["section"]
+        if section not in sections:
+            sections[section] = {"passed": 0, "failed": 0}
+        if r["passed"]:
+            sections[section]["passed"] += 1
+        else:
+            sections[section]["failed"] += 1
+    
+    print("BY SECTION:")
+    print("-" * 80)
+    for section, counts in sections.items():
+        total_section = counts["passed"] + counts["failed"]
+        print(f"{section}: {counts['passed']}/{total_section} passed")
+    print()
 
 
 def main():
-    """Main test runner"""
-    global admin_token
+    """Main test execution"""
+    print("\n" + "="*80)
+    print("  ArtyFex Phase C Backend Testing")
+    print("  Backend URL:", BACKEND_URL)
+    print("="*80)
     
-    print("="*70)
-    print("ArtyFex Phase B Backend Testing Suite")
-    print("="*70)
-    print(f"Backend URL: {BASE_URL}")
-    print(f"Admin: {ADMIN_EMAIL}")
-    print("="*70)
+    # Setup
+    if not admin_login():
+        print("\n❌ CRITICAL: Admin login failed. Cannot proceed with tests.")
+        return
     
-    # Login as admin first
-    admin_token = admin_login()
+    # Run test sections
+    test_section_1_google_auth_errors()
+    test_section_2_admin_settings()
+    test_section_3_review_prompts()
+    test_section_4_threshold()
+    test_section_5_regression()
     
-    # Run all test suites
-    test_coupon_validation()
-    test_admin_coupon_crud()
-    test_order_with_coupon()
-    test_failed_payment_logging()
-    test_regression()
+    # Cleanup
+    cleanup()
     
-    # Print summary and exit
-    exit_code = print_summary()
-    sys.exit(exit_code)
+    # Summary
+    print_summary()
+    
+    # Save results to file
+    with open("/app/backend_test_results.json", "w") as f:
+        json.dump(test_results, f, indent=2)
+    print(f"Detailed results saved to: /app/backend_test_results.json\n")
 
 
 if __name__ == "__main__":

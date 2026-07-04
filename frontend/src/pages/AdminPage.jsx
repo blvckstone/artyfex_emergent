@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast, Toaster } from "sonner";
-import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2 } from "lucide-react";
+import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2, Settings as SettingsIcon } from "lucide-react";
 
 const TOKEN_KEY = "artyfex_admin_token";
 
@@ -72,6 +72,7 @@ export default function AdminPage() {
   const [userDetail, setUserDetail] = useState(null);
   const [coupons, setCoupons] = useState([]);
   const [failedPayments, setFailedPayments] = useState([]);
+  const [settings, setSettings] = useState({ review_prompt_days: 7 });
   const [couponEditing, setCouponEditing] = useState(null); // null | coupon obj | "new"
   const [editing, setEditing] = useState(null); // null | product obj | "new"
   const [saving, setSaving] = useState(false);
@@ -81,15 +82,16 @@ export default function AdminPage() {
   const reload = React.useCallback(async () => {
     if (!token) return;
     try {
-      const [s, p, o, l, r, rt, u, c, fp] = await Promise.all([
+      const [s, p, o, l, r, rt, u, c, fp, st] = await Promise.all([
         authed.get("/admin/stats"), authed.get("/products"),
         authed.get("/admin/orders"), authed.get("/admin/leads"), authed.get("/reviews"),
         authed.get("/admin/returns"), authed.get("/admin/users"),
         authed.get("/admin/coupons"), authed.get("/admin/failed-payments"),
+        authed.get("/admin/settings"),
       ]);
       setStats(s.data); setProducts(p.data); setOrders(o.data); setLeads(l.data);
       setReviews(r.data); setReturns(rt.data); setUsers(u.data);
-      setCoupons(c.data); setFailedPayments(fp.data);
+      setCoupons(c.data); setFailedPayments(fp.data); setSettings(st.data);
     } catch (err) {
       if (err?.response?.status === 401) { localStorage.removeItem(TOKEN_KEY); setToken(""); }
     }
@@ -147,7 +149,19 @@ export default function AdminPage() {
     { key: "reviews", label: "Reviews", icon: Star },
     { key: "coupons", label: "Coupons", icon: Tag },
     { key: "failed", label: "Failed Payments", icon: AlertTriangle },
+    { key: "settings", label: "Settings", icon: SettingsIcon },
   ];
+
+  const saveSettings = async (val) => {
+    setSaving(true);
+    try {
+      const { data } = await authed.patch("/admin/settings", { review_prompt_days: Number(val) });
+      setSettings(data);
+      toast.success("Settings saved");
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Save failed");
+    } finally { setSaving(false); }
+  };
 
   const saveCoupon = async (form) => {
     setSaving(true);
@@ -539,6 +553,39 @@ export default function AdminPage() {
                 ))}
               </div>
             )}
+          </>
+        )}
+        {tab === "settings" && (
+          <>
+            <h1 className="font-serif text-4xl">Settings</h1>
+            <p className="mt-2 text-sm text-cream/50">Fine-tune how the storefront behaves for logged-in customers.</p>
+            <div className="mt-8 hairline p-6 max-w-xl">
+              <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Automated Reviews</div>
+              <div className="mt-2 font-serif text-2xl text-cream">Review-prompt delay</div>
+              <p className="mt-2 text-sm text-cream/60">
+                After a piece is delivered, we wait this many days before asking the collector for their review. Set to 0 to prompt immediately.
+              </p>
+              <div className="mt-6 flex items-center gap-3">
+                <input
+                  type="number"
+                  min="0"
+                  max="90"
+                  value={settings.review_prompt_days ?? 7}
+                  onChange={(e) => setSettings({ ...settings, review_prompt_days: e.target.value })}
+                  data-testid="admin-settings-review-days"
+                  className="w-24 bg-ink-950 border border-white/15 focus:border-gold outline-none px-3 py-2.5 text-cream text-lg text-center font-serif"
+                />
+                <span className="text-sm text-cream/60">days after delivery</span>
+                <button
+                  data-testid="admin-settings-save"
+                  onClick={() => saveSettings(settings.review_prompt_days)}
+                  disabled={saving}
+                  className="ml-auto bg-gold text-ink-950 px-5 py-2.5 text-xs uppercase tracking-luxury hover:bg-cream disabled:opacity-60"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin inline" /> : "Save"}
+                </button>
+              </div>
+            </div>
           </>
         )}
       </main>

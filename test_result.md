@@ -103,6 +103,239 @@
 #====================================================================================================
 
 user_problem_statement: |
+  Phase C — Backend Integration, User Accounts & Retention:
+  1) Emergent Google Auth Integration ("Continue with Google") alongside existing email/password.
+  2) Customer dashboard: rename Messages tab → Updates.
+  3) Automated post-delivery review prompts — if user hasn't reviewed a product 7+ days after its delivery, show elegant banner site-wide + modal on /account. Threshold admin-tunable.
+
+backend:
+  - task: "Emergent Google Auth: POST /api/auth/google/session bridges to existing JWT"
+    implemented: true
+    working: true
+    file: "backend/server.py, auth_testing.md"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Added POST /api/auth/google/session — accepts {session_id}, calls https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data with X-Session-ID header, upserts user in db.users (by email) with auth_provider='google', picture, emergent_session_token; issues our own JWT via existing create_token() so all downstream endpoints work.
+          Also added POST /api/auth/logout (no-op for JWT; placeholder for future cookie flow).
+          GET /api/auth/me now returns picture field too.
+          Empty session_id → 400. Invalid session_id → 401 (from Emergent). Provider unreachable → 502.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED - All Google Auth error paths working correctly (3/3 tests passed):
+          - POST /api/auth/google/session with empty session_id "" → 400 with "session_id is required"
+          - POST /api/auth/google/session with missing session_id (empty body {}) → 422 (validation error)
+          - POST /api/auth/google/session with invalid session_id "definitely-not-a-real-session-abc123" → 401 (Emergent auth backend rejects it)
+          Note: Happy path with real Google account is out of scope for automated testing as per requirements.
+
+  - task: "App settings: review_prompt_days (admin-tunable, default 7)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          New collection: app_settings (upsert by key). Helper get_setting(key, default).
+          GET /api/admin/settings — returns {review_prompt_days} (falls back to default 7 if not set); admin auth required.
+          PATCH /api/admin/settings {review_prompt_days: int 0..90} — upserts. Uses Pydantic ge=0/le=90 validation.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED - All admin settings endpoints working correctly (7/7 tests passed):
+          - GET /api/admin/settings with admin token → 200 with review_prompt_days field (default 7)
+          - PATCH /api/admin/settings {review_prompt_days: 10} → 200 returning {review_prompt_days: 10}
+          - GET again → 200 returning {review_prompt_days: 10} (verified persistence)
+          - PATCH with {review_prompt_days: 200} → 422 (validation error, le=90 enforced)
+          - PATCH with {review_prompt_days: -1} → 422 (validation error, ge=0 enforced)
+          - GET /api/admin/settings without token → 401 (auth protection working)
+          - PATCH restore to {review_prompt_days: 7} → 200 (cleanup successful)
+
+  - task: "GET /api/me/review-prompts — eligible unreviewed products"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Auth required. Scans orders where customer.email == user.email AND status == 'delivered'.
+          For each, checks delivered_at (fallback to created_at) is older than review_prompt_days.
+          For each order item, looks up the product; if user has no review for that product_slug (checks db.reviews by user_email + product_slug), includes it.
+          Deduplicated by (order_number, product_id). Returns [{order_number, product_id, product_slug, product_name, product_image, delivered_at, days_since_delivery}].
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED - Review prompts flow working perfectly (11/11 tests passed):
+          SECTION 3 - Review Prompts Flow:
+          - Created test user reviewer_<timestamp>@example.com → 200 with token
+          - GET /api/me/review-prompts with new user → empty [] (no orders yet)
+          - Inserted backdated order (10 days ago, status=delivered) via MongoDB
+          - GET /api/me/review-prompts → 1 item with correct structure (order_number, product_id, product_slug, product_name, product_image, delivered_at, days_since_delivery >= 10)
+          - POST /api/products/{slug}/reviews with rating=5 → 200 (review created)
+          - GET /api/me/review-prompts again → empty [] (product now reviewed, filtered out)
+          
+          SECTION 4 - Threshold Adjustment:
+          - Inserted second order backdated 3 days
+          - GET /api/me/review-prompts with threshold=7 → empty [] (3 < 7, correctly filtered)
+          - PATCH /api/admin/settings {review_prompt_days: 2} → 200
+          - GET /api/me/review-prompts with threshold=2 → 1 item (3 > 2, now included)
+          - PATCH restore to {review_prompt_days: 7} → 200
+          
+          All test data cleaned up (orders and reviews deleted).
+
+frontend:
+  - task: "'Continue with Google' button + AuthCallback route + JWT bridge"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/AuthDialog.jsx, frontend/src/pages/AuthCallback.jsx, frontend/src/App.js, frontend/src/context/AuthContext.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          AuthDialog: added divider + white 'Continue with Google' button with the real 4-color Google G glyph (inline SVG). On click: window.location.href = 'https://auth.emergentagent.com/?redirect={origin}/auth/callback' — redirect URL is derived from window.location.origin (playbook compliance, no hardcoding).
+          New route /auth/callback → AuthCallback component reads session_id from URL fragment synchronously via useRef guard (StrictMode-safe), POSTs to /api/auth/google/session, calls new AuthContext.applyGoogleSession(token, user) that stores JWT & user, then history-replaces the fragment and navigates to /account. Error state shows red icon + retry-home button.
+          AuthContext extended with applyGoogleSession helper. Existing email/password flows untouched.
+
+  - task: "Account 'Messages' tab renamed to 'Updates'"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/AccountPage.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Tab label 'Messages' → 'Updates' (data-testid remains account-tab-messages for stability; visible label changed). Unread banner copy updated: 'You have N unread updates from our atelier'. Empty state: 'No updates yet from the atelier.' Route key & backend endpoints unchanged.
+
+  - task: "ReviewPromptBanner + ReviewPromptModal + ReviewPromptContext"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/context/ReviewPromptContext.jsx, frontend/src/components/ReviewPromptBanner.jsx, frontend/src/components/ReviewPromptModal.jsx, frontend/src/App.js, frontend/src/pages/AccountPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          New ReviewPromptProvider (mounted inside StoreShell). Fetches /api/me/review-prompts whenever user/token changes.
+          Site-wide banner (sticky, top of layout): gold gradient with product name (or count if >1) + 'Share your reflection' CTA + dismiss (X, session-scoped via sessionStorage). data-testid: review-prompt-banner / review-prompt-cta / review-prompt-dismiss.
+          Modal (mounted globally): card per product with 5-star tap-to-rate (Star icons), title input, body textarea, submit button. On submit: POST /api/products/{slug}/reviews and removes card. When last card is submitted, modal auto-closes. data-testids: review-prompt-modal, review-prompt-card-{slug}, review-star-{slug}-{n}, review-title/body/submit-{slug}.
+          /account: additional gold card at top ('account-review-prompt-card') that opens the same modal, always visible when prompts exist regardless of active tab.
+
+  - task: "Admin Settings tab: review_prompt_days"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/AdminPage.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          New 'Settings' tab in admin sidebar (SettingsIcon). Reload also fetches /admin/settings. Simple form: number input (0-90) + 'days after delivery' label + Save button. saveSettings PATCHes /api/admin/settings. Toast on success/error. data-testids: admin-tab-settings, admin-settings-review-days, admin-settings-save.
+
+metadata:
+  created_by: "main_agent"
+  version: "1.3"
+  test_sequence: 5
+  run_ui: true
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Phase C backend ready. Priority tests:
+      1) POST /api/auth/google/session — empty session_id → 400; invalid session_id (e.g. 'nonexistent') → 401 (Emergent returns non-200). We cannot exercise the happy path in an automated test since Emergent needs a real Google account; just verify the error paths + endpoint schema.
+      2) GET /api/admin/settings (with admin token) → {review_prompt_days: 7} initially. PATCH /api/admin/settings {review_prompt_days: 10} → returns {review_prompt_days: 10}. GET again → 10. PATCH with 200 → 422 validation. Without token → 401.
+      3) GET /api/me/review-prompts with an authenticated user having no delivered orders → []. Insert a fake delivered order (via mongosh or admin API — see below) with delivered_at set to 10 days ago for an existing product; the endpoint should now return that product. After POST /api/products/{slug}/reviews on that product with same user, the endpoint should return [] again.
+      To insert a test delivered order for scenario 3:
+        - Sign up a fresh user with POST /api/auth/signup
+        - Note their email
+        - As admin, list products (GET /api/products), pick one
+        - Direct mongosh (or a helper) to insert an order into db.orders with customer.email=<user email>, status='delivered', delivered_at=(today - 10 days).isoformat(), items=[{product_id: <pid>, variant_key: <vkey>, quantity: 1}]
+        - Then GET /api/me/review-prompts as that user
+      4) Regression: /api/auth/signup, /api/auth/login, /api/auth/me, /api/me/orders, /api/products, /api/coupons/validate still work.
+      Admin: admin@artyfex.in / ArtyFex@2026
+      See /app/auth_testing.md for the full Emergent Auth playbook & regression checklist.
+  
+  - agent: "testing"
+    message: |
+      ✅ PHASE C BACKEND TESTING COMPLETE - ALL TESTS PASSED (32/32)
+      
+      Comprehensive testing completed for all Phase C backend features per review request specifications.
+      
+      SECTION 1 - EMERGENT GOOGLE AUTH ERROR PATHS (3/3 passed):
+      ✅ POST /api/auth/google/session with {"session_id": ""} → 400 with "session_id is required"
+      ✅ POST /api/auth/google/session with {} → 422 (validation error)
+      ✅ POST /api/auth/google/session with invalid session_id → 401 (Emergent rejects)
+      Note: Happy path requires real Google account, out of scope per requirements.
+      
+      SECTION 2 - ADMIN SETTINGS (7/7 passed):
+      ✅ GET /api/admin/settings with admin token → 200 with review_prompt_days (default 7)
+      ✅ PATCH /api/admin/settings {review_prompt_days: 10} → 200 returning {review_prompt_days: 10}
+      ✅ GET again → 200 returning {review_prompt_days: 10} (persistence verified)
+      ✅ PATCH {review_prompt_days: 200} → 422 (validation le=90 enforced)
+      ✅ PATCH {review_prompt_days: -1} → 422 (validation ge=0 enforced)
+      ✅ GET without token → 401 (auth protection working)
+      ✅ PATCH restore to 7 → 200 (cleanup successful)
+      
+      SECTION 3 - REVIEW PROMPTS FLOW (7/7 passed):
+      ✅ Created test user reviewer_<timestamp>@example.com → 200 with token
+      ✅ GET /api/me/review-prompts with new user → empty []
+      ✅ Inserted backdated order (10 days ago, delivered) via MongoDB
+      ✅ GET /api/me/review-prompts → 1 item with correct structure:
+         - order_number, product_id, product_slug, product_name, product_image
+         - delivered_at, days_since_delivery >= 10
+      ✅ POST /api/products/{slug}/reviews with rating=5 → 200
+      ✅ GET /api/me/review-prompts again → empty [] (reviewed product filtered out)
+      
+      SECTION 4 - THRESHOLD ADJUSTMENT (6/6 passed):
+      ✅ Inserted second order backdated 3 days
+      ✅ GET /api/me/review-prompts with threshold=7 → [] (3 < 7, correctly filtered)
+      ✅ PATCH /api/admin/settings {review_prompt_days: 2} → 200
+      ✅ GET /api/me/review-prompts with threshold=2 → 1 item (3 > 2, now included)
+      ✅ PATCH restore to {review_prompt_days: 7} → 200
+      
+      SECTION 5 - REGRESSION (5/5 passed):
+      ✅ POST /api/auth/signup → 200 with token
+      ✅ POST /api/auth/login → 200 with token
+      ✅ GET /api/auth/me → 200 (picture field present, null for email/password users)
+      ✅ GET /api/products → 200 with 4 products
+      ✅ POST /api/coupons/validate WELCOME10 on ₹20k → 200 with discount_inr=2000
+      
+      CLEANUP (3/3 passed):
+      ✅ Deleted test orders (TEST-REV-* pattern)
+      ✅ Deleted test reviews (reviewer_* email pattern)
+      ✅ Restored review_prompt_days to 7
+      
+      All backend APIs functioning correctly. No issues found.
+
+
+user_problem_statement_previous: |
   Phase B — Core E-commerce Expansion & UX Enhancements:
   1) Catalog Scalability: search + filters (price / size / colour / in-stock / sort) on /shop.
   2) Product Variations: extend product model to support Shopify-style variations (colour + size axes) with per-variant stock/price/image; admin can upload via variants JSON.

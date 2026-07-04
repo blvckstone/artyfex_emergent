@@ -15,6 +15,7 @@ import bcrypt
 import jwt as pyjwt
 import razorpay
 import asyncio
+import httpx
 import resend
 
 ROOT_DIR = Path(__file__).parent
@@ -212,6 +213,14 @@ class UserSignup(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+
+class GoogleSessionIn(BaseModel):
+    session_id: str
+
+
+class ReviewPromptDelay(BaseModel):
+    review_prompt_days: int = Field(ge=0, le=90)
 
 
 class ReviewSubmit(BaseModel):
@@ -747,7 +756,162 @@ async def user_login(payload: UserLogin):
 
 @api_router.get("/auth/me")
 async def user_me(user=Depends(get_current_user)):
-    return {"name": user["name"], "email": user["email"], "phone": user.get("phone", "")}
+    return {"name": user["name"], "email": user["email"], "phone": user.get("phone", ""), "picture": user.get("picture")}
+
+
+# ---------- GOOGLE (EMERGENT) AUTH ---------- #
+# REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+@api_router.post("/auth/google/session")
+async def auth_google_session(payload: GoogleSessionIn):
+    """
+    Exchange an Emergent-Auth session_id for our own JWT.
+
+    Flow:
+      1) Frontend received a `session_id` in the URL fragment after Google OAuth
+      2) Frontend calls this endpoint with that session_id
+      3) We call Emergent Auth server-side to fetch the authenticated profile
+      4) We upsert the user in our users collection (linked by email) and issue our own JWT
+    """
+    sid = (payload.session_id or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+                headers={"X-Session-ID": sid},
+            )
+        if resp.status_code != 200:
+            raise HTTPException(status_code=401, detail="Google session invalid or expired")
+        data = resp.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception("Emergent auth session-data call failed")
+        raise HTTPException(status_code=502, detail=f"Auth provider unreachable: {e}")
+
+    email = (data.get("email") or "").lower()
+    name = data.get("name") or email.split("@")[0]
+    picture = data.get("picture")
+    session_token = data.get("session_token")  # 7-day token from Emergent; stored for future cookie option
+    if not email:
+        raise HTTPException(status_code=400, detail="Google account did not return an email address")
+
+    # Upsert by email
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    if existing:
+        update = {"name": name or existing.get("name"), "auth_provider": "google"}
+        if picture:
+            update["picture"] = picture
+        if session_token:
+            update["emergent_session_token"] = session_token
+        await db.users.update_one({"email": email}, {"$set": update})
+        user = {**existing, **update}
+    else:
+        user = {
+            "id": str(uuid.uuid4()),
+            "name": name,
+            "email": email,
+            "phone": "",
+            "picture": picture,
+            "auth_provider": "google",
+            "emergent_session_token": session_token,
+            "created_at": now_iso(),
+        }
+        await db.users.insert_one(user)
+
+    token = create_token(email, role="user")
+    return {
+        "token": token,
+        "user": {"name": user["name"], "email": user["email"], "phone": user.get("phone", ""), "picture": user.get("picture")},
+    }
+
+
+@api_router.post("/auth/logout")
+async def auth_logout():
+    """No-op for JWT; frontend discards the token. Present for future cookie-based sessions."""
+    return {"ok": True}
+
+
+# ---------- APP SETTINGS ---------- #
+DEFAULT_REVIEW_PROMPT_DAYS = 7
+
+
+async def get_setting(key: str, default):
+    doc = await db.app_settings.find_one({"key": key}, {"_id": 0})
+    return doc["value"] if doc else default
+
+
+@api_router.get("/admin/settings")
+async def admin_get_settings(admin=Depends(get_current_admin)):
+    days = await get_setting("review_prompt_days", DEFAULT_REVIEW_PROMPT_DAYS)
+    return {"review_prompt_days": days}
+
+
+@api_router.patch("/admin/settings")
+async def admin_patch_settings(payload: ReviewPromptDelay, admin=Depends(get_current_admin)):
+    await db.app_settings.update_one(
+        {"key": "review_prompt_days"},
+        {"$set": {"key": "review_prompt_days", "value": payload.review_prompt_days}},
+        upsert=True,
+    )
+    return {"review_prompt_days": payload.review_prompt_days}
+
+
+# ---------- REVIEW PROMPTS ---------- #
+@api_router.get("/me/review-prompts")
+async def my_review_prompts(user=Depends(get_current_user)):
+    """
+    Return a list of {order_number, product_id, product_slug, product_name, product_image, delivered_at}
+    for products this user has NOT yet reviewed, where the order was delivered ≥ review_prompt_days ago.
+    """
+    days = int(await get_setting("review_prompt_days", DEFAULT_REVIEW_PROMPT_DAYS))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    delivered_orders = await db.orders.find(
+        {"customer.email": user["email"], "status": "delivered"},
+        {"_id": 0},
+    ).to_list(500)
+
+    prompts = []
+    seen_pairs = set()
+    for order in delivered_orders:
+        delivered_iso = order.get("delivered_at") or order.get("created_at")
+        try:
+            dt = datetime.fromisoformat(delivered_iso.replace("Z", "+00:00")) if delivered_iso else None
+        except Exception:
+            dt = None
+        if not dt:
+            continue
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        if dt > cutoff:
+            continue  # not old enough yet
+        for it in order.get("items", []):
+            pid = it.get("product_id")
+            if not pid:
+                continue
+            pair = (order["order_number"], pid)
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            prod = await db.products.find_one({"id": pid}, {"_id": 0})
+            if not prod:
+                continue
+            # Skip if user has already reviewed this product
+            already = await db.reviews.find_one({"user_email": user["email"], "product_slug": prod["slug"]}, {"_id": 0})
+            if already:
+                continue
+            prompts.append({
+                "order_number": order["order_number"],
+                "product_id": pid,
+                "product_slug": prod["slug"],
+                "product_name": prod["name"],
+                "product_image": prod.get("hero_image"),
+                "delivered_at": dt.isoformat(),
+                "days_since_delivery": (datetime.now(timezone.utc) - dt).days,
+            })
+    return prompts
 
 
 @api_router.get("/me/orders", response_model=List[Order])

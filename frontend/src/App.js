@@ -22,6 +22,10 @@ import ShopPage from "@/pages/ShopPage";
 import AccountPage from "@/pages/AccountPage";
 import LegalPage from "@/pages/LegalPage";
 import ProductPage from "@/pages/ProductPage";
+import AuthCallback from "@/pages/AuthCallback";
+import ReviewPromptBanner from "@/components/ReviewPromptBanner";
+import ReviewPromptModal from "@/components/ReviewPromptModal";
+import { ReviewPromptProvider } from "@/context/ReviewPromptContext";
 
 function Home() {
   const [products, setProducts] = useState([]);
@@ -66,16 +70,19 @@ function StoreShell() {
   const openCheckout = () => { setIsOpen(false); setTimeout(() => setCheckoutOpen(true), 250); };
   return (
     <div className="App relative">
+      <ReviewPromptBanner />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/shop" element={<ShopPage />} />
         <Route path="/product/:slug" element={<ProductPage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="/policies/:slug" element={<LegalPage />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
       </Routes>
       <CartSheet onCheckout={openCheckout} />
       <CheckoutDialog open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
       <AuthDialog />
+      <ReviewPromptModal />
     </div>
   );
 }
@@ -91,7 +98,9 @@ export default function App() {
             <AuthProvider>
               <WishlistProvider>
                 <CartProvider>
-                  <StoreShell />
+                  <ReviewPromptProvider>
+                    <StoreShell />
+                  </ReviewPromptProvider>
                 </CartProvider>
               </WishlistProvider>
             </AuthProvider>

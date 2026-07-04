@@ -5,8 +5,9 @@ import { useWishlist } from "@/context/WishlistContext";
 import { useCart } from "@/context/CartContext";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { Package, RotateCcw, User, LogOut, Loader2, Heart, ShoppingBag, X, Mail, Save } from "lucide-react";
+import { Package, RotateCcw, User, LogOut, Loader2, Heart, ShoppingBag, X, Mail, Save, Star } from "lucide-react";
 import { toast } from "sonner";
+import { useReviewPrompts } from "@/context/ReviewPromptContext";
 
 const formatINR = (n) => `₹${(n || 0).toLocaleString("en-IN")}`;
 
@@ -21,6 +22,7 @@ export default function AccountPage() {
   const { user, ready, logout, openAuth, authedApi, updateProfile } = useAuth();
   const { items: wishItems, toggle: toggleWish, refresh: refreshWish } = useWishlist();
   const { addItem } = useCart();
+  const { prompts: reviewPrompts, setModalOpen: openReviewModal } = useReviewPrompts();
   const nav = useNavigate();
   const [tab, setTab] = useState("orders");
   const [orders, setOrders] = useState([]);
@@ -69,7 +71,7 @@ export default function AccountPage() {
     { key: "orders", label: "Orders", icon: Package },
     { key: "returns", label: "Returns", icon: RotateCcw },
     { key: "wishlist", label: "Wishlist", icon: Heart },
-    { key: "messages", label: "Messages", icon: Mail, badge: unreadCount },
+    { key: "messages", label: "Updates", icon: Mail, badge: unreadCount },
     { key: "profile", label: "Profile", icon: User },
   ];
 
@@ -119,9 +121,25 @@ export default function AccountPage() {
           >
             <Mail className="w-4 h-4 text-gold" />
             <span className="text-sm text-cream">
-              You have <span className="text-gold font-medium">{unreadCount}</span> unread message{unreadCount === 1 ? "" : "s"} from our atelier
+              You have <span className="text-gold font-medium">{unreadCount}</span> unread update{unreadCount === 1 ? "" : "s"} from our atelier
             </span>
             <span className="ml-auto text-[10px] uppercase tracking-luxury text-gold">Read now →</span>
+          </button>
+        )}
+
+        {reviewPrompts.length > 0 && (
+          <button
+            data-testid="account-review-prompt-card"
+            onClick={() => openReviewModal(true)}
+            className="mt-6 w-full flex items-center gap-3 border border-gold/40 bg-gradient-to-r from-gold/5 to-transparent hover:from-gold/10 px-5 py-3 text-left transition-colors"
+          >
+            <Star className="w-4 h-4 text-gold" fill="currentColor" />
+            <span className="text-sm text-cream">
+              {reviewPrompts.length === 1
+                ? <>Rate your <span className="italic text-gold">{reviewPrompts[0].product_name.split(" — ")[0]}</span> — delivered {reviewPrompts[0].days_since_delivery} days ago</>
+                : <>{reviewPrompts.length} pieces are awaiting your reflection</>}
+            </span>
+            <span className="ml-auto text-[10px] uppercase tracking-luxury text-gold">Share now →</span>
           </button>
         )}
 
@@ -249,7 +267,7 @@ export default function AccountPage() {
 
           {!loading && tab === "messages" && (
             <div className="grid gap-4">
-              {messages.length === 0 && <div className="hairline p-10 text-center text-cream/40">No messages yet from the atelier.</div>}
+              {messages.length === 0 && <div className="hairline p-10 text-center text-cream/40">No updates yet from the atelier.</div>}
               {messages.map((m) => (
                 <div
                   key={m.id}

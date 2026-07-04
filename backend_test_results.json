@@ -1,0 +1,226 @@
+[
+  {
+    "section": "Setup",
+    "test": "Admin login",
+    "passed": true,
+    "details": "Token: eyJhbGciOiJIUzI1NiIs...",
+    "timestamp": "2026-07-04T11:17:23.483846+00:00"
+  },
+  {
+    "section": "Section 1",
+    "test": "Empty session_id \u2192 400",
+    "passed": true,
+    "details": "Status: 400, Body: {\"detail\":\"session_id is required\"}",
+    "timestamp": "2026-07-04T11:17:23.582888+00:00"
+  },
+  {
+    "section": "Section 1",
+    "test": "Missing session_id \u2192 400/422",
+    "passed": true,
+    "details": "Status: 422, Body: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"session_id\"],\"msg\":\"Field required\",\"input\":{},\"url\":\"https://errors.pydantic.dev/2.13/v/missing\"}]}",
+    "timestamp": "2026-07-04T11:17:23.707314+00:00"
+  },
+  {
+    "section": "Section 1",
+    "test": "Invalid session_id \u2192 401/502",
+    "passed": true,
+    "details": "Status: 401, Body: {\"detail\":\"Google session invalid or expired\"}",
+    "timestamp": "2026-07-04T11:17:23.863842+00:00"
+  },
+  {
+    "section": "Section 2",
+    "test": "GET /admin/settings \u2192 200",
+    "passed": true,
+    "details": "Current value: 7",
+    "timestamp": "2026-07-04T11:17:23.954989+00:00"
+  },
+  {
+    "section": "Section 2",
+    "test": "PATCH review_prompt_days=10 \u2192 200",
+    "passed": true,
+    "details": "Response: {'review_prompt_days': 10}",
+    "timestamp": "2026-07-04T11:17:24.063271+00:00"
+  },
+  {
+    "section": "Section 2",
+    "test": "GET again \u2192 review_prompt_days=10",
+    "passed": true,
+    "details": "Value: 10",
+    "timestamp": "2026-07-04T11:17:24.163211+00:00"
+  },
+  {
+    "section": "Section 2",
+    "test": "PATCH review_prompt_days=200 \u2192 422",
+    "passed": true,
+    "details": "Status: 422, Body: {\"detail\":[{\"type\":\"less_than_equal\",\"loc\":[\"body\",\"review_prompt_days\"],\"msg\":\"Input should be less than or equal to 90\",\"input\":200,\"ctx\":{\"le\":90},\"url\":\"https://errors.pydantic.dev/2.13/v/less_tha",
+    "timestamp": "2026-07-04T11:17:24.257242+00:00"
+  },
+  {
+    "section": "Section 2",
+    "test": "PATCH review_prompt_days=-1 \u2192 422",
+    "passed": true,
+    "details": "Status: 422, Body: {\"detail\":[{\"type\":\"greater_than_equal\",\"loc\":[\"body\",\"review_prompt_days\"],\"msg\":\"Input should be greater than or equal to 0\",\"input\":-1,\"ctx\":{\"ge\":0},\"url\":\"https://errors.pydantic.dev/2.13/v/great",
+    "timestamp": "2026-07-04T11:17:24.348176+00:00"
+  },
+  {
+    "section": "Section 2",
+    "test": "GET without token \u2192 401",
+    "passed": true,
+    "details": "Status: 401",
+    "timestamp": "2026-07-04T11:17:24.473214+00:00"
+  },
+  {
+    "section": "Section 2",
+    "test": "PATCH restore to 7 \u2192 200",
+    "passed": true,
+    "details": "Response: {'review_prompt_days': 7}",
+    "timestamp": "2026-07-04T11:17:24.617199+00:00"
+  },
+  {
+    "section": "Section 3",
+    "test": "Create test user",
+    "passed": true,
+    "details": "Email: reviewer_1783163844@example.com",
+    "timestamp": "2026-07-04T11:17:24.934706+00:00"
+  },
+  {
+    "section": "Section 3",
+    "test": "GET /me/review-prompts \u2192 empty []",
+    "passed": true,
+    "details": "Response: []",
+    "timestamp": "2026-07-04T11:17:25.023506+00:00"
+  },
+  {
+    "section": "Section 3",
+    "test": "Get products for test",
+    "passed": true,
+    "details": "Using product: obsidian-geode-2x3 (id: e79f4c24-b644-43a0-b65d-76ef787f2e0f)",
+    "timestamp": "2026-07-04T11:17:25.117693+00:00"
+  },
+  {
+    "section": "Section 3",
+    "test": "Insert backdated order (10 days ago)",
+    "passed": true,
+    "details": "Order: TEST-REV-1783163844, Product: obsidian-geode-2x3",
+    "timestamp": "2026-07-04T11:17:25.121152+00:00"
+  },
+  {
+    "section": "Section 3",
+    "test": "GET /me/review-prompts \u2192 1 item",
+    "passed": true,
+    "details": "Order: TEST-REV-1783163844, Product: obsidian-geode-2x3, Days: 10",
+    "timestamp": "2026-07-04T11:17:25.219717+00:00"
+  },
+  {
+    "section": "Section 3",
+    "test": "POST review \u2192 200",
+    "passed": true,
+    "details": "Review created for obsidian-geode-2x3",
+    "timestamp": "2026-07-04T11:17:25.325270+00:00"
+  },
+  {
+    "section": "Section 3",
+    "test": "GET /me/review-prompts \u2192 empty [] after review",
+    "passed": true,
+    "details": "Response: []",
+    "timestamp": "2026-07-04T11:17:25.424083+00:00"
+  },
+  {
+    "section": "Section 4",
+    "test": "Get second product",
+    "passed": true,
+    "details": "Using: moon-crystal-24",
+    "timestamp": "2026-07-04T11:17:25.516484+00:00"
+  },
+  {
+    "section": "Section 4",
+    "test": "Insert order backdated 3 days",
+    "passed": true,
+    "details": "Order: TEST-REV-1783163845-3D",
+    "timestamp": "2026-07-04T11:17:25.519175+00:00"
+  },
+  {
+    "section": "Section 4",
+    "test": "GET prompts with 3-day order (threshold=7) \u2192 []",
+    "passed": true,
+    "details": "Response: []",
+    "timestamp": "2026-07-04T11:17:25.609051+00:00"
+  },
+  {
+    "section": "Section 4",
+    "test": "PATCH review_prompt_days=2 \u2192 200",
+    "passed": true,
+    "details": "Response: {'review_prompt_days': 2}",
+    "timestamp": "2026-07-04T11:17:25.704245+00:00"
+  },
+  {
+    "section": "Section 4",
+    "test": "GET prompts with threshold=2 \u2192 1 item",
+    "passed": true,
+    "details": "Product: moon-crystal-24, Days: 3",
+    "timestamp": "2026-07-04T11:17:25.810289+00:00"
+  },
+  {
+    "section": "Section 4",
+    "test": "PATCH restore to 7 \u2192 200",
+    "passed": true,
+    "details": "Response: {'review_prompt_days': 7}",
+    "timestamp": "2026-07-04T11:17:25.907308+00:00"
+  },
+  {
+    "section": "Section 5",
+    "test": "POST /auth/signup \u2192 200",
+    "passed": true,
+    "details": "Email: regression_1783163845@example.com",
+    "timestamp": "2026-07-04T11:17:26.230581+00:00"
+  },
+  {
+    "section": "Section 5",
+    "test": "POST /auth/login \u2192 200",
+    "passed": true,
+    "details": "Token received: True",
+    "timestamp": "2026-07-04T11:17:26.552272+00:00"
+  },
+  {
+    "section": "Section 5",
+    "test": "GET /auth/me \u2192 200",
+    "passed": true,
+    "details": "picture: None",
+    "timestamp": "2026-07-04T11:17:26.646366+00:00"
+  },
+  {
+    "section": "Section 5",
+    "test": "GET /products \u2192 4 products",
+    "passed": true,
+    "details": "Count: 4",
+    "timestamp": "2026-07-04T11:17:26.739336+00:00"
+  },
+  {
+    "section": "Section 5",
+    "test": "POST /coupons/validate WELCOME10 \u2192 2000",
+    "passed": true,
+    "details": "Discount: 2000",
+    "timestamp": "2026-07-04T11:17:26.842759+00:00"
+  },
+  {
+    "section": "Cleanup",
+    "test": "Delete test orders",
+    "passed": true,
+    "details": "Deleted 2 orders",
+    "timestamp": "2026-07-04T11:17:26.846235+00:00"
+  },
+  {
+    "section": "Cleanup",
+    "test": "Delete test reviews",
+    "passed": true,
+    "details": "Deleted 1 reviews",
+    "timestamp": "2026-07-04T11:17:26.846575+00:00"
+  },
+  {
+    "section": "Cleanup",
+    "test": "Restore review_prompt_days=7",
+    "passed": true,
+    "details": "Status: 200",
+    "timestamp": "2026-07-04T11:17:26.939590+00:00"
+  }
+]
