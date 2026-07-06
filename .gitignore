@@ -83,6 +83,10 @@ android-sdk/
 .env
 .env.*
 *.env
+# Keep example templates that document required env vars
+!.env.example
+!backend/.env.example
+!frontend/.env.example
 credentials.json
 *.key
 .credentials

@@ -1,0 +1,46 @@
+# Render Blueprint for ArtyFex backend (FastAPI + MongoDB Atlas)
+# One-click deploy: https://render.com/docs/blueprint-spec
+#
+# Usage:
+#   1) Push this file to GitHub in the repo root.
+#   2) On Render → New → Blueprint → select this repo.
+#   3) Render reads render.yaml, spins the service, and prompts for the
+#      environment variables listed at the bottom (sync: false ones).
+
+services:
+  - type: web
+    name: artyfex-backend
+    runtime: python
+    plan: free            # bump to "starter" for always-on (recommended for production)
+    rootDir: backend
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "uvicorn server:app --host 0.0.0.0 --port $PORT --workers 2"
+    healthCheckPath: /api/products
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # The values below MUST be filled in Render dashboard (sync:false)
+      # so they never live in source control.
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SENDER_EMAIL
+        sync: false
+      - key: SENDER_NAME
+        sync: false
