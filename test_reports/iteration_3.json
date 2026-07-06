@@ -5,7 +5,7 @@
     "CheckoutDialog centering @1365x768: dialog box x=222.5 width=920 -> centerX=682.5, viewport centerX=682.5, delta=0.0px (well within ~40px tolerance)",
     "Pay button (data-testid=checkout-pay-button) fully in viewport: box x=815.3 y=407.5 w=286.2 h=56, all edges inside 1365x768",
     "Add-to-cart -> cart sheet -> Secure Checkout -> dialog open flow works with 0 app console errors",
-    "Form fill (name/email/phone/address/city/pincode) accepted; clicking Pay triggers POST https://artyfex-seo-pages.preview.emergentagent.com/api/orders",
+    "Form fill (name/email/phone/address/city/pincode) accepted; clicking Pay triggers POST https://emergent-dev-38.preview.emergentagent.com/api/orders",
     "Razorpay checkout.js dynamically injected (script tag present) and window.Razorpay is truthy after Pay click",
     "Razorpay iframe opened at https://api.razorpay.com/v1/checkout/public?... with 'Test Mode' badge visible — modal reached (no actual payment attempted, per spec)",
     "Autofill: input fields render with dark bg-ink-950 (visible in screenshot /tmp/co_centered.png), no white autofill flash"
@@ -21,7 +21,7 @@
   "notes": {
     "admin_regression": "Not re-executed this iteration — iteration_2 confirmed admin login + all 5 tabs work with 0 console errors, and no admin code was touched in this fix (only CheckoutDialog.jsx wrapper + index.css autofill rules).",
     "razorpay_flow_evidence": {
-      "order_post_url": "https://artyfex-seo-pages.preview.emergentagent.com/api/orders",
+      "order_post_url": "https://emergent-dev-38.preview.emergentagent.com/api/orders",
       "razorpay_script": "https://checkout.razorpay.com/v1/checkout.js",
       "razorpay_iframe": "https://api.razorpay.com/v1/checkout/public?...unified_session_id=T8x9Fpb7gGHwUA",
       "window_Razorpay": true
