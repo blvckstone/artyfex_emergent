@@ -117,7 +117,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: "NA"
+      - working: true
         agent: "main"
         comment: |
           Added HomepageContent model (announcement + hero + sale_banner + custom_css), site_settings collection with key='homepage', public GET /api/homepage returns merged defaults, admin PATCH replaces content. Startup seeds default homepage if missing.
@@ -141,7 +141,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: "NA"
+      - working: true
         agent: "main"
         comment: |
           Added ShippingSettings model with method=flat|zone|distance, flat_rate_inr, free_shipping_above_inr, zone_rates (list of {name, states[], rate_inr}), distance_base_fee_inr, distance_per_km_inr, distance_bands. STATE_DISTANCE_KM_FROM_MUMBAI static table for distance calc. calc_shipping helper. Public POST /api/shipping/calculate with {subtotal_inr, state, pincode}. Free-shipping threshold applies across all methods. Verified via curl: subtotal=10000 MH → ₹1499 flat; subtotal=30000 → free.
