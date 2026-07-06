@@ -11,6 +11,7 @@ import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import SaleBanner from "@/components/SaleBanner";
+import SessionTracker from "@/components/SessionTracker";
 import ProductShowcase from "@/components/ProductShowcase";
 import Craftsmanship from "@/components/Craftsmanship";
 import Collection from "@/components/Collection";
@@ -130,6 +131,7 @@ function StoreShell() {
 export default function App() {
   return (
     <BrowserRouter>
+      <SessionTracker />
       <Routes>
         <Route path="/admin" element={<AdminPage />} />
         <Route

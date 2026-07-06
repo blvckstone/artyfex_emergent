@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast, Toaster } from "sonner";
-import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2, Settings as SettingsIcon, Truck, Palette } from "lucide-react";
+import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2, Settings as SettingsIcon, Truck, Palette, ShieldCheck } from "lucide-react";
 import HomepageEditor from "@/components/admin/HomepageEditor";
 import ShippingEditor from "@/components/admin/ShippingEditor";
+import AnalyticsDashboard from "@/components/admin/AnalyticsDashboard";
+import EmployeesTab from "@/components/admin/EmployeesTab";
+import PasswordChangeCard from "@/components/admin/PasswordChangeCard";
+import CustomersTab from "@/components/admin/CustomersTab";
 
 const TOKEN_KEY = "artyfex_admin_token";
 
@@ -78,8 +82,49 @@ export default function AdminPage() {
   const [couponEditing, setCouponEditing] = useState(null); // null | coupon obj | "new"
   const [editing, setEditing] = useState(null); // null | product obj | "new"
   const [saving, setSaving] = useState(false);
+  const [me, setMe] = useState(null); // current admin (for RBAC gating)
 
   const authed = useAuthedApi(token);
+
+  // Fetch current admin identity + permissions
+  useEffect(() => {
+    if (!token) { setMe(null); return; }
+    authed.get("/admin/me")
+      .then(({ data }) => setMe(data))
+      .catch((err) => {
+        if (err?.response?.status === 401) { localStorage.removeItem(TOKEN_KEY); setToken(""); }
+      });
+  }, [token, authed]);
+
+  const hasPerm = (p) => !!me && (me.role === "owner" || (me.permissions || []).includes(p));
+
+  // Auto-fallback if current tab is not accessible for this admin's permissions
+  useEffect(() => {
+    if (!me) return;
+    const allowed = [
+      ["dashboard", "view_analytics", false],
+      ["homepage", "manage_homepage", false],
+      ["products", "manage_products", false],
+      ["orders", "manage_orders", false],
+      ["shipping", "manage_shipping", false],
+      ["returns", "manage_returns", false],
+      ["users", "manage_customers", false],
+      ["leads", "manage_leads", false],
+      ["reviews", "manage_reviews", false],
+      ["coupons", "manage_coupons", false],
+      ["failed", "view_analytics", false],
+      ["employees", "manage_employees", true],
+      ["settings", null, false],
+    ].filter(([, perm, ownerOnly]) => {
+      if (ownerOnly && me.role !== "owner") return false;
+      if (!perm) return true;
+      return me.role === "owner" || (me.permissions || []).includes(perm);
+    }).map((t) => t[0]);
+    if (allowed.length && !allowed.includes(tab)) {
+      setTab(allowed[0]);
+    }
+    // eslint-disable-next-line
+  }, [me]);
 
   const reload = React.useCallback(async () => {
     if (!token) return;
@@ -151,20 +196,26 @@ export default function AdminPage() {
     reload();
   };
 
-  const tabs = [
-    { key: "dashboard", label: "Dashboard", icon: LayoutGrid },
-    { key: "homepage", label: "Homepage", icon: Palette },
-    { key: "products", label: "Products", icon: Package },
-    { key: "orders", label: "Orders", icon: ShoppingBag },
-    { key: "shipping", label: "Shipping", icon: Truck },
-    { key: "returns", label: "Returns", icon: RotateCcw },
-    { key: "users", label: "Customers", icon: UserCircle },
-    { key: "leads", label: "B2B Leads", icon: Users },
-    { key: "reviews", label: "Reviews", icon: Star },
-    { key: "coupons", label: "Coupons", icon: Tag },
-    { key: "failed", label: "Failed Payments", icon: AlertTriangle },
-    { key: "settings", label: "Settings", icon: SettingsIcon },
+  const allTabs = [
+    { key: "dashboard", label: "Dashboard", icon: LayoutGrid, perm: "view_analytics" },
+    { key: "homepage", label: "Homepage", icon: Palette, perm: "manage_homepage" },
+    { key: "products", label: "Products", icon: Package, perm: "manage_products" },
+    { key: "orders", label: "Orders", icon: ShoppingBag, perm: "manage_orders" },
+    { key: "shipping", label: "Shipping", icon: Truck, perm: "manage_shipping" },
+    { key: "returns", label: "Returns", icon: RotateCcw, perm: "manage_returns" },
+    { key: "users", label: "Customers", icon: UserCircle, perm: "manage_customers" },
+    { key: "leads", label: "B2B Leads", icon: Users, perm: "manage_leads" },
+    { key: "reviews", label: "Reviews", icon: Star, perm: "manage_reviews" },
+    { key: "coupons", label: "Coupons", icon: Tag, perm: "manage_coupons" },
+    { key: "failed", label: "Failed Payments", icon: AlertTriangle, perm: "view_analytics" },
+    { key: "employees", label: "Employees", icon: ShieldCheck, perm: "manage_employees", ownerOnly: true },
+    { key: "settings", label: "Settings", icon: SettingsIcon }, // always accessible (for password change)
   ];
+  const tabs = allTabs.filter((t) => {
+    if (t.ownerOnly && me?.role !== "owner") return false;
+    if (!t.perm) return true;
+    return hasPerm(t.perm);
+  });
 
   const saveSettings = async (val) => {
     setSaving(true);
@@ -276,15 +327,7 @@ export default function AdminPage() {
         </div>
 
         {tab === "dashboard" && (
-          <>
-            <h1 className="font-serif text-4xl">Dashboard</h1>
-            <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Stat label="Revenue" value={formatINR(stats?.revenue_inr)} accent />
-              <Stat label="Orders" value={stats?.orders_confirmed ?? 0} sub={`${stats?.orders_total ?? 0} total`} />
-              <Stat label="Products" value={stats?.products_total ?? 0} />
-              <Stat label="New B2B leads" value={stats?.leads_new ?? 0} />
-            </div>
-          </>
+          <AnalyticsDashboard authed={authed} />
         )}
 
         {tab === "products" && (
@@ -370,7 +413,8 @@ export default function AdminPage() {
 
         {tab === "users" && (
           <>
-            <div className="flex items-end justify-between flex-wrap gap-4">
+            <CustomerInsightsPanels authed={authed} />
+            <div className="flex items-end justify-between flex-wrap gap-4 mt-8">
               <div>
                 <h1 className="font-serif text-4xl">Customers</h1>
                 <div className="mt-2 text-xs text-cream/40">{users.length} registered · click a row to view full history & send a personal message</div>
@@ -586,10 +630,90 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
+
+            {/* Admin password reset */}
+            <div className="mt-8">
+              <PasswordChangeCard authed={authed} />
+            </div>
           </>
+        )}
+
+        {tab === "employees" && (
+          <EmployeesTab authed={authed} me={me} />
         )}
       </main>
       <Toaster theme="dark" position="bottom-center" />
+    </div>
+  );
+}
+
+function CustomerInsightsPanels({ authed }) {
+  const [couponData, setCouponData] = useState({ codes: [], customers: [] });
+  const [wishlistData, setWishlistData] = useState({ total_wishlists: 0, by_customer: [], by_product: [] });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!authed) return;
+    Promise.all([
+      authed.get("/admin/analytics/coupon-usage"),
+      authed.get("/admin/analytics/wishlist-usage"),
+    ])
+      .then(([c, w]) => { setCouponData(c.data); setWishlistData(w.data); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [authed]);
+
+  if (loading) return <div className="text-cream/40 text-xs"><Loader2 className="w-3.5 h-3.5 animate-spin inline" /> Loading insights…</div>;
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-4">
+      <div className="hairline p-5 bg-ink-900/50" data-testid="customer-coupon-panel">
+        <div className="flex items-center gap-2 mb-3">
+          <Tag className="w-4 h-4 text-gold" />
+          <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Coupons used per customer</div>
+        </div>
+        {couponData.customers.length === 0 ? (
+          <div className="text-sm text-cream/40">No coupons have been used yet.</div>
+        ) : (
+          <div className="max-h-64 overflow-y-auto pr-2 divide-y divide-white/5">
+            {couponData.customers.map((row, i) => (
+              <div key={`${row.customer_email}-${row.code}-${i}`} className="flex items-center gap-3 py-2 text-sm">
+                <div className="flex-1 min-w-0">
+                  <div className="text-cream/90 truncate">{row.customer_name || row.customer_email}</div>
+                  <div className="text-[10px] text-cream/40">{row.customer_email}</div>
+                </div>
+                <span className="font-mono text-gold text-xs">{row.code}</span>
+                <span className="text-cream/70 text-xs w-8 text-right">{row.uses}×</span>
+                <span className="text-cream/40 text-[10px] w-24 text-right">−₹{row.total_discount_inr.toLocaleString("en-IN")}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="hairline p-5 bg-ink-900/50" data-testid="customer-wishlist-panel">
+        <div className="flex items-center gap-2 mb-3">
+          <Star className="w-4 h-4 text-gold" />
+          <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Wishlists per customer · {wishlistData.total_wishlists} saves</div>
+        </div>
+        {wishlistData.by_customer.length === 0 ? (
+          <div className="text-sm text-cream/40">Nothing wishlisted yet.</div>
+        ) : (
+          <div className="max-h-64 overflow-y-auto pr-2 divide-y divide-white/5">
+            {wishlistData.by_customer.map((c) => (
+              <div key={c.user_email} className="py-2 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-cream/90 truncate">{c.user_email}</span>
+                  <span className="text-gold text-xs">{c.count} item{c.count === 1 ? "" : "s"}</span>
+                </div>
+                <div className="mt-1 text-[11px] text-cream/50 truncate">
+                  {c.items.map((i) => i.product_name).join(" · ")}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

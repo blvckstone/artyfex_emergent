@@ -1,0 +1,207 @@
+{
+  "total": 40,
+  "passed": 40,
+  "failed": 0,
+  "tests": [
+    {
+      "name": "Analytics overview - has all required keys",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "Analytics overview - orders structure valid",
+      "passed": true,
+      "details": "Orders: {'total': 9, 'active': 8, 'successful': 1, 'cancelled': 0, 'failed': 0}"
+    },
+    {
+      "name": "Analytics overview - returns structure valid",
+      "passed": true,
+      "details": "Returns: {'total': 0, 'active': 0, 'completed': 0}"
+    },
+    {
+      "name": "Analytics overview - financials structure valid",
+      "passed": true,
+      "details": "Financials: {'revenue_inr': 149492, 'products_total': 4, 'customers_total': 1, 'b2b_leads_new': 0, 'failed_transactions': 0}"
+    },
+    {
+      "name": "Analytics overview - series_30d has 30 entries with correct structure",
+      "passed": true,
+      "details": "Length: 30, Sample: {'date': '2026-06-07', 'orders': 0, 'revenue_inr': 0}"
+    },
+    {
+      "name": "Analytics overview - top_products is array",
+      "passed": true,
+      "details": "Type: <class 'list'>, Length: 4"
+    },
+    {
+      "name": "Analytics overview - coupons_summary is array",
+      "passed": true,
+      "details": "Type: <class 'list'>, Length: 0"
+    },
+    {
+      "name": "Analytics alerts - has all required keys",
+      "passed": true,
+      "details": "Keys: ['low_stock_products', 'out_of_stock_count', 'old_pending_returns', 'recent_failed_payments_1h']"
+    },
+    {
+      "name": "Analytics alerts - response types valid",
+      "passed": true,
+      "details": "low_stock: <class 'list'>, out_of_stock: <class 'int'>, old_returns: <class 'list'>, recent_failures: <class 'int'>"
+    },
+    {
+      "name": "Analytics coupon-usage - has codes[] and customers[]",
+      "passed": true,
+      "details": "Keys: ['codes', 'customers'], codes type: <class 'list'>, customers type: <class 'list'>"
+    },
+    {
+      "name": "Analytics wishlist-usage - has total_wishlists, by_customer[], by_product[]",
+      "passed": true,
+      "details": "Keys: ['total_wishlists', 'by_customer', 'by_product'], total: 0"
+    },
+    {
+      "name": "Live analytics - heartbeat session 1",
+      "passed": true,
+      "details": "Status: 200, Response: {'ok': True}"
+    },
+    {
+      "name": "Live analytics - heartbeat session 2",
+      "passed": true,
+      "details": "Status: 200, Response: {'ok': True}"
+    },
+    {
+      "name": "Live analytics - active_users >= 2",
+      "passed": true,
+      "details": "active_users: 3, sessions_now_by_path: [{'path': '/admin', 'count': 1}, {'path': '/', 'count': 1}, {'path': '/shop', 'count': 1}]"
+    },
+    {
+      "name": "Live analytics - sessions_now_by_path is array",
+      "passed": true,
+      "details": "Type: <class 'list'>, Length: 3"
+    },
+    {
+      "name": "Live analytics - pageview /shop",
+      "passed": true,
+      "details": "Status: 200, Response: {'ok': True}"
+    },
+    {
+      "name": "Live analytics - top_pages_24h contains /shop",
+      "passed": true,
+      "details": "top_pages_24h: [{'path': '/shop', 'count': 4}]"
+    },
+    {
+      "name": "RBAC - owner login",
+      "passed": true,
+      "details": "Token received"
+    },
+    {
+      "name": "RBAC - owner has role='owner'",
+      "passed": true,
+      "details": "Role: owner"
+    },
+    {
+      "name": "RBAC - owner has all 11 permissions",
+      "passed": true,
+      "details": "Permissions count: 11, Permissions: ['manage_products', 'manage_orders', 'manage_returns', 'manage_customers', 'manage_reviews', 'manage_leads', 'manage_coupons', 'manage_homepage', 'manage_shipping', 'view_analytics', 'manage_employees']"
+    },
+    {
+      "name": "RBAC - GET /admin/permissions returns 11 keys",
+      "passed": true,
+      "details": "Count: 11, Permissions: ['manage_products', 'manage_orders', 'manage_returns', 'manage_customers', 'manage_reviews', 'manage_leads', 'manage_coupons', 'manage_homepage', 'manage_shipping', 'view_analytics', 'manage_employees']"
+    },
+    {
+      "name": "RBAC - GET /admin/employees",
+      "passed": true,
+      "details": "Employees: 1"
+    },
+    {
+      "name": "RBAC - create employee",
+      "passed": true,
+      "details": "Employee ID: 4fe14cea-225f-4a36-83e8-5ed5500e6182"
+    },
+    {
+      "name": "RBAC - employee has role='employee'",
+      "passed": true,
+      "details": "Role: employee"
+    },
+    {
+      "name": "RBAC - employee has correct permissions",
+      "passed": true,
+      "details": "Permissions: ['view_analytics', 'manage_orders']"
+    },
+    {
+      "name": "RBAC - employee response does NOT expose password_hash",
+      "passed": true,
+      "details": "Has password_hash: False"
+    },
+    {
+      "name": "RBAC - employee login",
+      "passed": true,
+      "details": "Token received"
+    },
+    {
+      "name": "RBAC - employee GET /admin/me shows role='employee'",
+      "passed": true,
+      "details": "Role: employee"
+    },
+    {
+      "name": "RBAC - employee GET /admin/me shows correct permissions",
+      "passed": true,
+      "details": "Permissions: ['view_analytics', 'manage_orders']"
+    },
+    {
+      "name": "RBAC - employee can GET /admin/analytics/overview (has view_analytics)",
+      "passed": true,
+      "details": "Status: 200"
+    },
+    {
+      "name": "RBAC - employee CANNOT GET /admin/employees (missing manage_employees)",
+      "passed": true,
+      "details": "Status: 403, Expected: 403"
+    },
+    {
+      "name": "RBAC - employee CANNOT PATCH /admin/shipping-settings (missing manage_shipping)",
+      "passed": true,
+      "details": "Status: 403, Expected: 403"
+    },
+    {
+      "name": "RBAC - employee can change own password",
+      "passed": true,
+      "details": "Status: 200"
+    },
+    {
+      "name": "RBAC - employee login with old password fails",
+      "passed": true,
+      "details": "Status: 401, Expected: 401"
+    },
+    {
+      "name": "RBAC - employee login with new password succeeds",
+      "passed": true,
+      "details": "Token received"
+    },
+    {
+      "name": "RBAC - owner can update employee permissions",
+      "passed": true,
+      "details": "Updated permissions: ['view_analytics']"
+    },
+    {
+      "name": "RBAC - owner can delete employee",
+      "passed": true,
+      "details": "Status: 200"
+    },
+    {
+      "name": "RBAC - deleted employee not in list",
+      "passed": true,
+      "details": "Employee 4fe14cea-225f-4a36-83e8-5ed5500e6182 exists: False"
+    },
+    {
+      "name": "RBAC - owner password change with wrong current password fails",
+      "passed": true,
+      "details": "Status: 400, Expected: 400"
+    },
+    {
+      "name": "RBAC - owner can still login with original password",
+      "passed": true,
+      "details": "Status: 200"
+    }
+  ]
+}

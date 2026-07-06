@@ -350,17 +350,41 @@ async def seed_if_empty():
     if await db.coupons.count_documents({}) == 0:
         await db.coupons.insert_many([Coupon(**c).model_dump() for c in SEED_COUPONS])
         logging.info(f"Seeded {len(SEED_COUPONS)} coupons")
-    # Seed admin (idempotent)
+    # Seed admin (idempotent) - owner has all permissions
     if not await db.admins.find_one({"email": ADMIN_EMAIL}):
         pw_hash = bcrypt.hashpw(ADMIN_PASSWORD.encode(), bcrypt.gensalt()).decode()
         await db.admins.insert_one({
             "id": str(uuid.uuid4()), "email": ADMIN_EMAIL,
             "password_hash": pw_hash, "created_at": now_iso(),
+            "role": "owner", "permissions": ALL_PERMISSIONS,
+            "display_name": "Atelier Owner",
         })
         logging.info(f"Seeded admin {ADMIN_EMAIL}")
+    else:
+        # Backfill owner role + permissions on existing owner doc
+        await db.admins.update_one(
+            {"email": ADMIN_EMAIL},
+            {"$set": {"role": "owner", "permissions": ALL_PERMISSIONS}}
+        )
 
 
 # ---------- AUTH ---------- #
+# Permission catalog — extend here when new admin capabilities are added.
+ALL_PERMISSIONS = [
+    "manage_products",
+    "manage_orders",
+    "manage_returns",
+    "manage_customers",
+    "manage_reviews",
+    "manage_leads",
+    "manage_coupons",
+    "manage_homepage",
+    "manage_shipping",
+    "view_analytics",
+    "manage_employees",
+]
+
+
 def create_token(email: str, role: str = "admin") -> str:
     payload = {"sub": email, "role": role, "exp": datetime.now(timezone.utc) + timedelta(days=7)}
     return pyjwt.encode(payload, JWT_SECRET, algorithm="HS256")
@@ -382,6 +406,26 @@ async def get_current_admin(authorization: str = Header(None)):
     admin = await db.admins.find_one({"email": payload.get("sub")}, {"_id": 0, "password_hash": 0})
     if not admin:
         raise HTTPException(status_code=401, detail="Admin not found")
+    # Ensure permissions field always exists (legacy docs)
+    admin.setdefault("role", "owner")
+    admin.setdefault("permissions", ALL_PERMISSIONS if admin.get("role") == "owner" else [])
+    return admin
+
+
+def require_permission(perm: str):
+    """FastAPI dependency: only allows requests from an admin having `perm` (owner bypasses)."""
+    async def _dep(admin=Depends(get_current_admin)):
+        role = admin.get("role", "owner")
+        perms = admin.get("permissions") or []
+        if role == "owner" or perm in perms:
+            return admin
+        raise HTTPException(status_code=403, detail=f"Missing permission: {perm}")
+    return _dep
+
+
+def require_owner(admin=Depends(get_current_admin)):
+    if admin.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Owner only")
     return admin
 
 
@@ -1416,7 +1460,7 @@ async def admin_get_homepage(admin=Depends(get_current_admin)):
 
 
 @api_router.patch("/admin/homepage")
-async def admin_patch_homepage(payload: HomepageContent, admin=Depends(get_current_admin)):
+async def admin_patch_homepage(payload: HomepageContent, admin=Depends(require_permission("manage_homepage"))):
     data = payload.model_dump()
     await save_site_setting("homepage", data)
     return data
@@ -1429,7 +1473,7 @@ async def admin_get_shipping(admin=Depends(get_current_admin)):
 
 
 @api_router.patch("/admin/shipping-settings")
-async def admin_patch_shipping(payload: ShippingSettings, admin=Depends(get_current_admin)):
+async def admin_patch_shipping(payload: ShippingSettings, admin=Depends(require_permission("manage_shipping"))):
     data = payload.model_dump()
     if data.get("method") not in ("flat", "zone", "distance"):
         raise HTTPException(status_code=400, detail="method must be one of flat|zone|distance")
@@ -1460,6 +1504,426 @@ async def admin_update_tracking(order_number: str, payload: TrackingUpdate, admi
     return doc
 
 
+# =============================================================================
+# ------------------ PHASE B: ANALYTICS, LIVE, RBAC, EMPLOYEES ----------------
+# =============================================================================
+
+# ---------- MODELS ----------
+class EmployeeCreate(BaseModel):
+    email: EmailStr
+    password: str
+    display_name: Optional[str] = ""
+    permissions: List[str] = Field(default_factory=list)
+
+
+class EmployeeUpdate(BaseModel):
+    display_name: Optional[str] = None
+    permissions: Optional[List[str]] = None
+    password: Optional[str] = None  # optional password change
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class HeartbeatIn(BaseModel):
+    session_id: str
+    path: Optional[str] = "/"
+    user_agent: Optional[str] = None
+
+
+class PageviewIn(BaseModel):
+    path: str
+    session_id: Optional[str] = None
+    referrer: Optional[str] = None
+
+
+# ---------- ENSURE TTL INDEXES ----------
+async def ensure_live_indexes():
+    try:
+        await db.live_sessions.create_index("expire_at", expireAfterSeconds=0)
+        await db.live_sessions.create_index("session_id", unique=True)
+        await db.page_views.create_index([("path", 1), ("day", 1)])
+    except Exception as e:
+        logging.warning(f"index creation warning: {e}")
+
+
+# =============================================================================
+# ------------------ ANALYTICS: OVERVIEW + ALERTS + LIVE ---------------------
+# =============================================================================
+def _iso_date(d: datetime) -> str:
+    return d.strftime("%Y-%m-%d")
+
+
+@api_router.get("/admin/analytics/overview")
+async def analytics_overview(admin=Depends(require_permission("view_analytics"))):
+    now = datetime.now(timezone.utc)
+    day_30_ago = now - timedelta(days=30)
+
+    orders = await db.orders.find({}, {"_id": 0}).to_list(5000)
+    returns = await db.returns.find({}, {"_id": 0}).to_list(5000)
+
+    # Order KPIs
+    def _s(o): return o.get("status") or ""
+    active_states = {"pending_payment", "confirmed", "packed", "shipped"}
+    orders_total = len(orders)
+    orders_active = sum(1 for o in orders if _s(o) in active_states)
+    orders_success = sum(1 for o in orders if _s(o) == "delivered")
+    orders_cancelled = sum(1 for o in orders if _s(o) == "cancelled")
+    orders_failed = sum(1 for o in orders if _s(o) == "payment_failed")
+
+    # Return KPIs
+    ret_active_states = {"requested", "approved", "received"}
+    ret_completed_states = {"refunded", "rejected"}
+    returns_total = len(returns)
+    returns_active = sum(1 for r in returns if r.get("status") in ret_active_states)
+    returns_completed = sum(1 for r in returns if r.get("status") in ret_completed_states)
+
+    # Financials
+    revenue = sum(int(o.get("total_inr") or 0) for o in orders if _s(o) in ("delivered", "confirmed", "packed", "shipped"))
+    products_total = await db.products.count_documents({})
+    customers_total = await db.users.count_documents({})
+    b2b_new = await db.b2b_leads.count_documents({
+        "status": "new",
+        "created_at": {"$gte": _iso_date(day_30_ago)},
+    })
+    failed_tx_total = await db.failed_payments.count_documents({})
+
+    # Top products (by order count and review score)
+    product_order_counts = {}
+    product_revenue = {}
+    for o in orders:
+        if _s(o) in ("cancelled", "payment_failed", "pending_payment"):
+            continue
+        for it in (o.get("items") or []):
+            pid = it.get("product_id")
+            if not pid: continue
+            product_order_counts[pid] = product_order_counts.get(pid, 0) + int(it.get("quantity") or 1)
+            product_revenue[pid] = product_revenue.get(pid, 0) + int(it.get("subtotal_inr") or 0)
+
+    # Review avg per product
+    reviews_by_product = {}
+    async for r in db.reviews.find({}, {"_id": 0}):
+        pid = r.get("product_id")
+        if not pid: continue
+        reviews_by_product.setdefault(pid, []).append(int(r.get("rating") or 0))
+
+    products = await db.products.find({}, {"_id": 0}).to_list(500)
+    top_products = []
+    for p in products:
+        pid = p.get("id")
+        r_list = reviews_by_product.get(pid, [])
+        top_products.append({
+            "id": pid,
+            "name": p.get("name"),
+            "image": (p.get("images") or [None])[0],
+            "slug": p.get("slug"),
+            "orders": product_order_counts.get(pid, 0),
+            "revenue_inr": product_revenue.get(pid, 0),
+            "avg_rating": round(sum(r_list) / len(r_list), 2) if r_list else 0,
+            "review_count": len(r_list),
+            "stock_count": p.get("stock_count", 0),
+        })
+    top_products.sort(key=lambda x: (x["orders"], x["avg_rating"], x["review_count"]), reverse=True)
+
+    # 30-day time series (orders & revenue per day)
+    series_map = {}
+    for i in range(30):
+        d = (now - timedelta(days=29 - i)).date()
+        series_map[d.isoformat()] = {"date": d.isoformat(), "orders": 0, "revenue_inr": 0}
+    for o in orders:
+        try:
+            d = datetime.fromisoformat((o.get("created_at") or "").replace("Z", "+00:00")).date().isoformat()
+        except Exception:
+            continue
+        if d in series_map:
+            series_map[d]["orders"] += 1
+            if _s(o) not in ("cancelled", "payment_failed", "pending_payment"):
+                series_map[d]["revenue_inr"] += int(o.get("total_inr") or 0)
+    series = list(series_map.values())
+
+    # Coupons total uses (per code)
+    coupon_uses = {}
+    for o in orders:
+        code = o.get("coupon_code")
+        if code:
+            coupon_uses[code] = coupon_uses.get(code, 0) + 1
+    coupons_summary = [{"code": c, "uses": n} for c, n in sorted(coupon_uses.items(), key=lambda x: -x[1])]
+
+    return {
+        "orders": {
+            "total": orders_total,
+            "active": orders_active,
+            "successful": orders_success,
+            "cancelled": orders_cancelled,
+            "failed": orders_failed,
+        },
+        "returns": {
+            "total": returns_total,
+            "active": returns_active,
+            "completed": returns_completed,
+        },
+        "financials": {
+            "revenue_inr": revenue,
+            "products_total": products_total,
+            "customers_total": customers_total,
+            "b2b_leads_new": b2b_new,
+            "failed_transactions": failed_tx_total,
+        },
+        "top_products": top_products[:8],
+        "series_30d": series,
+        "coupons_summary": coupons_summary,
+    }
+
+
+@api_router.get("/admin/analytics/alerts")
+async def analytics_alerts(admin=Depends(require_permission("view_analytics"))):
+    now = datetime.now(timezone.utc)
+    hour_1_ago = now - timedelta(hours=1)
+    day_2_ago = now - timedelta(days=2)
+
+    low_stock = []
+    async for p in db.products.find({"stock_count": {"$lte": 3}}, {"_id": 0, "id": 1, "name": 1, "slug": 1, "stock_count": 1, "images": 1}):
+        low_stock.append({
+            "id": p.get("id"),
+            "name": p.get("name"),
+            "slug": p.get("slug"),
+            "stock_count": p.get("stock_count", 0),
+            "image": (p.get("images") or [None])[0],
+        })
+
+    out_of_stock = sum(1 for p in low_stock if p["stock_count"] <= 0)
+
+    old_pending_returns = []
+    pending_returns = await db.returns.find({"status": "requested"}, {"_id": 0}).to_list(500)
+    for r in pending_returns:
+        try:
+            created = datetime.fromisoformat(r.get("created_at", "").replace("Z", "+00:00"))
+            if created < day_2_ago:
+                old_pending_returns.append({
+                    "id": r.get("id"),
+                    "order_number": r.get("order_number"),
+                    "hours_old": int((now - created).total_seconds() / 3600),
+                })
+        except Exception:
+            continue
+
+    recent_failures = await db.failed_payments.count_documents({"created_at": {"$gte": hour_1_ago.isoformat().replace("+00:00", "Z")}})
+
+    return {
+        "low_stock_products": low_stock,
+        "out_of_stock_count": out_of_stock,
+        "old_pending_returns": old_pending_returns,
+        "recent_failed_payments_1h": recent_failures,
+    }
+
+
+@api_router.get("/admin/analytics/coupon-usage")
+async def analytics_coupon_usage(admin=Depends(require_permission("view_analytics"))):
+    """Return per-code totals and per-customer usage breakdown."""
+    per_code = {}
+    per_customer = {}
+    async for o in db.orders.find({"coupon_code": {"$ne": None}}, {"_id": 0, "coupon_code": 1, "customer.email": 1, "customer.name": 1, "total_inr": 1, "discount_inr": 1, "order_number": 1, "created_at": 1}):
+        code = o.get("coupon_code")
+        if not code: continue
+        email = (o.get("customer") or {}).get("email") or "guest"
+        name = (o.get("customer") or {}).get("name") or ""
+        per_code[code] = per_code.get(code, 0) + 1
+        key = f"{email}::{code}"
+        entry = per_customer.get(key) or {"customer_email": email, "customer_name": name, "code": code, "uses": 0, "total_discount_inr": 0, "last_used_at": None, "orders": []}
+        entry["uses"] += 1
+        entry["total_discount_inr"] += int(o.get("discount_inr") or 0)
+        entry["orders"].append(o.get("order_number"))
+        # Track most-recent
+        ca = o.get("created_at") or ""
+        if not entry["last_used_at"] or ca > entry["last_used_at"]:
+            entry["last_used_at"] = ca
+        per_customer[key] = entry
+
+    codes = [{"code": c, "uses": n} for c, n in sorted(per_code.items(), key=lambda x: -x[1])]
+    customers = sorted(per_customer.values(), key=lambda x: -x["uses"])
+    return {"codes": codes, "customers": customers}
+
+
+@api_router.get("/admin/analytics/wishlist-usage")
+async def analytics_wishlist_usage(admin=Depends(require_permission("view_analytics"))):
+    """Return wishlist entries grouped by customer + by product."""
+    entries = []
+    per_customer = {}
+    per_product = {}
+    async for w in db.wishlists.find({}, {"_id": 0}):
+        email = w.get("user_email") or w.get("email") or ""
+        pid = w.get("product_id") or ""
+        prod = await db.products.find_one({"id": pid}, {"_id": 0, "name": 1, "slug": 1, "images": 1, "price_inr": 1, "id": 1}) if pid else None
+        row = {
+            "user_email": email,
+            "product_id": pid,
+            "product_name": (prod or {}).get("name") or "(unknown)",
+            "product_slug": (prod or {}).get("slug") or "",
+            "product_image": ((prod or {}).get("images") or [None])[0],
+            "created_at": w.get("created_at"),
+        }
+        entries.append(row)
+        per_customer.setdefault(email, []).append(row)
+        per_product.setdefault(pid, {"product_id": pid, "product_name": row["product_name"], "product_image": row["product_image"], "count": 0, "customers": []})
+        per_product[pid]["count"] += 1
+        per_product[pid]["customers"].append(email)
+
+    customers = [{"user_email": e, "count": len(rows), "items": rows} for e, rows in per_customer.items()]
+    customers.sort(key=lambda x: -x["count"])
+    products = sorted(per_product.values(), key=lambda x: -x["count"])
+    return {"total_wishlists": len(entries), "by_customer": customers, "by_product": products}
+
+
+# =============================================================================
+# ------------------ LIVE ANALYTICS -----------------------------------------
+# =============================================================================
+@api_router.post("/analytics/heartbeat")
+async def analytics_heartbeat(payload: HeartbeatIn):
+    """Public. Frontend calls every ~20s. Upserts a live_sessions doc with TTL."""
+    now = datetime.now(timezone.utc)
+    expire_at = now + timedelta(seconds=45)
+    await db.live_sessions.update_one(
+        {"session_id": payload.session_id},
+        {"$set": {
+            "session_id": payload.session_id,
+            "path": payload.path or "/",
+            "user_agent": (payload.user_agent or "")[:200],
+            "last_seen": now,
+            "expire_at": expire_at,
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.post("/analytics/pageview")
+async def analytics_pageview(payload: PageviewIn):
+    """Public. Counts a page-view for the day."""
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    await db.page_views.update_one(
+        {"path": payload.path, "day": day},
+        {"$inc": {"count": 1}, "$setOnInsert": {"path": payload.path, "day": day}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.get("/admin/analytics/live")
+async def analytics_live(admin=Depends(require_permission("view_analytics"))):
+    """Active sessions (within TTL window) + top-visited paths."""
+    now = datetime.now(timezone.utc)
+    active_docs = await db.live_sessions.find({"expire_at": {"$gt": now}}, {"_id": 0}).to_list(2000)
+    active_users = len(active_docs)
+
+    # Top paths from active sessions
+    page_counts = {}
+    for d in active_docs:
+        p = d.get("path") or "/"
+        page_counts[p] = page_counts.get(p, 0) + 1
+    top_now = sorted([{"path": p, "count": c} for p, c in page_counts.items()], key=lambda x: -x["count"])[:10]
+
+    # Top pages in last 24h from page_views collection
+    day_today = now.strftime("%Y-%m-%d")
+    day_yest = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    day_totals = {}
+    async for pv in db.page_views.find({"day": {"$in": [day_today, day_yest]}}, {"_id": 0}):
+        p = pv.get("path") or "/"
+        day_totals[p] = day_totals.get(p, 0) + int(pv.get("count") or 0)
+    top_24h = sorted([{"path": p, "count": c} for p, c in day_totals.items()], key=lambda x: -x["count"])[:10]
+
+    return {
+        "active_users": active_users,
+        "sessions_now_by_path": top_now,
+        "top_pages_24h": top_24h,
+        "as_of": now.isoformat().replace("+00:00", "Z"),
+    }
+
+
+# =============================================================================
+# ------------------ RBAC: EMPLOYEES + PASSWORD -----------------------------
+# =============================================================================
+@api_router.get("/admin/permissions")
+async def admin_list_permissions(admin=Depends(get_current_admin)):
+    """Catalog of permission keys for the admin UI to render checkboxes."""
+    return {"all": ALL_PERMISSIONS}
+
+
+@api_router.get("/admin/employees")
+async def admin_list_employees(admin=Depends(require_permission("manage_employees"))):
+    """Only lists employees (not the owner)."""
+    docs = await db.admins.find({"role": {"$ne": "owner"}}, {"_id": 0, "password_hash": 0}).to_list(500)
+    return docs
+
+
+@api_router.post("/admin/employees")
+async def admin_create_employee(payload: EmployeeCreate, admin=Depends(require_permission("manage_employees"))):
+    email = payload.email.lower()
+    if await db.admins.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="An admin with this email already exists")
+    invalid = [p for p in payload.permissions if p not in ALL_PERMISSIONS]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Unknown permissions: {invalid}")
+    pw_hash = bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt()).decode()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "email": email,
+        "password_hash": pw_hash,
+        "display_name": payload.display_name or "",
+        "role": "employee",
+        "permissions": payload.permissions,
+        "created_at": now_iso(),
+    }
+    await db.admins.insert_one(doc)
+    doc.pop("password_hash", None)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.patch("/admin/employees/{employee_id}")
+async def admin_update_employee(employee_id: str, payload: EmployeeUpdate, admin=Depends(require_permission("manage_employees"))):
+    existing = await db.admins.find_one({"id": employee_id, "role": {"$ne": "owner"}})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    update = {}
+    if payload.display_name is not None:
+        update["display_name"] = payload.display_name
+    if payload.permissions is not None:
+        invalid = [p for p in payload.permissions if p not in ALL_PERMISSIONS]
+        if invalid:
+            raise HTTPException(status_code=400, detail=f"Unknown permissions: {invalid}")
+        update["permissions"] = payload.permissions
+    if payload.password:
+        update["password_hash"] = bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt()).decode()
+    if not update:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    await db.admins.update_one({"id": employee_id}, {"$set": update})
+    doc = await db.admins.find_one({"id": employee_id}, {"_id": 0, "password_hash": 0})
+    return doc
+
+
+@api_router.delete("/admin/employees/{employee_id}")
+async def admin_delete_employee(employee_id: str, admin=Depends(require_permission("manage_employees"))):
+    existing = await db.admins.find_one({"id": employee_id, "role": {"$ne": "owner"}})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    await db.admins.delete_one({"id": employee_id})
+    return {"deleted": True}
+
+
+@api_router.patch("/admin/me/password")
+async def admin_change_password(payload: PasswordChange, admin=Depends(get_current_admin)):
+    doc = await db.admins.find_one({"email": admin["email"]})
+    if not doc or not bcrypt.checkpw(payload.current_password.encode(), doc["password_hash"].encode()):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    pw_hash = bcrypt.hashpw(payload.new_password.encode(), bcrypt.gensalt()).decode()
+    await db.admins.update_one({"email": admin["email"]}, {"$set": {"password_hash": pw_hash, "password_changed_at": now_iso()}})
+    return {"ok": True}
+
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -1474,6 +1938,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 @app.on_event("startup")
 async def on_startup():
     await seed_if_empty()
+    await ensure_live_indexes()
     # Seed default site settings if missing (idempotent)
     if not await db.site_settings.find_one({"key": "homepage"}):
         await save_site_setting("homepage", DEFAULT_HOMEPAGE)
