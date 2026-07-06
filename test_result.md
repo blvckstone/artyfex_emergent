@@ -120,7 +120,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: "NA"
+      - working: true
         agent: "main"
         comment: |
           GET /api/admin/analytics/overview (permission: view_analytics). Returns nested {orders:{total,active,successful,cancelled,failed}, returns:{total,active,completed}, financials:{revenue_inr,products_total,customers_total,b2b_leads_new,failed_transactions}, top_products (8), series_30d (30 entries with date/orders/revenue_inr), coupons_summary}. All computed from db.orders, db.returns, db.products, db.users, db.b2b_leads, db.failed_payments, db.reviews.
@@ -145,7 +145,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: "NA"
+      - working: true
         agent: "main"
         comment: |
           GET /api/admin/analytics/alerts (view_analytics). Returns low_stock_products (stock_count ≤ 3), out_of_stock_count, old_pending_returns (>48h), recent_failed_payments_1h.
@@ -165,7 +165,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: "NA"
+      - working: true
         agent: "main"
         comment: |
           GET /api/admin/analytics/coupon-usage → {codes:[{code,uses}], customers:[{customer_email,customer_name,code,uses,total_discount_inr,orders,last_used_at}]}. Aggregates from db.orders where coupon_code is set.
@@ -186,7 +186,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: "NA"
+      - working: true
         agent: "main"
         comment: |
           Public POST /api/analytics/heartbeat {session_id, path, user_agent?} → upserts live_sessions with expire_at = now+45s. TTL index on expire_at auto-evicts. Public POST /api/analytics/pageview {path,session_id?} → increments page_views per (path, day). Admin GET /api/admin/analytics/live (view_analytics) → {active_users, sessions_now_by_path (top 10), top_pages_24h (top 10), as_of}.
@@ -210,7 +210,7 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: "NA"
+      - working: true
         agent: "main"
         comment: |
           Extended admins schema with role (owner|employee) and permissions[]. ALL_PERMISSIONS = 11 keys (manage_products/orders/returns/customers/reviews/leads/coupons/homepage/shipping/employees + view_analytics). Owner seed backfilled with role=owner, all permissions. New endpoints (all require manage_employees; owner bypasses): GET /api/admin/employees, POST /api/admin/employees (create with hashed pw), PATCH /api/admin/employees/{id}, DELETE /api/admin/employees/{id}. Also PATCH /api/admin/me/password (any admin — verifies current password, min 8 chars new). GET /api/admin/permissions returns catalog. require_permission(perm) dependency created; owner always passes.
