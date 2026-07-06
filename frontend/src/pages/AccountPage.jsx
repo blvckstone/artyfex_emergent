@@ -69,10 +69,10 @@ export default function AccountPage() {
 
   const tabs = [
     { key: "orders", label: "Orders", icon: Package },
-    { key: "returns", label: "Returns", icon: RotateCcw },
-    { key: "wishlist", label: "Wishlist", icon: Heart },
     { key: "messages", label: "Updates", icon: Mail, badge: unreadCount },
+    { key: "wishlist", label: "Wishlist", icon: Heart },
     { key: "profile", label: "Profile", icon: User },
+    { key: "returns", label: "Returns", icon: RotateCcw },
   ];
 
   const submitReturn = async (order_number, payload) => {
@@ -105,9 +105,10 @@ export default function AccountPage() {
               className={`relative flex items-center gap-2 px-4 py-3 text-xs uppercase tracking-luxury border-b-2 -mb-px whitespace-nowrap ${tab===t.key?"border-gold text-gold":"border-transparent text-cream/50"}`}>
               <t.icon className="w-3.5 h-3.5" />{t.label}
               {t.badge > 0 && (
-                <span data-testid={`account-tab-badge-${t.key}`} className="ml-1 min-w-[18px] h-[18px] px-1.5 flex items-center justify-center bg-gold text-ink-950 text-[10px] rounded-full font-medium">
-                  {t.badge}
-                </span>
+                <>
+                  <span data-testid={`account-tab-dot-${t.key}`} className="ml-1 w-2 h-2 rounded-full bg-gold animate-pulse" aria-hidden="true" />
+                  <span data-testid={`account-tab-badge-${t.key}`} className="sr-only">{t.badge} unread</span>
+                </>
               )}
             </button>
           ))}
@@ -159,62 +160,121 @@ export default function AccountPage() {
                     <div className={`text-xs uppercase tracking-luxury ml-auto ${statusColor(o.status)}`}>{o.status.replace(/_/g, " ")}</div>
                     <div className="font-serif text-2xl text-cream">{formatINR(o.total_inr)}</div>
                   </div>
-                  <div className="mt-3 text-xs text-cream/50">{o.items.length} item(s) · {o.customer.city}, {o.customer.pincode}</div>
-                  {o.status === "delivered" && (() => {
-                    const deliveredAt = o.delivered_at ? new Date(o.delivered_at) : null;
-                    const daysSince = deliveredAt ? Math.floor((Date.now() - deliveredAt.getTime()) / 86400000) : null;
-                    const withinWindow = daysSince !== null && daysSince <= 3;
-                    if (withinWindow) {
-                      return (
-                        <button data-testid={`return-${o.order_number}`} onClick={() => setReturnFor(o)} className="mt-4 text-xs uppercase tracking-luxury text-gold border-b border-gold/40 pb-0.5">
-                          Request return · {3 - daysSince} day{3 - daysSince === 1 ? "" : "s"} left
-                        </button>
-                      );
-                    }
-                    return (
-                      <div className="mt-4 text-xs uppercase tracking-luxury text-cream/30">
-                        Return window closed ({daysSince}+ days since delivery)
-                      </div>
-                    );
-                  })()}
+                  <div className="mt-3 text-xs text-cream/50">
+                    {o.items.length} item(s) · {o.customer.city}
+                    {o.customer.state ? `, ${o.customer.state}` : ""} · {o.customer.pincode}
+                  </div>
+                  {(o.tracking_id || o.tracking_url) && (
+                    <div className="mt-4 border-t border-gold/20 pt-4 flex flex-wrap items-center gap-3 bg-gold/5 -mx-6 -mb-6 px-6 py-4">
+                      <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Tracking</div>
+                      {o.tracking_carrier && <div className="text-xs text-cream/70">{o.tracking_carrier}</div>}
+                      {o.tracking_id && (
+                        <div className="font-mono text-sm text-gold" data-testid={`order-tracking-${o.order_number}`}>
+                          {o.tracking_id}
+                        </div>
+                      )}
+                      {o.tracking_url && (
+                        <a
+                          href={o.tracking_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          data-testid={`order-track-link-${o.order_number}`}
+                          className="ml-auto text-[10px] uppercase tracking-luxury text-gold border border-gold/40 px-3 py-1.5 hover:bg-gold hover:text-ink-950 transition-colors"
+                        >
+                          Track shipment →
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
 
           {!loading && tab === "returns" && (
-            <div className="grid gap-4">
-              {returns.length === 0 && <div className="hairline p-10 text-center text-cream/40">No return requests.</div>}
-              {returns.map((r) => (
-                <div key={r.id} className="hairline p-6" data-testid={`account-return-${r.id}`}>
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <div className="text-gold font-mono text-sm">{r.order_number}</div>
-                    <div className="text-xs text-cream/40">{new Date(r.created_at).toLocaleDateString()}</div>
-                    <div className={`text-xs uppercase tracking-luxury ml-auto ${statusColor(r.status)}`}>{r.status}</div>
+            <div className="grid gap-6">
+              {/* Eligible orders (delivered, within 3-day window, no open return) */}
+              {(() => {
+                const openReturnOrders = new Set(returns.filter((r) => ["requested", "approved", "received"].includes(r.status)).map((r) => r.order_number));
+                const eligible = orders.filter((o) => {
+                  if (o.status !== "delivered") return false;
+                  const deliveredAt = o.delivered_at ? new Date(o.delivered_at) : null;
+                  if (!deliveredAt) return false;
+                  const daysSince = Math.floor((Date.now() - deliveredAt.getTime()) / 86400000);
+                  return daysSince <= 3 && !openReturnOrders.has(o.order_number);
+                });
+                return (
+                  <div className="hairline p-6" data-testid="returns-init-section">
+                    <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Request a return</div>
+                    <p className="mt-2 text-xs text-cream/50">Returns must be raised within <span className="text-cream">3 days of delivery.</span> Original packaging is required. Damage evidence needed for damaged items.</p>
+                    {eligible.length === 0 ? (
+                      <div className="mt-4 text-sm text-cream/50">No orders are currently eligible for return.</div>
+                    ) : (
+                      <div className="mt-4 grid gap-2">
+                        {eligible.map((o) => {
+                          const deliveredAt = new Date(o.delivered_at);
+                          const daysSince = Math.floor((Date.now() - deliveredAt.getTime()) / 86400000);
+                          const daysLeft = 3 - daysSince;
+                          return (
+                            <div key={o.order_number} className="flex items-center gap-3 flex-wrap border border-white/5 p-3">
+                              <div className="text-gold font-mono text-sm">{o.order_number}</div>
+                              <div className="text-xs text-cream/50">{o.items.length} item(s) · {formatINR(o.total_inr)}</div>
+                              <div className="text-[10px] uppercase tracking-luxury text-emerald-400/70 ml-auto">
+                                {daysLeft} day{daysLeft === 1 ? "" : "s"} left
+                              </div>
+                              <button
+                                data-testid={`returns-init-${o.order_number}`}
+                                onClick={() => setReturnFor(o)}
+                                className="text-[10px] uppercase tracking-luxury text-gold border border-gold/40 px-3 py-1.5 hover:bg-gold hover:text-ink-950 transition-colors"
+                              >
+                                Start return
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-3 text-sm"><span className="text-cream/50">Reason:</span> {r.reason}</div>
-                  {r.details && <div className="mt-1 text-sm text-cream/70 italic">&ldquo;{r.details}&rdquo;</div>}
-                  {r.damage_image_url && (
-                    <div className="mt-2 text-xs">
-                      <a href={r.damage_image_url} target="_blank" rel="noreferrer" className="text-gold hover:text-cream underline underline-offset-2">
-                        View damage evidence →
-                      </a>
+                );
+              })()}
+
+              {/* Existing return requests */}
+              <div>
+                <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-3">Your return requests</div>
+                <div className="grid gap-4">
+                  {returns.length === 0 && <div className="hairline p-10 text-center text-cream/40">No return requests yet.</div>}
+                  {returns.map((r) => (
+                    <div key={r.id} className="hairline p-6" data-testid={`account-return-${r.id}`}>
+                      <div className="flex items-center gap-4 flex-wrap">
+                        <div className="text-gold font-mono text-sm">{r.order_number}</div>
+                        <div className="text-xs text-cream/40">{new Date(r.created_at).toLocaleDateString()}</div>
+                        <div className={`text-xs uppercase tracking-luxury ml-auto ${statusColor(r.status)}`}>{r.status}</div>
+                      </div>
+                      <div className="mt-3 text-sm"><span className="text-cream/50">Reason:</span> {r.reason}</div>
+                      {r.details && <div className="mt-1 text-sm text-cream/70 italic">&ldquo;{r.details}&rdquo;</div>}
+                      {r.damage_image_url && (
+                        <div className="mt-2 text-xs">
+                          <a href={r.damage_image_url} target="_blank" rel="noreferrer" className="text-gold hover:text-cream underline underline-offset-2">
+                            View damage evidence →
+                          </a>
+                        </div>
+                      )}
+                      {r.is_genuine === false && (
+                        <div className="mt-3 text-xs uppercase tracking-luxury text-red-400/80">Marked non-genuine — restocking fees may apply</div>
+                      )}
+                      {r.is_genuine === true && (
+                        <div className="mt-3 text-xs uppercase tracking-luxury text-emerald-400/80">Verified genuine — full refund eligible</div>
+                      )}
+                      {r.admin_notes && (
+                        <div className="mt-3 border-t border-white/5 pt-3 text-sm text-cream/70">
+                          <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-1">From atelier</div>
+                          {r.admin_notes}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {r.is_genuine === false && (
-                    <div className="mt-3 text-xs uppercase tracking-luxury text-red-400/80">Marked non-genuine — restocking fees may apply</div>
-                  )}
-                  {r.is_genuine === true && (
-                    <div className="mt-3 text-xs uppercase tracking-luxury text-emerald-400/80">Verified genuine — full refund eligible</div>
-                  )}
-                  {r.admin_notes && (
-                    <div className="mt-3 border-t border-white/5 pt-3 text-sm text-cream/70">
-                      <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-1">From atelier</div>
-                      {r.admin_notes}
-                    </div>
-                  )}
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
           )}
 

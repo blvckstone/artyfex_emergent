@@ -103,10 +103,226 @@
 #====================================================================================================
 
 user_problem_statement: |
-  Phase D — SEO & Pages + Bug Fixes:
-  1) BUG: Mobile Navbar links "The Craft", "Reviews", "Trade / B2B" do not navigate to their sections (works on desktop only).
-  2) BUG: Shop page shows only 1 product per row on mobile — needs 2 side-by-side tiles like a real e-commerce site.
-  3) FEATURE: SEO-friendly structured pages — About Us, Contact, plus enhanced Terms & Privacy — with proper meta tags, canonical URLs, OG/Twitter cards, JSON-LD schema, sitemap.xml + robots.txt.
+  Phase A — Enterprise upgrade:
+  1) Homepage CMS: admin can edit announcement bar, hero (text/images/colours/CTAs/stats), sale banner, and inject custom CSS. Rendered dynamically on the storefront.
+  2) Smart Checkout: Amazon-style structured address (line1/line2/landmark/city/state/pincode/country) + dynamic shipping (flat | zone | distance) configurable in admin. Free-shipping threshold applies to all methods. Distance method uses static state→km table (no Google Maps yet).
+  3) Customer /account: Tabs reordered → Orders, Updates (pulsing gold dot when unread), Wishlist, Profile, Returns (far right). "Request return" button REMOVED from Orders tab; return requests only initiated from Returns tab. Admin can attach tracking_id/url/carrier to any order → visible on customer Orders tab.
+
+backend:
+  - task: "Phase A: Homepage CMS endpoints (GET /api/homepage, GET/PATCH /api/admin/homepage) + default seed"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Added HomepageContent model (announcement + hero + sale_banner + custom_css), site_settings collection with key='homepage', public GET /api/homepage returns merged defaults, admin PATCH replaces content. Startup seeds default homepage if missing.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (5/5 tests passed):
+          - GET /api/homepage (public, no auth) → 200 with all required keys (announcement, hero, sale_banner, custom_css)
+          - Default values present: announcement.text and hero.headline_line_1 non-empty
+          - GET /api/admin/homepage without token → 401 (auth protection working)
+          - GET /api/admin/homepage with admin token → 200
+          - PATCH /api/admin/homepage with updated announcement.text and hero.headline_italic → 200, response echoes updates
+          - GET /api/homepage again → shows persisted updated values
+          All homepage CMS endpoints working correctly with proper auth and persistence.
+
+  - task: "Phase A: Shipping settings (GET/PATCH /api/admin/shipping-settings) + calc endpoint (POST /api/shipping/calculate)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Added ShippingSettings model with method=flat|zone|distance, flat_rate_inr, free_shipping_above_inr, zone_rates (list of {name, states[], rate_inr}), distance_base_fee_inr, distance_per_km_inr, distance_bands. STATE_DISTANCE_KM_FROM_MUMBAI static table for distance calc. calc_shipping helper. Public POST /api/shipping/calculate with {subtotal_inr, state, pincode}. Free-shipping threshold applies across all methods. Verified via curl: subtotal=10000 MH → ₹1499 flat; subtotal=30000 → free.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (10/10 tests passed):
+          - GET /api/admin/shipping-settings → 200 with all required keys (method, flat_rate_inr, free_shipping_above_inr, zone_rates, distance_base_fee_inr, distance_per_km_inr, distance_bands, origin_state)
+          - PATCH with invalid method → 400 (validation working)
+          - FLAT method: subtotal=10k → flat_rate_inr (1499), free_shipping_applied=false
+          - FLAT method: subtotal=30k (above 25k threshold) → shipping_inr=0, free_shipping_applied=true
+          - PATCH method=zone → 200
+          - ZONE method: Maharashtra → zone rate (499 for local zone)
+          - ZONE method: Nagaland (not in any zone) → fallback zone rate (1499)
+          - PATCH method=distance → 200
+          - DISTANCE method: Tamil Nadu (1330 km) → ~4289 INR (base 299 + 3*1330)
+          - PATCH restore method=flat → 200
+          All shipping methods (flat/zone/distance) working correctly with proper free-shipping threshold logic.
+
+  - task: "Phase A: Order tracking (PATCH /api/admin/orders/{n}/tracking) + Order model tracking_id/url/carrier/updated_at"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Extended Order model with tracking_id, tracking_url, tracking_carrier, tracking_updated_at (all optional). New PATCH endpoint accepts any subset. Existing GET /api/orders/{n} + /me/orders return the new fields.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (4/4 tests passed):
+          - Created test order via POST /api/orders (razorpay method) → order_number generated
+          - PATCH /api/admin/orders/{order_number}/tracking with full payload (tracking_id, tracking_url, tracking_carrier) → 200
+          - Response includes all tracking fields + tracking_updated_at populated
+          - PATCH with partial payload (only tracking_carrier="BlueDart") → tracking_carrier updated, tracking_id remains unchanged
+          - GET /api/orders/{order_number} → all tracking fields visible (tracking_id, tracking_url, tracking_carrier, tracking_updated_at)
+          Order tracking endpoints working correctly with partial update support.
+
+  - task: "Phase A: OrderCustomer extended with structured address (line1, line2, landmark, state, country)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Backward-compatible: all 5 new fields Optional. Existing `address` still populated by frontend (composed from line1+line2+landmark). Existing orders load fine.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (4/4 tests passed):
+          - Order with ONLY old fields (name, email, phone, address, city, pincode) → success (backward compatibility working)
+          - Order with new structured fields (line1, line2, landmark, state, country) → success
+          - Retrieved order shows all new fields persisted correctly (line1="789 New Street", line2="Sector 5", landmark="Near Mall", state="Karnataka", country="India")
+          - Total calculation verified: subtotal (25000) - discount (2500) + shipping (1499) = total (23999) ✓
+          Backward compatibility working perfectly. Both old and new address formats accepted.
+
+frontend:
+  - task: "Phase A: AnnouncementBar + SaleBanner components + Hero content prop (CMS-driven)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/AnnouncementBar.jsx, frontend/src/components/SaleBanner.jsx, frontend/src/components/Hero.jsx, frontend/src/App.js, frontend/src/lib/homepage.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Home component now fetches /api/homepage on load and passes content to AnnouncementBar (top-of-page), Hero (props with fallbacks to previous hard-coded copy), and SaleBanner (rendered between Collection and Reviews). If any fetch fails, hero falls back to defaults so page never breaks.
+
+  - task: "Phase A: Amazon-style checkout form + dynamic shipping calc"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/CheckoutDialog.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Form redesigned with fields: name, phone, email, pincode, state (select IN states), line1, line2, landmark (optional), city, country (locked India). On state/pincode change → POST /api/shipping/calculate, updates order summary total live. Order payload sends both structured fields AND composed `address` for backward compat.
+
+  - task: "Phase A: AccountPage — reorder tabs, remove return btn from Orders, add tracking display, add returns init section, add pulsing dot for Updates"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/AccountPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Tabs order: Orders, Updates, Wishlist, Profile, Returns. Updates shows small pulsing gold dot when unread>0 (with SR-only label for accessibility). Orders tab strips return button; shows tracking id/carrier/link in a gold-highlighted panel. Returns tab lists eligible delivered orders (within 3-day window, no open return) with a Start-return button opening the existing ReturnDialog.
+
+  - task: "Phase A: Admin — new Homepage & Shipping tabs + tracking input per Order row"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/AdminPage.jsx, frontend/src/components/admin/HomepageEditor.jsx, frontend/src/components/admin/ShippingEditor.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Two new sidebar tabs: Homepage (CMS editor with announcement/hero/sale banner/stats/custom css) and Shipping (method selector + flat/zone/distance editors + built-in test calculator). New OrderRow component with expandable tracking editor (carrier + tracking id + tracking url + Save button).
+
+metadata:
+  created_by: "main_agent"
+  version: "2.0"
+  test_sequence: 7
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Phase A backend ready for testing. Focus areas:
+      1) GET /api/homepage returns default homepage content (public, no auth). PATCH /api/admin/homepage requires admin JWT; PATCH with new values persists and subsequent GET returns them. All colour/text/image fields under announcement/hero/sale_banner are strings.
+      2) GET /api/admin/shipping-settings + PATCH — verify method validation (must be flat|zone|distance). POST /api/shipping/calculate is public and returns {method, shipping_inr, free_shipping_applied, notes}. Test all 3 methods:
+         - flat: with subtotal below/above free threshold → correct rate / free
+         - zone: state matches one of zone.states → uses that rate; unmatched state → falls back to last zone with empty states[] (or last zone)
+         - distance: uses STATE_DISTANCE_KM_FROM_MUMBAI (Maharashtra=30km, Tamil Nadu=1330km, etc.) with base+per_km, or matching distance band
+      3) PATCH /api/admin/orders/{order_number}/tracking with partial payload updates only provided fields; returned order includes tracking_updated_at ISO string. GET /api/me/orders + /api/orders/{n} return tracking fields.
+      4) Order creation still works with backward-compat customer payload (only old `address/city/pincode`) AND with new structured payload (line1/state/country included). Total_inr must equal subtotal - discount + shipping.
+      
+      Admin creds: admin@artyfex.in / ArtyFex@2026. Razorpay test key rzp_test_T9Lu5nFzdgCxRw is configured. Do NOT test frontend — user will confirm after backend passes.
+  
+  - agent: "testing"
+    message: |
+      ✅ PHASE A BACKEND TESTING COMPLETE - ALL TESTS PASSED (24/24)
+      
+      Comprehensive testing completed for all 4 Phase A backend tasks per review request specifications.
+      Test file: /app/backend_test_phase_a.py
+      Results: /app/backend_test_phase_a_results.json
+      
+      TASK 1 - HOMEPAGE CMS (5/5 passed):
+      ✅ GET /api/homepage (public) → 200 with defaults (announcement.text, hero.headline_line_1 non-empty)
+      ✅ GET /api/admin/homepage without token → 401
+      ✅ GET /api/admin/homepage with token → 200
+      ✅ PATCH /api/admin/homepage → 200, response echoes updates
+      ✅ GET /api/homepage → shows persisted values
+      
+      TASK 2 - SHIPPING SETTINGS + CALC (10/10 passed):
+      ✅ GET /api/admin/shipping-settings → 200 with all required keys
+      ✅ PATCH with invalid method → 400
+      ✅ Flat method, subtotal=10k → flat_rate_inr (1499), not free
+      ✅ Flat method, subtotal=30k → free shipping (0 INR)
+      ✅ Zone method, Maharashtra → zone rate (499)
+      ✅ Zone method, Nagaland → fallback zone (1499)
+      ✅ Distance method, Tamil Nadu (1330 km) → ~4289 INR
+      ✅ All method switches working (flat ↔ zone ↔ distance)
+      
+      TASK 3 - ORDER TRACKING (4/4 passed):
+      ✅ Created test order via POST /api/orders
+      ✅ PATCH tracking with full payload → all fields set + tracking_updated_at
+      ✅ PATCH tracking partial (only carrier) → carrier changes, id remains
+      ✅ GET /api/orders/{n} → tracking fields visible
+      
+      TASK 4 - BACKWARD COMPAT (4/4 passed):
+      ✅ Order with ONLY old fields (address, city, pincode) → success
+      ✅ Order with new fields (line1, line2, landmark, state, country) → all persisted
+      ✅ Total calculation: subtotal - discount + shipping = total ✓
+      
+      CONCLUSION: All Phase A backend features working correctly. No issues found.
+      Ready for main agent to summarize and finish.
 
 frontend:
   - task: "Fix mobile Navbar hash-links (The Craft / Reviews / Trade B2B)"

@@ -6,8 +6,11 @@ import { CartProvider, useCart } from "@/context/CartContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { WishlistProvider } from "@/context/WishlistContext";
 import { fetchProducts, fetchReviews } from "@/lib/api";
+import { fetchHomepage } from "@/lib/homepage";
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
+import AnnouncementBar from "@/components/AnnouncementBar";
+import SaleBanner from "@/components/SaleBanner";
 import ProductShowcase from "@/components/ProductShowcase";
 import Craftsmanship from "@/components/Craftsmanship";
 import Collection from "@/components/Collection";
@@ -33,10 +36,11 @@ import { ReviewPromptProvider } from "@/context/ReviewPromptContext";
 function Home() {
   const [products, setProducts] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [homepage, setHomepage] = useState(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    Promise.all([fetchProducts(), fetchReviews()])
-      .then(([p, r]) => { setProducts(p); setReviews(r); })
+    Promise.all([fetchProducts(), fetchReviews(), fetchHomepage().catch(() => null)])
+      .then(([p, r, hp]) => { setProducts(p); setReviews(r); setHomepage(hp); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -80,12 +84,14 @@ function Home() {
           ],
         }}
       />
+      <AnnouncementBar content={homepage?.announcement} />
       <Navbar />
       <main>
-        <Hero />
+        <Hero content={homepage?.hero} />
         <ProductShowcase product={hero} />
         <Craftsmanship />
         <Collection products={products} />
+        <SaleBanner content={homepage?.sale_banner} />
         <Reviews reviews={reviews} />
         <B2B />
       </main>

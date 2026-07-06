@@ -137,8 +137,15 @@ class ProductIn(BaseModel):
     variants: List[Variant]; is_hero: bool = False; stock: int = 5
 
 class OrderCustomer(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     name: str; email: EmailStr; phone: str
     address: str; city: str; pincode: str
+    # New Amazon-style structured fields (all optional for backward compat)
+    line1: Optional[str] = None      # House / Building / Flat
+    line2: Optional[str] = None      # Area / Street / Colony
+    landmark: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = "India"
 
 class OrderItem(BaseModel):
     product_id: str; variant_key: str; quantity: int = 1
@@ -163,6 +170,11 @@ class Order(BaseModel):
     razorpay_order_id: Optional[str] = None
     razorpay_payment_id: Optional[str] = None
     delivered_at: Optional[str] = None
+    # Shipment tracking (Phase A)
+    tracking_id: Optional[str] = None
+    tracking_url: Optional[str] = None
+    tracking_carrier: Optional[str] = None
+    tracking_updated_at: Optional[str] = None
     created_at: str = Field(default_factory=now_iso)
 
 class Review(BaseModel):
@@ -1138,6 +1150,316 @@ async def admin_list_failed_payments(admin=Depends(get_current_admin)):
     return await db.failed_payments.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
 
 
+# =============================================================================
+# ---------- PHASE A: HOMEPAGE CMS + SHIPPING SETTINGS + TRACKING ----------
+# =============================================================================
+
+# ---------- MODELS ----------
+class AnnouncementBar(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    enabled: bool = True
+    text: str = "Complimentary delivery on all mirrors above ₹25,000 · Handpoured in Mumbai"
+    bg_color: str = "#0a0a0a"
+    text_color: str = "#D4AF37"
+    link_url: Optional[str] = ""
+    link_label: Optional[str] = ""
+
+
+class HeroStat(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    k: str = ""
+    v: str = ""
+
+
+class HeroContent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    eyebrow: str = "ArtyFex Atelier · Est. 2020 · Mumbai"
+    headline_line_1: str = "A mirror,"
+    headline_italic: str = "poured"
+    headline_line_2: str = "over one hundred"
+    headline_line_3: str = "and twenty hours."
+    subheadline: str = (
+        "The Obsidian Aurora — a 2×3 ft statement mirror of black marbled resin, real crushed "
+        "blue crystal, and a hand-brushed golden aluminum border. Signed by the artisan. One of one."
+    )
+    primary_cta_text: str = "Acquire the piece"
+    primary_cta_link: str = "#product"
+    secondary_cta_text: str = "Explore the craft"
+    secondary_cta_link: str = "#craft"
+    background_image: str = (
+        "https://images.unsplash.com/photo-1688646953306-5ec93eab8c06?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHwzfHxsdXh1cnklMjBwZW50aG91c2UlMjBsaXZpbmclMjByb29tfGVufDB8fHx8MTc4MzA2MjM3M3ww&ixlib=rb-4.1.0&q=85"
+    )
+    mirror_image: str = (
+        "https://images.pexels.com/photos/8068653/pexels-photo-8068653.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    )
+    edition_label: str = "Edition"
+    edition_text: str = "Obsidian Aurora №03"
+    text_color: str = "#f5efdf"
+    accent_color: str = "#D4AF37"
+    stats: List[HeroStat] = Field(default_factory=lambda: [
+        HeroStat(k="120", v="artisan hours"),
+        HeroStat(k="1 of 1", v="unique piece"),
+        HeroStat(k="24 mo", v="warranty"),
+    ])
+
+
+class SaleBanner(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    enabled: bool = False
+    title: str = "Festive Edit"
+    subtitle: str = "Enjoy 10% off select statement pieces this season."
+    cta_text: str = "Discover"
+    cta_link: str = "/shop"
+    bg_color: str = "#1a1208"
+    text_color: str = "#f5efdf"
+    accent_color: str = "#D4AF37"
+    image: str = ""
+
+
+class HomepageContent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    announcement: AnnouncementBar = Field(default_factory=AnnouncementBar)
+    hero: HeroContent = Field(default_factory=HeroContent)
+    sale_banner: SaleBanner = Field(default_factory=SaleBanner)
+    custom_css: str = ""
+
+
+class ZoneRate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    name: str = "Rest of India"
+    states: List[str] = Field(default_factory=list)
+    rate_inr: int = 1499
+
+
+class DistanceBand(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    max_km: int = 500
+    rate_inr: int = 999
+
+
+class ShippingSettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    method: str = "flat"  # "flat" | "zone" | "distance"
+    flat_rate_inr: int = 1499
+    free_shipping_above_inr: int = 25000
+    origin_city: str = "Mumbai"
+    origin_state: str = "Maharashtra"
+    origin_pincode: str = "400095"
+    zone_rates: List[ZoneRate] = Field(default_factory=lambda: [
+        ZoneRate(name="Maharashtra (Local)", states=["Maharashtra"], rate_inr=499),
+        ZoneRate(name="Metro & West", states=["Gujarat", "Goa", "Karnataka", "Madhya Pradesh", "Telangana", "Andhra Pradesh"], rate_inr=999),
+        ZoneRate(name="Rest of India", states=[], rate_inr=1499),
+    ])
+    distance_base_fee_inr: int = 299
+    distance_per_km_inr: int = 3
+    distance_bands: List[DistanceBand] = Field(default_factory=list)
+
+
+class ShippingCalcIn(BaseModel):
+    subtotal_inr: int
+    state: Optional[str] = None
+    pincode: Optional[str] = None
+    country: Optional[str] = "India"
+
+
+class TrackingUpdate(BaseModel):
+    tracking_id: Optional[str] = None
+    tracking_url: Optional[str] = None
+    tracking_carrier: Optional[str] = None
+
+
+# Static state→approx km distance table from Mumbai origin (Malad West, 400095)
+# Used for the "distance" shipping method without needing Google Maps.
+STATE_DISTANCE_KM_FROM_MUMBAI = {
+    "maharashtra": 30,
+    "goa": 600,
+    "gujarat": 550,
+    "karnataka": 980,
+    "kerala": 1500,
+    "tamil nadu": 1330,
+    "telangana": 700,
+    "andhra pradesh": 700,
+    "rajasthan": 1200,
+    "madhya pradesh": 850,
+    "delhi": 1400,
+    "uttar pradesh": 1500,
+    "punjab": 1750,
+    "haryana": 1400,
+    "west bengal": 1900,
+    "bihar": 1900,
+    "odisha": 1700,
+    "chhattisgarh": 1200,
+    "jharkhand": 1800,
+    "uttarakhand": 1600,
+    "himachal pradesh": 1700,
+    "jammu and kashmir": 2000,
+    "ladakh": 2100,
+    "assam": 2400,
+    "meghalaya": 2500,
+    "manipur": 2700,
+    "mizoram": 2700,
+    "nagaland": 2700,
+    "tripura": 2600,
+    "arunachal pradesh": 2800,
+    "sikkim": 2200,
+    "chandigarh": 1600,
+    "puducherry": 1350,
+    "andaman and nicobar islands": 2500,
+    "dadra and nagar haveli and daman and diu": 200,
+    "lakshadweep": 1400,
+}
+
+
+DEFAULT_HOMEPAGE = HomepageContent().model_dump()
+DEFAULT_SHIPPING = ShippingSettings().model_dump()
+
+
+async def load_site_setting(key: str, default_dict: dict) -> dict:
+    doc = await db.site_settings.find_one({"key": key}, {"_id": 0})
+    if not doc:
+        return default_dict
+    val = doc.get("value") or {}
+    # Deep-merge: fill any missing keys from default so old rows stay valid
+    def merge(base, override):
+        if not isinstance(base, dict) or not isinstance(override, dict):
+            return override if override is not None else base
+        out = dict(base)
+        for k, v in override.items():
+            out[k] = merge(base.get(k), v) if isinstance(v, dict) else v
+        return out
+    return merge(default_dict, val)
+
+
+async def save_site_setting(key: str, value: dict):
+    await db.site_settings.update_one(
+        {"key": key},
+        {"$set": {"key": key, "value": value, "updated_at": now_iso()}},
+        upsert=True,
+    )
+
+
+def calc_shipping(settings: dict, subtotal_inr: int, state: Optional[str], pincode: Optional[str]) -> dict:
+    """Compute shipping cost for the given cart context and settings."""
+    method = settings.get("method", "flat")
+    free_above = int(settings.get("free_shipping_above_inr", 25000) or 0)
+    result = {"method": method, "shipping_inr": 0, "free_shipping_applied": False, "notes": ""}
+    if subtotal_inr <= 0:
+        return result
+    if free_above and subtotal_inr >= free_above:
+        result["free_shipping_applied"] = True
+        result["notes"] = f"Free shipping · order above ₹{free_above:,}"
+        return result
+
+    state_norm = (state or "").strip().lower()
+
+    if method == "flat":
+        result["shipping_inr"] = int(settings.get("flat_rate_inr", 1499) or 0)
+        result["notes"] = "Flat rate shipping"
+    elif method == "zone":
+        zones = settings.get("zone_rates") or []
+        chosen = None
+        # Prefer explicit state match
+        for z in zones:
+            zs = [s.strip().lower() for s in (z.get("states") or [])]
+            if state_norm and state_norm in zs:
+                chosen = z
+                break
+        # Fallback: first zone with empty states list acts as "rest of India"
+        if not chosen:
+            for z in zones:
+                if not (z.get("states") or []):
+                    chosen = z
+                    break
+        if not chosen and zones:
+            chosen = zones[-1]
+        if chosen:
+            result["shipping_inr"] = int(chosen.get("rate_inr", 0) or 0)
+            result["notes"] = f"Zone · {chosen.get('name', '')}"
+        else:
+            result["shipping_inr"] = int(settings.get("flat_rate_inr", 1499) or 0)
+            result["notes"] = "Zone unmatched — fallback flat rate"
+    elif method == "distance":
+        km = STATE_DISTANCE_KM_FROM_MUMBAI.get(state_norm)
+        if km is None:
+            # Fallback: median India distance ~1200km
+            km = 1200
+        # Prefer explicit distance bands if configured
+        bands = settings.get("distance_bands") or []
+        band = None
+        for b in sorted(bands, key=lambda x: int(x.get("max_km", 0) or 0)):
+            if km <= int(b.get("max_km", 0) or 0):
+                band = b
+                break
+        if band:
+            result["shipping_inr"] = int(band.get("rate_inr", 0) or 0)
+            result["notes"] = f"Distance ~{km} km · {band.get('max_km', 0)} km band"
+        else:
+            base = int(settings.get("distance_base_fee_inr", 299) or 0)
+            per_km = float(settings.get("distance_per_km_inr", 3) or 0)
+            result["shipping_inr"] = int(base + per_km * km)
+            result["notes"] = f"Distance ~{km} km · base ₹{base} + ₹{per_km:.1f}/km"
+    else:
+        result["shipping_inr"] = int(settings.get("flat_rate_inr", 1499) or 0)
+        result["notes"] = "Unknown method — flat fallback"
+    return result
+
+
+# ---------- HOMEPAGE ROUTES ----------
+@api_router.get("/homepage")
+async def public_get_homepage():
+    return await load_site_setting("homepage", DEFAULT_HOMEPAGE)
+
+
+@api_router.get("/admin/homepage")
+async def admin_get_homepage(admin=Depends(get_current_admin)):
+    return await load_site_setting("homepage", DEFAULT_HOMEPAGE)
+
+
+@api_router.patch("/admin/homepage")
+async def admin_patch_homepage(payload: HomepageContent, admin=Depends(get_current_admin)):
+    data = payload.model_dump()
+    await save_site_setting("homepage", data)
+    return data
+
+
+# ---------- SHIPPING ROUTES ----------
+@api_router.get("/admin/shipping-settings")
+async def admin_get_shipping(admin=Depends(get_current_admin)):
+    return await load_site_setting("shipping", DEFAULT_SHIPPING)
+
+
+@api_router.patch("/admin/shipping-settings")
+async def admin_patch_shipping(payload: ShippingSettings, admin=Depends(get_current_admin)):
+    data = payload.model_dump()
+    if data.get("method") not in ("flat", "zone", "distance"):
+        raise HTTPException(status_code=400, detail="method must be one of flat|zone|distance")
+    await save_site_setting("shipping", data)
+    return data
+
+
+@api_router.post("/shipping/calculate")
+async def public_shipping_calculate(payload: ShippingCalcIn):
+    settings = await load_site_setting("shipping", DEFAULT_SHIPPING)
+    return calc_shipping(settings, payload.subtotal_inr, payload.state, payload.pincode)
+
+
+# ---------- ADMIN: ORDER TRACKING ----------
+@api_router.patch("/admin/orders/{order_number}/tracking")
+async def admin_update_tracking(order_number: str, payload: TrackingUpdate, admin=Depends(get_current_admin)):
+    update = {"tracking_updated_at": now_iso()}
+    if payload.tracking_id is not None:
+        update["tracking_id"] = payload.tracking_id.strip() or None
+    if payload.tracking_url is not None:
+        update["tracking_url"] = payload.tracking_url.strip() or None
+    if payload.tracking_carrier is not None:
+        update["tracking_carrier"] = payload.tracking_carrier.strip() or None
+    res = await db.orders.update_one({"order_number": order_number}, {"$set": update})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Order not found")
+    doc = await db.orders.find_one({"order_number": order_number}, {"_id": 0})
+    return doc
+
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -1152,6 +1474,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 @app.on_event("startup")
 async def on_startup():
     await seed_if_empty()
+    # Seed default site settings if missing (idempotent)
+    if not await db.site_settings.find_one({"key": "homepage"}):
+        await save_site_setting("homepage", DEFAULT_HOMEPAGE)
+        logging.info("Seeded default homepage content")
+    if not await db.site_settings.find_one({"key": "shipping"}):
+        await save_site_setting("shipping", DEFAULT_SHIPPING)
+        logging.info("Seeded default shipping settings")
 
 
 @app.on_event("shutdown")

@@ -1,0 +1,170 @@
+[
+  {
+    "section": "Setup",
+    "test": "Admin login",
+    "passed": true,
+    "details": "Token: eyJhbGciOiJIUzI1NiIs...",
+    "timestamp": "2026-07-06T09:47:05.181358+00:00"
+  },
+  {
+    "section": "Task 1",
+    "test": "GET /api/homepage (public) \u2192 200 with defaults",
+    "passed": true,
+    "details": "Keys present: True, announcement.text: 'TEST ANNOUNCEMENT - Phase A Testing...', hero.headline_line_1: 'TEST HEADLINE...'",
+    "timestamp": "2026-07-06T09:47:05.184270+00:00"
+  },
+  {
+    "section": "Task 1",
+    "test": "GET /api/admin/homepage without token \u2192 401",
+    "passed": true,
+    "details": "Status: 401",
+    "timestamp": "2026-07-06T09:47:05.185811+00:00"
+  },
+  {
+    "section": "Task 1",
+    "test": "GET /api/admin/homepage with token \u2192 200",
+    "passed": true,
+    "details": "Status: 200",
+    "timestamp": "2026-07-06T09:47:05.188681+00:00"
+  },
+  {
+    "section": "Task 1",
+    "test": "PATCH /api/admin/homepage \u2192 200 with updated values",
+    "passed": true,
+    "details": "announcement.text match: True, hero.headline_italic match: True",
+    "timestamp": "2026-07-06T09:47:05.192060+00:00"
+  },
+  {
+    "section": "Task 1",
+    "test": "GET /api/homepage shows updated values",
+    "passed": true,
+    "details": "announcement persisted: True, hero persisted: True",
+    "timestamp": "2026-07-06T09:47:05.194321+00:00"
+  },
+  {
+    "section": "Task 2",
+    "test": "GET /api/admin/shipping-settings \u2192 200 with structure",
+    "passed": true,
+    "details": "Has all required keys: True, method: flat",
+    "timestamp": "2026-07-06T09:47:05.196987+00:00"
+  },
+  {
+    "section": "Task 2",
+    "test": "PATCH shipping-settings with invalid method \u2192 400",
+    "passed": true,
+    "details": "Status: 400, Body: {\"detail\":\"method must be one of flat|zone|distance\"}",
+    "timestamp": "2026-07-06T09:47:05.199216+00:00"
+  },
+  {
+    "section": "Task 2",
+    "test": "Flat method, subtotal=10k \u2192 flat_rate_inr, not free",
+    "passed": true,
+    "details": "method: flat, shipping_inr: 1499, free_shipping_applied: False",
+    "timestamp": "2026-07-06T09:47:05.201079+00:00"
+  },
+  {
+    "section": "Task 2",
+    "test": "Flat method, subtotal=30k \u2192 free shipping",
+    "passed": true,
+    "details": "shipping_inr: 0, free_shipping_applied: True",
+    "timestamp": "2026-07-06T09:47:05.202837+00:00"
+  },
+  {
+    "section": "Task 2",
+    "test": "PATCH method=zone \u2192 200",
+    "passed": true,
+    "details": "Status: 200, method: zone",
+    "timestamp": "2026-07-06T09:47:05.209274+00:00"
+  },
+  {
+    "section": "Task 2",
+    "test": "Zone method, Maharashtra \u2192 zone rate",
+    "passed": true,
+    "details": "method: zone, shipping_inr: 499, notes: Zone \u00b7 Maharashtra (Local)",
+    "timestamp": "2026-07-06T09:47:05.211098+00:00"
+  },
+  {
+    "section": "Task 2",
+    "test": "Zone method, Nagaland \u2192 fallback zone",
+    "passed": true,
+    "details": "method: zone, shipping_inr: 1499, notes: Zone \u00b7 Rest of India",
+    "timestamp": "2026-07-06T09:47:05.212946+00:00"
+  },
+  {
+    "section": "Task 2",
+    "test": "PATCH method=distance \u2192 200",
+    "passed": true,
+    "details": "Status: 200, method: distance",
+    "timestamp": "2026-07-06T09:47:05.217956+00:00"
+  },
+  {
+    "section": "Task 2",
+    "test": "Distance method, Tamil Nadu \u2192 ~4289 INR",
+    "passed": true,
+    "details": "method: distance, shipping_inr: 4289 (expected ~4289), notes: Distance ~1330 km \u00b7 base \u20b9299 + \u20b93.0/km",
+    "timestamp": "2026-07-06T09:47:05.219797+00:00"
+  },
+  {
+    "section": "Task 2",
+    "test": "PATCH restore method=flat \u2192 200",
+    "passed": true,
+    "details": "Status: 200, method: flat",
+    "timestamp": "2026-07-06T09:47:05.224175+00:00"
+  },
+  {
+    "section": "Task 3",
+    "test": "Create test order",
+    "passed": true,
+    "details": "Order: ARF-D7D1AF0B",
+    "timestamp": "2026-07-06T09:47:05.498039+00:00"
+  },
+  {
+    "section": "Task 3",
+    "test": "PATCH tracking with full payload \u2192 200",
+    "passed": true,
+    "details": "tracking_id: True, tracking_url: True, tracking_carrier: True, tracking_updated_at: True",
+    "timestamp": "2026-07-06T09:47:05.501497+00:00"
+  },
+  {
+    "section": "Task 3",
+    "test": "PATCH tracking partial (only carrier) \u2192 carrier changes, id remains",
+    "passed": true,
+    "details": "tracking_id unchanged: True (DTDC12345), tracking_carrier updated: True (BlueDart)",
+    "timestamp": "2026-07-06T09:47:05.504545+00:00"
+  },
+  {
+    "section": "Task 3",
+    "test": "GET /api/orders/{n} \u2192 tracking fields visible",
+    "passed": true,
+    "details": "tracking_id: DTDC12345, tracking_carrier: BlueDart",
+    "timestamp": "2026-07-06T09:47:05.506415+00:00"
+  },
+  {
+    "section": "Task 4",
+    "test": "Get product for test",
+    "passed": true,
+    "details": "Using: obsidian-geode-2x3",
+    "timestamp": "2026-07-06T09:47:05.508125+00:00"
+  },
+  {
+    "section": "Task 4",
+    "test": "Order with ONLY old fields \u2192 success",
+    "passed": true,
+    "details": "Order: ARF-8513401A",
+    "timestamp": "2026-07-06T09:47:05.509970+00:00"
+  },
+  {
+    "section": "Task 4",
+    "test": "Order with new fields \u2192 all fields persisted",
+    "passed": true,
+    "details": "line1: True, line2: True, landmark: True, state: True, country: True",
+    "timestamp": "2026-07-06T09:47:05.513595+00:00"
+  },
+  {
+    "section": "Task 4",
+    "test": "Total calculation: subtotal - discount + shipping = total",
+    "passed": true,
+    "details": "subtotal: 25000, discount: 2500, shipping: 1499, total: 23999, expected: 23999",
+    "timestamp": "2026-07-06T09:47:05.517007+00:00"
+  }
+]

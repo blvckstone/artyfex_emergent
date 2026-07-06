@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast, Toaster } from "sonner";
-import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2, Settings as SettingsIcon } from "lucide-react";
+import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2, Settings as SettingsIcon, Truck, Palette } from "lucide-react";
+import HomepageEditor from "@/components/admin/HomepageEditor";
+import ShippingEditor from "@/components/admin/ShippingEditor";
 
 const TOKEN_KEY = "artyfex_admin_token";
 
@@ -134,6 +136,16 @@ export default function AdminPage() {
     toast.success(`Order → ${status}`); reload();
   };
 
+  const updateOrderTracking = async (num, patch) => {
+    try {
+      await authed.patch(`/admin/orders/${num}/tracking`, patch);
+      toast.success("Tracking updated");
+      reload();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Update failed");
+    }
+  };
+
   const updateLeadStatus = async (id, status) => {
     await authed.patch(`/admin/leads/${id}`, { status });
     reload();
@@ -141,8 +153,10 @@ export default function AdminPage() {
 
   const tabs = [
     { key: "dashboard", label: "Dashboard", icon: LayoutGrid },
+    { key: "homepage", label: "Homepage", icon: Palette },
     { key: "products", label: "Products", icon: Package },
     { key: "orders", label: "Orders", icon: ShoppingBag },
+    { key: "shipping", label: "Shipping", icon: Truck },
     { key: "returns", label: "Returns", icon: RotateCcw },
     { key: "users", label: "Customers", icon: UserCircle },
     { key: "leads", label: "B2B Leads", icon: Users },
@@ -303,32 +317,18 @@ export default function AdminPage() {
             <div className="mt-6 grid gap-3">
               {orders.length === 0 && <div className="text-cream/40 text-sm">No orders yet.</div>}
               {orders.map((o) => (
-                <div key={o.order_number} className="hairline p-4">
-                  <div className="flex flex-wrap items-center gap-4">
-                    <div>
-                      <div className="text-gold font-mono text-sm">{o.order_number}</div>
-                      <div className="text-xs text-cream/50">{new Date(o.created_at).toLocaleString()}</div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm">{o.customer.name} · {o.customer.phone}</div>
-                      <div className="text-xs text-cream/50 truncate">{o.customer.address}, {o.customer.city} — {o.customer.pincode}</div>
-                    </div>
-                    <div className="text-cream">{formatINR(o.total_inr)}</div>
-                    <select value={o.status} onChange={(e)=>updateOrderStatus(o.order_number, e.target.value)}
-                      className="bg-ink-950 border border-white/15 text-xs text-cream px-3 py-2 uppercase tracking-luxury">
-                      {["pending_payment","confirmed","packed","shipped","delivered","cancelled","payment_failed"].map(s=>(
-                        <option key={s} value={s}>{s.replace(/_/g," ")}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="mt-3 text-xs text-cream/50">
-                    {o.items.length} item(s) · Payment: {o.payment_method}
-                    {o.razorpay_payment_id && ` · rzp: ${o.razorpay_payment_id}`}
-                  </div>
-                </div>
+                <OrderRow key={o.order_number} o={o} onStatus={updateOrderStatus} onTracking={updateOrderTracking} />
               ))}
             </div>
           </>
+        )}
+
+        {tab === "homepage" && (
+          <HomepageEditor authed={authed} />
+        )}
+
+        {tab === "shipping" && (
+          <ShippingEditor authed={authed} api={api} />
         )}
 
         {tab === "leads" && (
@@ -693,8 +693,89 @@ function CouponEditor({ initial, onCancel, onSave, saving }) {
   );
 }
 
-function ReturnRow({ r, onUpdate }) {
-  const [notes, setNotes] = useState(r.admin_notes || "");
+function OrderRow({ o, onStatus, onTracking }) {
+  const [trackingId, setTrackingId] = useState(o.tracking_id || "");
+  const [trackingUrl, setTrackingUrl] = useState(o.tracking_url || "");
+  const [trackingCarrier, setTrackingCarrier] = useState(o.tracking_carrier || "");
+  const [showTracking, setShowTracking] = useState(!!o.tracking_id);
+  const [saving, setSaving] = useState(false);
+
+  const c = o.customer || {};
+  const addrLine = [c.line1 || c.address, c.line2, c.landmark].filter(Boolean).join(", ");
+  const stateLine = [c.city, c.state, c.pincode].filter(Boolean).join(" · ");
+
+  const saveTracking = async () => {
+    setSaving(true);
+    try {
+      await onTracking(o.order_number, {
+        tracking_id: trackingId || null,
+        tracking_url: trackingUrl || null,
+        tracking_carrier: trackingCarrier || null,
+      });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="hairline p-4" data-testid={`admin-order-${o.order_number}`}>
+      <div className="flex flex-wrap items-center gap-4">
+        <div>
+          <div className="text-gold font-mono text-sm">{o.order_number}</div>
+          <div className="text-xs text-cream/50">{new Date(o.created_at).toLocaleString()}</div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm">{c.name} · {c.phone}</div>
+          <div className="text-xs text-cream/50 truncate">{addrLine}</div>
+          <div className="text-xs text-cream/40 truncate">{stateLine}{c.country && c.country !== "India" ? ` · ${c.country}` : ""}</div>
+        </div>
+        <div className="text-cream">₹{(o.total_inr || 0).toLocaleString("en-IN")}</div>
+        <select value={o.status} onChange={(e) => onStatus(o.order_number, e.target.value)}
+          className="bg-ink-950 border border-white/15 text-xs text-cream px-3 py-2 uppercase tracking-luxury">
+          {["pending_payment", "confirmed", "packed", "shipped", "delivered", "cancelled", "payment_failed"].map(s => (
+            <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+          ))}
+        </select>
+      </div>
+      <div className="mt-3 flex items-center gap-3 flex-wrap text-xs text-cream/50">
+        <span>{o.items.length} item(s) · Payment: {o.payment_method}</span>
+        {o.razorpay_payment_id && <span>· rzp: {o.razorpay_payment_id}</span>}
+        <button
+          type="button"
+          data-testid={`admin-order-toggle-tracking-${o.order_number}`}
+          onClick={() => setShowTracking((v) => !v)}
+          className="ml-auto text-[10px] uppercase tracking-luxury text-gold border border-gold/30 px-3 py-1 hover:bg-gold/10"
+        >
+          {o.tracking_id ? `Tracking: ${o.tracking_id}` : (showTracking ? "Hide tracking" : "Add tracking")}
+        </button>
+      </div>
+      {showTracking && (
+        <div className="mt-3 grid sm:grid-cols-[1fr_1fr_1.5fr_auto] gap-2 items-end border-t border-white/5 pt-3">
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-luxury text-cream/50">Carrier</span>
+            <input data-testid={`admin-order-carrier-${o.order_number}`} value={trackingCarrier} onChange={(e) => setTrackingCarrier(e.target.value)} placeholder="BlueDart / DTDC / Delhivery" className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none" />
+          </label>
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-luxury text-cream/50">Tracking ID</span>
+            <input data-testid={`admin-order-trackingid-${o.order_number}`} value={trackingId} onChange={(e) => setTrackingId(e.target.value)} placeholder="e.g. DTDC1234567" className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none font-mono" />
+          </label>
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-luxury text-cream/50">Tracking URL (optional)</span>
+            <input data-testid={`admin-order-trackingurl-${o.order_number}`} value={trackingUrl} onChange={(e) => setTrackingUrl(e.target.value)} placeholder="https://carrier.com/track/…" className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none" />
+          </label>
+          <button
+            data-testid={`admin-order-save-tracking-${o.order_number}`}
+            onClick={saveTracking}
+            disabled={saving}
+            className="px-4 py-2 bg-gold text-ink-950 hover:bg-cream text-xs uppercase tracking-luxury disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save tracking"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReturnRow({ r, onUpdate }) {  const [notes, setNotes] = useState(r.admin_notes || "");
   const [genuine, setGenuine] = useState(r.is_genuine === null || r.is_genuine === undefined ? "" : String(r.is_genuine));
   const isFinal = ["approved", "rejected", "refunded"].includes(r.status);
   const daysSinceDelivery = r.order_delivered_at
