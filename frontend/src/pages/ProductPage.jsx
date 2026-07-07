@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { ShoppingBag, Check, Heart, Share2, Copy, Instagram, MessageCircle, ArrowLeft, Plus, Minus } from "lucide-react";
+import { ShoppingBag, Check, Heart, Share2, Copy, Instagram, MessageCircle, ArrowLeft, Plus, Minus, Star } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ProductGallery from "@/components/ProductGallery";
@@ -22,6 +22,7 @@ export default function ProductPage() {
   const { has, toggle } = useWishlist();
   const { user, openAuth } = useAuth();
   const [product, setProduct] = useState(null);
+  const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [variantKey, setVariantKey] = useState("");
   const [qty, setQty] = useState(1);
@@ -35,6 +36,21 @@ export default function ProductPage() {
       .catch(() => setProduct(null))
       .finally(() => setLoading(false));
   }, [slug]);
+
+  // Fetch all reviews once and filter for this product (backend has no per-product endpoint)
+  useEffect(() => {
+    if (!product?.id) return;
+    api.get("/reviews")
+      .then((r) => setReviews((r.data || []).filter((rv) => rv.product_id === product.id)))
+      .catch(() => setReviews([]));
+  }, [product?.id]);
+
+  // Compute average rating (rounded to 1 decimal) and count
+  const ratingStats = useMemo(() => {
+    if (!reviews.length) return { count: 0, avg: 0 };
+    const sum = reviews.reduce((a, r) => a + (Number(r.rating) || 0), 0);
+    return { count: reviews.length, avg: Math.round((sum / reviews.length) * 10) / 10 };
+  }, [reviews]);
 
   const activeVariant = useMemo(
     () => (product ? product.variants.find((v) => v.key === variantKey) || product.variants[0] : null),
@@ -188,6 +204,32 @@ export default function ProductPage() {
             </h1>
             <p className="mt-3 text-lg italic text-gold-soft font-serif">{product.tagline}</p>
 
+            {/* Ratings — hidden entirely when no reviews for this product */}
+            {ratingStats.count > 0 && (
+              <div className="mt-4 inline-flex items-center gap-2" data-testid="product-rating">
+                <div className="flex items-center gap-0.5" aria-label={`${ratingStats.avg} out of 5 stars`}>
+                  {[1, 2, 3, 4, 5].map((n) => {
+                    const filled = ratingStats.avg >= n;
+                    const half = !filled && ratingStats.avg >= n - 0.5;
+                    return (
+                      <span key={n} className="relative inline-flex">
+                        <Star className={`w-4 h-4 ${filled ? "fill-gold text-gold" : "text-cream/25"}`} />
+                        {half && (
+                          <span className="absolute inset-0 overflow-hidden" style={{ width: "50%" }}>
+                            <Star className="w-4 h-4 fill-gold text-gold" />
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+                <span className="text-sm text-cream/80 font-medium" data-testid="product-rating-avg">{ratingStats.avg.toFixed(1)}</span>
+                <a href="#reviews" className="text-xs text-cream/50 hover:text-gold underline underline-offset-2" data-testid="product-rating-count">
+                  ({ratingStats.count} {ratingStats.count === 1 ? "review" : "reviews"})
+                </a>
+              </div>
+            )}
+
             {/* Pricing */}
             <div className="mt-8 flex items-baseline gap-4 flex-wrap" data-testid="product-price-block">
               <span className="font-serif text-4xl text-cream" data-testid="product-price">{formatINR(effectivePrice)}</span>
@@ -310,11 +352,11 @@ export default function ProductPage() {
                 <AnimatePresence mode="wait">
                   {added ? (
                     <motion.span key="added" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="inline-flex items-center gap-2">
-                      <Check className="w-4 h-4" /> Added to atelier
+                      <Check className="w-4 h-4" /> Added to cart
                     </motion.span>
                   ) : (
                     <motion.span key="add" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="inline-flex items-center gap-3">
-                      <ShoppingBag className="w-4 h-4" /> {outOfStock ? "Out of stock" : "Add to Atelier"}
+                      <ShoppingBag className="w-4 h-4" /> {outOfStock ? "Out of stock" : "Add to Cart"}
                     </motion.span>
                   )}
                 </AnimatePresence>

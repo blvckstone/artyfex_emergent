@@ -85,8 +85,7 @@ function Home() {
           ],
         }}
       />
-      <AnnouncementBar content={homepage?.announcement} />
-      <Navbar />
+      <Navbar announcement={homepage?.announcement} />
       <main>
         <Hero content={homepage?.hero} />
         <ProductShowcase product={hero} />

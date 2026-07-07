@@ -11,7 +11,7 @@ export const Footer = () => {
           <div className="lg:col-span-6">
             <BrandLogo
               imgClassName="h-10 md:h-14 w-auto object-contain mb-8"
-              textClassName="font-serif text-3xl md:text-4xl tracking-tight text-cream flex items-baseline gap-1 mb-8"
+              textClassName="font-serif text-3xl md:text-4xl tracking-tight text-cream inline-flex items-baseline mb-8"
               className="mb-2"
             />
             <h3 className="font-serif text-5xl md:text-6xl lg:text-7xl leading-[0.9] text-cream">
@@ -38,36 +38,39 @@ export const Footer = () => {
             </div>
           </div>
 
-          <FooterCol title="Atelier">
-            <Link to="/about">About Us</Link>
-            <a href="/#craft">The Craft</a>
-            <Link to="/shop">The Collection</Link>
-            <a href="/#reviews">Collectors</a>
-            <a href="/#b2b">Trade / B2B</a>
-            <Link to="/admin">Admin Panel</Link>
-          </FooterCol>
+          {/* Link columns — laid out as 2×2 grid so they use screen space evenly */}
+          <div className="lg:col-span-6 grid grid-cols-2 gap-x-8 gap-y-12">
+            <FooterCol title="Atelier">
+              <Link to="/about">About Us</Link>
+              <a href="/#craft">The Craft</a>
+              <Link to="/shop">The Collection</Link>
+              <a href="/#reviews">Collectors</a>
+              <a href="/#b2b">Trade / B2B</a>
+              <Link to="/admin">Admin Panel</Link>
+            </FooterCol>
 
-          <FooterCol title="Support">
-            <Link to="/contact">Contact Atelier</Link>
-            <Link to="/policies/shipping">Shipping & Returns</Link>
-            <Link to="/policies/refund">Care Guide</Link>
-            <Link to="/account">Order Tracking</Link>
-          </FooterCol>
+            <FooterCol title="Support">
+              <Link to="/contact">Contact Atelier</Link>
+              <Link to="/policies/shipping">Shipping & Returns</Link>
+              <Link to="/policies/refund">Care Guide</Link>
+              <Link to="/account">Order Tracking</Link>
+            </FooterCol>
 
-          <FooterCol title="Legal">
-            <Link to="/policies/privacy">Privacy Policy</Link>
-            <Link to="/policies/terms">Terms &amp; Conditions</Link>
-            <Link to="/policies/refund">Returns &amp; Refunds</Link>
-            <Link to="/policies/shipping">Shipping Policy</Link>
-          </FooterCol>
+            <FooterCol title="Legal">
+              <Link to="/policies/privacy">Privacy Policy</Link>
+              <Link to="/policies/terms">Terms &amp; Conditions</Link>
+              <Link to="/policies/refund">Returns &amp; Refunds</Link>
+              <Link to="/policies/shipping">Shipping Policy</Link>
+            </FooterCol>
 
-          <FooterCol title="Contact">
-            <span className="text-cream/70">Maloni Mahada</span>
-            <span className="text-cream/50">Malad West, Mumbai 400095</span>
-            <a href="mailto:artyfex@artyfex.in" className="text-cream/70 hover:text-gold">artyfex@artyfex.in</a>
-            <a href="mailto:artyfex.in@gmail.com" className="text-cream/70 hover:text-gold">artyfex.in@gmail.com</a>
-            <a href="tel:+919970107760" className="text-cream/70 hover:text-gold">+91 99701 07760 · WhatsApp</a>
-          </FooterCol>
+            <FooterCol title="Contact">
+              <span className="text-cream/70">Maloni Mahada</span>
+              <span className="text-cream/50">Malad West, Mumbai 400095</span>
+              <a href="mailto:artyfex@artyfex.in" className="text-cream/70 hover:text-gold break-all">artyfex@artyfex.in</a>
+              <a href="mailto:artyfex.in@gmail.com" className="text-cream/70 hover:text-gold break-all">artyfex.in@gmail.com</a>
+              <a href="tel:+919970107760" className="text-cream/70 hover:text-gold">+91 99701 07760 · WhatsApp</a>
+            </FooterCol>
+          </div>
         </div>
 
         <div className="mt-16 pt-6 border-t border-white/5 text-xs text-cream/40 font-light leading-relaxed max-w-3xl">
@@ -78,17 +81,24 @@ export const Footer = () => {
           signature of the atelier.
         </div>
 
-        <div className="mt-10 pt-6 border-t border-white/5 flex flex-col md:flex-row justify-between gap-6">
+        <div className="mt-10 pt-6 border-t border-white/5 text-center">
           <div className="font-serif text-[10vw] lg:text-[8vw] leading-none text-cream/5 select-none pointer-events-none">
             ArtyFex
           </div>
         </div>
-        <div className="flex flex-col md:flex-row justify-between gap-4 text-[10px] uppercase tracking-luxury text-cream/40">
-          <span>© {new Date().getFullYear()} ArtyFex · All rights reserved</span>
-          <div className="flex gap-6">
-            <Link to="/policies/terms">Terms</Link>
-            <Link to="/policies/privacy">Privacy</Link>
-            <Link to="/policies/refund">Refunds</Link>
+
+        {/* Bottom bar — centred */}
+        <div className="mt-6 text-center space-y-2">
+          <div className="text-[10px] uppercase tracking-luxury text-cream/40">
+            © {new Date().getFullYear()} ArtyFex · All rights reserved
+          </div>
+          <div className="flex justify-center gap-6 text-[10px] uppercase tracking-luxury text-cream/40">
+            <Link to="/policies/terms" className="hover:text-gold">Terms</Link>
+            <Link to="/policies/privacy" className="hover:text-gold">Privacy</Link>
+            <Link to="/policies/refund" className="hover:text-gold">Refunds</Link>
+          </div>
+          <div className="pt-3 text-[10px] uppercase tracking-luxury text-gold-soft" data-testid="footer-credit">
+            Developed &amp; Maintain By Mohammad Shoeb
           </div>
         </div>
       </div>
@@ -97,8 +107,8 @@ export const Footer = () => {
 };
 
 const FooterCol = ({ title, children }) => (
-  <div className="lg:col-span-2">
-    <div className="text-[10px] uppercase tracking-luxury text-gold-soft mb-6">{title}</div>
+  <div>
+    <div className="text-[10px] uppercase tracking-luxury text-gold-soft mb-4">{title}</div>
     <div className="flex flex-col gap-3 text-sm">
       {React.Children.map(children, (c) =>
         React.cloneElement(c, {

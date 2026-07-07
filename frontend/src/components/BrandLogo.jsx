@@ -19,7 +19,7 @@ export default function BrandLogo({
 
   return (
     <span
-      className={`inline-flex items-center gap-2 ${className}`}
+      className={`inline-flex items-center ${className}`}
       data-testid="brand-logo"
     >
       {!failed ? (
@@ -33,7 +33,7 @@ export default function BrandLogo({
         <span
           className={
             textClassName ||
-            "font-serif text-2xl md:text-3xl tracking-tight text-cream flex items-baseline gap-1"
+            "font-serif text-2xl md:text-3xl tracking-tight text-cream inline-flex items-baseline"
           }
         >
           Arty<span className="italic text-gold">Fex</span>

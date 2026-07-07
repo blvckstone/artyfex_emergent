@@ -78,6 +78,15 @@ export default function ProductGallery({ product, variantImage }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [next, prev, lightboxOpen]);
 
+  // Lock body scroll while lightbox is open
+  useEffect(() => {
+    if (lightboxOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [lightboxOpen]);
+
   const handleMouseMove = (e) => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -118,10 +127,13 @@ export default function ProductGallery({ product, variantImage }) {
         onMouseEnter={() => setZooming(true)}
         onMouseLeave={() => setZooming(false)}
         onMouseMove={handleMouseMove}
+        onClick={() => setLightboxOpen(true)}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
-        className="relative aspect-[4/5] w-full overflow-hidden border border-white/10 bg-ink-900 group select-none"
-        style={{ cursor: zooming ? "zoom-in" : "default" }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLightboxOpen(true); } }}
+        className="relative aspect-[4/5] w-full overflow-hidden border border-white/10 bg-ink-900 group select-none cursor-zoom-in"
         data-testid="product-gallery-main-container"
       >
         <AnimatePresence initial={false} custom={direction} mode="wait">
@@ -156,9 +168,9 @@ export default function ProductGallery({ product, variantImage }) {
           {product?.craft_hours} artisan hours
         </div>
 
-        {/* Zoom hint */}
+        {/* Zoom hint — desktop only (mobile is tap-to-zoom via lightbox) */}
         <div
-          className={`absolute top-4 right-4 glass px-2.5 py-1.5 text-[10px] uppercase tracking-luxury text-cream/70 inline-flex items-center gap-1.5 pointer-events-none transition-opacity duration-300 ${
+          className={`hidden md:inline-flex absolute top-4 right-4 glass px-2.5 py-1.5 text-[10px] uppercase tracking-luxury text-cream/70 items-center gap-1.5 pointer-events-none transition-opacity duration-300 ${
             zooming ? "opacity-0" : "opacity-100"
           }`}
         >
@@ -189,20 +201,11 @@ export default function ProductGallery({ product, variantImage }) {
           </>
         )}
 
-        {/* Expand to lightbox */}
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); setLightboxOpen(true); }}
-          data-testid="gallery-expand"
-          aria-label="View fullscreen"
-          className="absolute bottom-4 left-4 z-10 glass border border-white/10 text-cream/80 hover:text-gold hover:border-gold/40 transition-all px-3 py-2 text-[10px] uppercase tracking-luxury inline-flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus:opacity-100"
-        >
-          <ZoomIn className="w-3 h-3" /> Fullscreen
-        </button>
+        {/* (Fullscreen open button removed — the entire image is clickable now) */}
 
-        {/* Index counter */}
+        {/* Index counter — bottom-left on mobile (avoids craft-hours badge), top-center on desktop */}
         {allImages.length > 1 && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 glass px-2.5 py-1 text-[10px] tracking-luxury text-cream/70 pointer-events-none">
+          <div className="absolute bottom-4 left-4 md:bottom-auto md:top-4 md:left-1/2 md:-translate-x-1/2 z-10 glass px-2.5 py-1 text-[10px] tracking-luxury text-cream/70 pointer-events-none">
             {activeIdx + 1} / {allImages.length}
           </div>
         )}
@@ -243,7 +246,7 @@ export default function ProductGallery({ product, variantImage }) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.35 }}
-            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 md:p-8"
+            className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 md:p-8"
             data-testid="gallery-lightbox"
             onClick={() => setLightboxOpen(false)}
           >

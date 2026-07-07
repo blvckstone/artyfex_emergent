@@ -6,6 +6,8 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { IDS } from "@/constants/testIds";
 import BrandLogo from "@/components/BrandLogo";
+import AnnouncementBar from "@/components/AnnouncementBar";
+import { fetchHomepage } from "@/lib/homepage";
 
 const links = [
   { id: IDS.nav.collection, label: "Shop", href: "/shop", route: true },
@@ -21,19 +23,31 @@ const links = [
 function scrollToId(id) {
   const el = document.getElementById(id);
   if (!el) return false;
-  // Account for the fixed 80px navbar
-  const y = el.getBoundingClientRect().top + window.pageYOffset - 72;
+  // Account for the fixed header (announcement ~30 + navbar ~56/64)
+  const y = el.getBoundingClientRect().top + window.pageYOffset - 96;
   window.scrollTo({ top: y, behavior: "smooth" });
   return true;
 }
 
-export const Navbar = () => {
+export const Navbar = ({ announcement: announcementProp }) => {
   const { setIsOpen, count } = useCart();
   const { user, openAuth } = useAuth();
   const nav = useNavigate();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [announcement, setAnnouncement] = useState(announcementProp || null);
+
+  // If parent didn't provide, fetch homepage announcement once so the bar
+  // appears on every page consistently.
+  useEffect(() => {
+    if (announcementProp) { setAnnouncement(announcementProp); return; }
+    let cancelled = false;
+    fetchHomepage()
+      .then((hp) => { if (!cancelled) setAnnouncement(hp?.announcement || null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [announcementProp]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -72,7 +86,9 @@ export const Navbar = () => {
         scrolled ? "glass" : "bg-transparent"
       }`}
     >
-      <div className="max-w-[1440px] mx-auto px-6 md:px-12 lg:px-16 flex items-center justify-between h-20">
+      {/* Announcement bar sits INSIDE the fixed header so nothing overlaps */}
+      <AnnouncementBar content={announcement} />
+      <div className="max-w-[1440px] mx-auto px-6 md:px-12 lg:px-16 flex items-center justify-between h-14 md:h-16">
         <Link
           to="/"
           data-testid={IDS.nav.logo}

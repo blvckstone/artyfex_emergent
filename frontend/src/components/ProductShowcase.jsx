@@ -240,7 +240,7 @@ export const ProductShowcase = ({ product }) => {
                       exit={{ opacity: 0, y: -8 }}
                       className="inline-flex items-center gap-2"
                     >
-                      <Check className="w-4 h-4" /> Added to atelier
+                      <Check className="w-4 h-4" /> Added to cart
                     </motion.span>
                   ) : (
                     <motion.span
@@ -250,7 +250,7 @@ export const ProductShowcase = ({ product }) => {
                       exit={{ opacity: 0, y: -8 }}
                       className="inline-flex items-center gap-3"
                     >
-                      <ShoppingBag className="w-4 h-4" /> Add to Atelier
+                      <ShoppingBag className="w-4 h-4" /> Add to Cart
                     </motion.span>
                   )}
                 </AnimatePresence>
