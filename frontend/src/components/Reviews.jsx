@@ -11,7 +11,27 @@ const Stars = ({ rating = 5 }) => (
   </div>
 );
 
-export const Reviews = ({ reviews = [] }) => {
+export const Reviews = ({ reviews = [], content }) => {
+  const c = content || {};
+  const eyebrow = c.eyebrow || "Verified Collectors";
+  const line1 = c.headline_line_1 || "Voices from";
+  const italic = c.headline_italic || "the collectors";
+  const avg = c.average_rating || "4.98";
+  const featuredIds = Array.isArray(c.featured_review_ids) ? c.featured_review_ids : [];
+
+  // If admin picked specific reviews, use those in that order.
+  // Otherwise, prefer any reviews marked `featured: true`. If none, show all.
+  let list;
+  if (featuredIds.length > 0) {
+    const map = new Map(reviews.map((r) => [r.id, r]));
+    list = featuredIds.map((id) => map.get(id)).filter(Boolean);
+  } else {
+    const flagged = reviews.filter((r) => r.featured);
+    list = flagged.length > 0 ? flagged : reviews;
+  }
+
+  if (list.length === 0) return null;
+
   return (
     <section id="reviews" data-testid={IDS.reviews.section} className="relative bg-ink-900 py-24 md:py-40">
       <div className="max-w-[1440px] mx-auto px-6 md:px-12 lg:px-16">
@@ -20,20 +40,20 @@ export const Reviews = ({ reviews = [] }) => {
             <div className="flex items-center gap-3 mb-6">
               <span className="gold-line w-10" />
               <span className="text-[10px] uppercase tracking-luxury text-gold-soft">
-                Verified Collectors
+                {eyebrow}
               </span>
             </div>
             <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl leading-[0.95] text-cream text-balance">
-              Voices from <span className="italic font-display text-gold">the collectors</span>.
+              {line1} <span className="italic font-display text-gold">{italic}</span>.
             </h2>
           </div>
           <div className="lg:col-span-5 lg:col-start-8 self-end">
             <div className="flex items-center gap-6">
-              <div className="font-serif text-6xl text-cream">4.98</div>
+              <div className="font-serif text-6xl text-cream">{avg}</div>
               <div>
                 <Stars rating={5} />
                 <div className="mt-2 text-xs text-cream/50">
-                  Based on {reviews.length}+ verified purchases
+                  Based on {list.length}+ verified purchases
                 </div>
               </div>
             </div>
@@ -41,7 +61,7 @@ export const Reviews = ({ reviews = [] }) => {
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {reviews.map((r, i) => (
+          {list.map((r, i) => (
             <motion.article
               key={r.id || i}
               data-testid={IDS.reviews.card(i)}

@@ -3,7 +3,10 @@ import { Link } from "react-router-dom";
 import { Instagram, Facebook } from "lucide-react";
 import BrandLogo from "@/components/BrandLogo";
 
-export const Footer = () => {
+export const Footer = ({ importantNote }) => {
+  const noteEnabled = importantNote?.enabled !== false;
+  const noteLabel = importantNote?.label || "Important note";
+  const noteBody = importantNote?.body || "No inbuilt LED lighting is included with any ArtyFex piece. Ambient light shown in product and lifestyle imagery is for styling visualisation only. Every piece is 100% handmade and one of one — subtle organic variations in resin currents and crystal placement are the signature of the atelier.";
   return (
     <footer className="relative bg-black text-cream border-t border-white/5">
       <div className="max-w-[1440px] mx-auto px-6 md:px-12 lg:px-16 pt-24 pb-10">
@@ -73,13 +76,12 @@ export const Footer = () => {
           </div>
         </div>
 
-        <div className="mt-16 pt-6 border-t border-white/5 text-xs text-cream/40 font-light leading-relaxed max-w-3xl">
-          <span className="uppercase tracking-luxury text-gold-soft">Important note · </span>
-          No inbuilt LED lighting is included with any ArtyFex piece. Ambient light shown in
-          product and lifestyle imagery is for styling visualisation only. Every piece is 100% handmade
-          and one of one — subtle organic variations in resin currents and crystal placement are the
-          signature of the atelier.
-        </div>
+        {noteEnabled && (
+          <div className="mt-16 pt-6 border-t border-white/5 text-xs text-cream/40 font-light leading-relaxed max-w-3xl" data-testid="footer-important-note">
+            <span className="uppercase tracking-luxury text-gold-soft">{noteLabel} · </span>
+            {noteBody}
+          </div>
+        )}
 
         <div className="mt-10 pt-6 border-t border-white/5 text-center">
           <div className="font-serif text-[10vw] lg:text-[8vw] leading-none text-cream/5 select-none pointer-events-none">

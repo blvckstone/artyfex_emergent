@@ -62,7 +62,7 @@ function useAuthedApi(token) {
   }, [token]);
 }
 
-const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: '[\n  {"key":"gold-standard","label":"Gold · Standard","hex":"#D4AF37","image":"","size":"","stock":5,"price_inr":null,"mrp_inr":null}\n]', stock: 5, is_hero: false };
+const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: [{ key: "default", label: "Default", hex: "#333333", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null }], has_variations: false, stock: 5, is_hero: false };
 
 export default function AdminPage() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
@@ -153,13 +153,29 @@ export default function AdminPage() {
   const saveProduct = async (form) => {
     setSaving(true);
     try {
+      const variantsArr = Array.isArray(form.variants) ? form.variants : (typeof form.variants === "string" ? JSON.parse(form.variants) : []);
+      // If product has no variations, collapse to a single default variant so backend model is happy.
+      const finalVariants = form.has_variations
+        ? variantsArr.map((v) => ({
+            key: v.key || (v.label || "variant").toLowerCase().replace(/\s+/g, "-"),
+            label: v.label || "Variant",
+            hex: v.hex || "#333333",
+            image: v.image || "",
+            size: v.size || "",
+            stock: Number(v.stock ?? 0),
+            price_inr: v.price_inr === "" || v.price_inr == null ? null : Number(v.price_inr),
+            mrp_inr: v.mrp_inr === "" || v.mrp_inr == null ? null : Number(v.mrp_inr),
+          }))
+        : [{ key: "default", label: "Default", hex: "#333333", image: form.hero_image || "", size: form.size || "", stock: Number(form.stock || 0), price_inr: null, mrp_inr: null }];
+
+      const { has_variations, ...rest } = form;
       const payload = {
-        ...form,
+        ...rest,
         price_inr: Number(form.price_inr), mrp_inr: Number(form.mrp_inr),
         craft_hours: Number(form.craft_hours), stock: Number(form.stock),
         materials: typeof form.materials === "string" ? form.materials.split("\n").map(s=>s.trim()).filter(Boolean) : form.materials,
         gallery: typeof form.gallery === "string" ? form.gallery.split("\n").map(s=>s.trim()).filter(Boolean) : form.gallery,
-        variants: typeof form.variants === "string" ? JSON.parse(form.variants) : form.variants,
+        variants: finalVariants,
       };
       if (form.id) await authed.put(`/admin/products/${form.id}`, payload);
       else await authed.post("/admin/products", payload);
@@ -345,7 +361,16 @@ export default function AdminPage() {
                     <div className="text-xs text-cream/50">{p.size} · Stock {p.stock}</div>
                   </div>
                   <div className="text-cream">{formatINR(p.price_inr)}</div>
-                  <button onClick={()=>setEditing({...p, materials: p.materials.join("\n"), gallery: p.gallery.join("\n"), variants: JSON.stringify(p.variants, null, 2)})} className="text-xs text-gold hover:text-cream border border-gold/30 px-3 py-1.5">Edit</button>
+                  <button onClick={()=>{
+                    const hasVar = !(p.variants?.length === 1 && (p.variants[0].key === "default" || p.variants[0].label === "Default"));
+                    setEditing({
+                      ...p,
+                      materials: p.materials.join("\n"),
+                      gallery: p.gallery.join("\n"),
+                      variants: Array.isArray(p.variants) ? p.variants : [],
+                      has_variations: hasVar,
+                    });
+                  }} className="text-xs text-gold hover:text-cream border border-gold/30 px-3 py-1.5">Edit</button>
                   <button onClick={()=>deleteProduct(p.id)} className="text-red-400 hover:text-red-300 p-2"><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
@@ -488,15 +513,32 @@ export default function AdminPage() {
         {tab === "reviews" && (
           <>
             <h1 className="font-serif text-4xl">Reviews</h1>
+            <p className="mt-2 text-sm text-cream/50">Toggle the ⭐ star to mark a review as <em>featured</em>. Featured reviews are shown on the homepage.</p>
             <div className="mt-6 grid gap-3">
               {reviews.map((r) => (
-                <div key={r.id} className="hairline p-4 flex gap-4">
+                <div key={r.id} className={`hairline p-4 flex gap-4 ${r.featured ? "border-gold/40" : ""}`} data-testid={`admin-review-row-${r.id}`}>
                   {r.image && <img src={r.image} alt="" className="w-16 h-16 object-cover" />}
                   <div className="flex-1 min-w-0">
-                    <div className="font-serif text-lg">{r.title} <span className="text-gold text-sm">· {r.rating}★</span></div>
+                    <div className="font-serif text-lg">{r.title} <span className="text-gold text-sm">· {r.rating}★</span> {r.featured && <span className="text-[10px] uppercase tracking-luxury text-gold ml-2">Featured</span>}</div>
                     <div className="text-xs text-cream/50">{r.author} · {r.location}</div>
                     <div className="text-sm text-cream/70 mt-2 line-clamp-2">{r.body}</div>
                   </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await authed.patch(`/admin/reviews/${r.id}`, { featured: !r.featured });
+                        toast.success(!r.featured ? "Marked as featured" : "Removed from featured");
+                        reload();
+                      } catch (err) {
+                        toast.error("Update failed");
+                      }
+                    }}
+                    className={`p-2 border transition-colors ${r.featured ? "border-gold text-gold hover:bg-gold/10" : "border-white/20 text-cream/40 hover:border-gold hover:text-gold"}`}
+                    title={r.featured ? "Unfeature" : "Feature on homepage"}
+                    data-testid={`admin-review-feature-toggle-${r.id}`}
+                  >
+                    <Star className={`w-4 h-4 ${r.featured ? "fill-current" : ""}`} />
+                  </button>
                   <button onClick={async()=>{await authed.delete(`/admin/reviews/${r.id}`); toast.success("Deleted"); reload();}} className="text-red-400 p-2"><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
@@ -731,30 +773,131 @@ function Stat({ label, value, sub, accent }) {
 function ProductEditor({ initial, onCancel, onSave, saving }) {
   const [f, setF] = useState(initial);
   const upd = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+
+  const variants = Array.isArray(f.variants) ? f.variants : [];
+
+  const updVariant = (idx, field) => (e) => {
+    const v = e && e.target ? (e.target.type === "checkbox" ? e.target.checked : e.target.value) : e;
+    setF((prev) => {
+      const arr = [...(prev.variants || [])];
+      arr[idx] = { ...arr[idx], [field]: v };
+      return { ...prev, variants: arr };
+    });
+  };
+  const addVariant = () => setF((prev) => ({
+    ...prev,
+    variants: [...(prev.variants || []), { key: "", label: "", hex: "#D4AF37", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null }],
+  }));
+  const removeVariant = (idx) => setF((prev) => ({ ...prev, variants: (prev.variants || []).filter((_, i) => i !== idx) }));
+
   return (
     <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onCancel}>
-      <div className="bg-ink-900 border border-white/10 w-[min(760px,95vw)] max-h-[90vh] overflow-y-auto p-8" onClick={(e)=>e.stopPropagation()}>
+      <div className="bg-ink-900 border border-white/10 w-[min(880px,95vw)] max-h-[90vh] overflow-y-auto p-8" onClick={(e)=>e.stopPropagation()} data-testid="product-editor-modal">
         <div className="flex justify-between items-center">
           <h3 className="font-serif text-2xl">{initial.id ? "Edit product" : "New product"}</h3>
           <button onClick={onCancel} className="text-cream/50 hover:text-cream text-sm">Cancel</button>
         </div>
+
         <div className="mt-6 grid sm:grid-cols-2 gap-4">
-          <Fld label="Slug"><input value={f.slug} onChange={upd("slug")} className={inp} required /></Fld>
-          <Fld label="Name"><input value={f.name} onChange={upd("name")} className={inp} required /></Fld>
+          <Fld label="Slug (URL, e.g. obsidian-aurora)"><input value={f.slug} onChange={upd("slug")} className={inp} required data-testid="pe-slug" /></Fld>
+          <Fld label="Product name"><input value={f.name} onChange={upd("name")} className={inp} required data-testid="pe-name" /></Fld>
           <Fld label="Tagline"><input value={f.tagline} onChange={upd("tagline")} className={inp} required /></Fld>
-          <Fld label="Size"><input value={f.size} onChange={upd("size")} className={inp} required /></Fld>
-          <Fld label="Price (₹)"><input type="number" value={f.price_inr} onChange={upd("price_inr")} className={inp} required /></Fld>
-          <Fld label="MRP (₹)"><input type="number" value={f.mrp_inr} onChange={upd("mrp_inr")} className={inp} required /></Fld>
+          <Fld label="Size / dimensions"><input value={f.size} onChange={upd("size")} className={inp} required /></Fld>
+          <Fld label="Price (₹)"><input type="number" value={f.price_inr} onChange={upd("price_inr")} className={inp} required data-testid="pe-price" /></Fld>
+          <Fld label="MRP (₹)"><input type="number" value={f.mrp_inr} onChange={upd("mrp_inr")} className={inp} required data-testid="pe-mrp" /></Fld>
           <Fld label="Craft hours"><input type="number" value={f.craft_hours} onChange={upd("craft_hours")} className={inp} /></Fld>
-          <Fld label="Stock"><input type="number" value={f.stock} onChange={upd("stock")} className={inp} /></Fld>
-          <div className="sm:col-span-2"><Fld label="Hero image URL"><input value={f.hero_image} onChange={upd("hero_image")} className={inp} required /></Fld></div>
-          <div className="sm:col-span-2"><Fld label="Description"><textarea rows={3} value={f.description} onChange={upd("description")} className={inp} /></Fld></div>
-          <div className="sm:col-span-2"><Fld label="Materials (one per line)"><textarea rows={4} value={f.materials} onChange={upd("materials")} className={inp} /></Fld></div>
-          <div className="sm:col-span-2"><Fld label="Gallery URLs (one per line)"><textarea rows={3} value={f.gallery} onChange={upd("gallery")} className={inp} /></Fld></div>
-          <div className="sm:col-span-2"><Fld label='Variants JSON — supports size/stock/price_inr/mrp_inr per variant (Shopify-style)'><textarea rows={6} value={f.variants} onChange={upd("variants")} className={`${inp} font-mono text-xs`} /></Fld></div>
-          <label className="flex items-center gap-2 text-sm text-cream/70"><input type="checkbox" checked={!!f.is_hero} onChange={upd("is_hero")} /> Mark as hero product</label>
+          <Fld label="Stock (base)"><input type="number" value={f.stock} onChange={upd("stock")} className={inp} data-testid="pe-stock" /></Fld>
         </div>
-        <button disabled={saving} onClick={()=>onSave(f)} className="mt-8 w-full bg-gold text-ink-950 py-4 text-xs uppercase tracking-luxury hover:bg-cream disabled:opacity-60">
+
+        <div className="mt-6 grid gap-4">
+          <Fld label="Main image URL" hint="Shown on shop cards and as the hero on the product page.">
+            <input value={f.hero_image} onChange={upd("hero_image")} className={inp} required data-testid="pe-hero-image" placeholder="https://..." />
+          </Fld>
+          <Fld label="Thumbnail image URLs (one per line)" hint="Extra photos shown in the gallery under the main image.">
+            <textarea rows={3} value={f.gallery} onChange={upd("gallery")} className={inp} placeholder="https://image1.jpg&#10;https://image2.jpg" data-testid="pe-gallery" />
+          </Fld>
+          <Fld label="Description"><textarea rows={3} value={f.description} onChange={upd("description")} className={inp} /></Fld>
+          <Fld label="Materials (one per line)"><textarea rows={3} value={f.materials} onChange={upd("materials")} className={inp} /></Fld>
+        </div>
+
+        {/* Variations toggle */}
+        <div className="mt-8 border border-white/10 p-5 bg-ink-950/40">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!f.has_variations}
+              onChange={(e) => setF({ ...f, has_variations: e.target.checked, variants: e.target.checked ? (variants.length > 0 && !(variants[0]?.key === "default") ? variants : [{ key: "", label: "", hex: "#D4AF37", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null }]) : [] })}
+              className="accent-gold w-4 h-4"
+              data-testid="pe-has-variations"
+            />
+            <div>
+              <div className="text-sm text-cream">Does this product have variations?</div>
+              <div className="text-xs text-cream/50">Tick this if the item comes in different sizes, colours or shapes.</div>
+            </div>
+          </label>
+
+          {f.has_variations && (
+            <div className="mt-6 space-y-4" data-testid="pe-variations-editor">
+              <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Variations · {variants.length}</div>
+              {variants.length === 0 && (
+                <div className="text-xs text-cream/50">No variations yet. Click &quot;+ Add variation&quot; to add one.</div>
+              )}
+              {variants.map((v, idx) => (
+                <div key={idx} className="border border-white/10 p-4 bg-ink-900" data-testid={`pe-variant-row-${idx}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-xs text-cream/60">Variation {idx + 1}</div>
+                    <button type="button" onClick={() => removeVariant(idx)} className="text-red-400 hover:text-red-300 p-1" data-testid={`pe-variant-remove-${idx}`}>
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <Fld label="Label (shown to buyers, e.g. 'Signature Gold · 2 ft')">
+                      <input value={v.label || ""} onChange={updVariant(idx, "label")} className={inp} data-testid={`pe-variant-label-${idx}`} />
+                    </Fld>
+                    <Fld label="Internal key (auto = slug of label)">
+                      <input value={v.key || ""} onChange={updVariant(idx, "key")} onBlur={(e)=>{ if (!e.target.value && v.label) updVariant(idx,"key")({ target:{ value: v.label.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9\-]/g,"") }}); }} className={inp} placeholder="e.g. signature-gold-2ft" />
+                    </Fld>
+                    <Fld label="Size (optional, e.g. 24 in / 2 ft)">
+                      <input value={v.size || ""} onChange={updVariant(idx, "size")} className={inp} />
+                    </Fld>
+                    <Fld label="Colour" hint="Pick a colour — the swatch is shown to buyers.">
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={v.hex || "#333333"} onChange={updVariant(idx, "hex")} className="w-12 h-10 border border-white/15 bg-ink-950 cursor-pointer" />
+                        <input value={v.hex || ""} onChange={updVariant(idx, "hex")} className={`${inp} font-mono`} placeholder="#D4AF37" />
+                      </div>
+                    </Fld>
+                    <Fld label="Stock available">
+                      <input type="number" min="0" value={v.stock ?? 0} onChange={updVariant(idx, "stock")} className={inp} data-testid={`pe-variant-stock-${idx}`} />
+                    </Fld>
+                    <Fld label="Price override (₹) — blank = use base price">
+                      <input type="number" min="0" value={v.price_inr ?? ""} onChange={updVariant(idx, "price_inr")} className={inp} placeholder="Same as base" />
+                    </Fld>
+                    <div className="sm:col-span-2">
+                      <Fld label="MRP override (₹) — blank = use base MRP">
+                        <input type="number" min="0" value={v.mrp_inr ?? ""} onChange={updVariant(idx, "mrp_inr")} className={inp} placeholder="Same as base MRP" />
+                      </Fld>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Fld label="Image URL for this variation" hint="Shown when the buyer picks this variation.">
+                        <input value={v.image || ""} onChange={updVariant(idx, "image")} className={inp} placeholder="https://..." data-testid={`pe-variant-image-${idx}`} />
+                      </Fld>
+                      {v.image && <img src={v.image} alt="" className="mt-2 w-24 h-24 object-cover border border-white/10" />}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <button type="button" onClick={addVariant} className="inline-flex items-center gap-2 text-xs uppercase tracking-luxury border border-gold/40 text-gold px-4 py-2.5 hover:bg-gold/10" data-testid="pe-add-variation">
+                <Plus className="w-3.5 h-3.5" /> Add variation
+              </button>
+            </div>
+          )}
+        </div>
+
+        <label className="mt-6 flex items-center gap-2 text-sm text-cream/70">
+          <input type="checkbox" checked={!!f.is_hero} onChange={upd("is_hero")} /> Mark as hero product (appears in the main hero showcase)
+        </label>
+
+        <button disabled={saving} onClick={()=>onSave(f)} className="mt-8 w-full bg-gold text-ink-950 py-4 text-xs uppercase tracking-luxury hover:bg-cream disabled:opacity-60" data-testid="pe-save">
           {saving ? <Loader2 className="w-4 h-4 animate-spin inline" /> : "Save product"}
         </button>
       </div>

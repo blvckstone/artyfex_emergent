@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Save, Image as ImageIcon, Megaphone, Sparkles, Star } from "lucide-react";
+import { Loader2, Save, Image as ImageIcon, Megaphone, Sparkles, Star, Hammer, LayoutGrid, MessageSquareQuote, AlertTriangle } from "lucide-react";
 
 const inp = "w-full bg-ink-950 border border-white/15 focus:border-gold focus:outline-none px-3 py-2.5 text-sm text-cream outline-none";
 const Fld = ({ label, children, hint }) => (
@@ -27,10 +27,14 @@ function Section({ icon: Icon, title, subtitle, children }) {
 export default function HomepageEditor({ authed }) {
   const [data, setData] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [productList, setProductList] = useState([]);
+  const [reviewList, setReviewList] = useState([]);
 
   useEffect(() => {
     if (!authed) return;
     authed.get("/admin/homepage").then(({ data }) => setData(data)).catch(() => toast.error("Could not load homepage settings"));
+    authed.get("/products").then(({ data }) => setProductList(data)).catch(() => {});
+    authed.get("/reviews").then(({ data }) => setReviewList(data)).catch(() => {});
   }, [authed]);
 
   if (!data) return <div className="text-cream/40 text-sm"><Loader2 className="w-4 h-4 animate-spin inline" /> Loading homepage settings…</div>;
@@ -51,6 +55,34 @@ export default function HomepageEditor({ authed }) {
       const clone = JSON.parse(JSON.stringify(prev));
       if (!clone.hero.stats) clone.hero.stats = [];
       clone.hero.stats[idx] = { ...clone.hero.stats[idx], [field]: e.target.value };
+      return clone;
+    });
+  };
+
+  const updateCraftStep = (idx, field) => (e) => {
+    setData((prev) => {
+      const clone = JSON.parse(JSON.stringify(prev));
+      if (!clone.craft) clone.craft = { steps: [] };
+      if (!Array.isArray(clone.craft.steps)) clone.craft.steps = [];
+      clone.craft.steps[idx] = { ...(clone.craft.steps[idx] || {}), [field]: e.target.value };
+      return clone;
+    });
+  };
+
+  const toggleInList = (path, id) => {
+    setData((prev) => {
+      const clone = JSON.parse(JSON.stringify(prev));
+      const keys = path.split(".");
+      let node = clone;
+      for (let i = 0; i < keys.length - 1; i++) {
+        if (node[keys[i]] === undefined || node[keys[i]] === null) node[keys[i]] = {};
+        node = node[keys[i]];
+      }
+      const last = keys[keys.length - 1];
+      const arr = Array.isArray(node[last]) ? [...node[last]] : [];
+      const idx = arr.indexOf(id);
+      if (idx >= 0) arr.splice(idx, 1); else arr.push(id);
+      node[last] = arr;
       return clone;
     });
   };
@@ -142,6 +174,120 @@ export default function HomepageEditor({ authed }) {
           <Fld label="Background color"><input value={data.sale_banner.bg_color} onChange={(e) => upd("sale_banner.bg_color")(e.target.value)} className={inp} /></Fld>
           <Fld label="Text color"><input value={data.sale_banner.text_color} onChange={(e) => upd("sale_banner.text_color")(e.target.value)} className={inp} /></Fld>
           <Fld label="Accent color"><input value={data.sale_banner.accent_color} onChange={(e) => upd("sale_banner.accent_color")(e.target.value)} className={inp} /></Fld>
+        </div>
+      </Section>
+
+      {/* Craft & Materials */}
+      <Section icon={Hammer} title="Craft & Materials section" subtitle="The atelier storytelling block below the hero. Controls the left-side image, headline, body, and 4 process steps.">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Fld label="Eyebrow (small caps)"><input value={data.craft?.eyebrow || ""} onChange={(e) => upd("craft.eyebrow")(e.target.value)} className={inp} data-testid="cms-craft-eyebrow" /></Fld>
+          <Fld label="Headline line 1"><input value={data.craft?.headline_line_1 || ""} onChange={(e) => upd("craft.headline_line_1")(e.target.value)} className={inp} /></Fld>
+          <Fld label="Italic word / accent"><input value={data.craft?.headline_italic || ""} onChange={(e) => upd("craft.headline_italic")(e.target.value)} className={inp} /></Fld>
+          <div className="sm:col-span-2"><Fld label="Body paragraph"><textarea rows={3} value={data.craft?.body || ""} onChange={(e) => upd("craft.body")(e.target.value)} className={inp} /></Fld></div>
+          <div className="sm:col-span-2"><Fld label="Section image URL" hint="The 4:5 image shown on the left (above 'Craft & Materials')."><input value={data.craft?.section_image || ""} onChange={(e) => upd("craft.section_image")(e.target.value)} className={inp} data-testid="cms-craft-image" /></Fld></div>
+          <Fld label="Image overlay label (small caps)"><input value={data.craft?.image_overlay_label || ""} onChange={(e) => upd("craft.image_overlay_label")(e.target.value)} className={inp} /></Fld>
+          <Fld label="Image overlay title"><input value={data.craft?.image_overlay_title || ""} onChange={(e) => upd("craft.image_overlay_title")(e.target.value)} className={inp} /></Fld>
+        </div>
+        <div className="mt-6">
+          <div className="text-[10px] uppercase tracking-luxury text-cream/50 mb-2">Process steps (4 tiles)</div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="border border-white/10 p-3 grid gap-2">
+                <input placeholder="Title (e.g. 01 · Design)" value={data.craft?.steps?.[i]?.title || ""} onChange={updateCraftStep(i, "title")} className={inp} />
+                <textarea rows={2} placeholder="Body" value={data.craft?.steps?.[i]?.body || ""} onChange={updateCraftStep(i, "body")} className={inp} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      {/* Collection section */}
+      <Section icon={LayoutGrid} title="Collection section" subtitle="Controls the 'Companion pieces' block. Tick the products you want to feature — leave all unchecked to auto-show every non-hero product.">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Fld label="Eyebrow (small caps)"><input value={data.collection_section?.eyebrow || ""} onChange={(e) => upd("collection_section.eyebrow")(e.target.value)} className={inp} /></Fld>
+          <Fld label="Headline line 1"><input value={data.collection_section?.headline_line_1 || ""} onChange={(e) => upd("collection_section.headline_line_1")(e.target.value)} className={inp} /></Fld>
+          <Fld label="Italic word / accent"><input value={data.collection_section?.headline_italic || ""} onChange={(e) => upd("collection_section.headline_italic")(e.target.value)} className={inp} /></Fld>
+          <div className="sm:col-span-2"><Fld label="Subtitle"><textarea rows={2} value={data.collection_section?.subtitle || ""} onChange={(e) => upd("collection_section.subtitle")(e.target.value)} className={inp} /></Fld></div>
+        </div>
+        <div className="mt-6">
+          <div className="text-[10px] uppercase tracking-luxury text-cream/50 mb-2">Featured products on homepage <span className="text-cream/30 normal-case">— {(data.collection_section?.featured_product_ids || []).length} selected. Leave empty to auto-show all non-hero.</span></div>
+          {productList.length === 0 ? (
+            <div className="text-xs text-cream/40">Loading products…</div>
+          ) : (
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {productList.map((p) => {
+                const selected = (data.collection_section?.featured_product_ids || []).includes(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    data-testid={`cms-featured-product-${p.slug}`}
+                    onClick={() => toggleInList("collection_section.featured_product_ids", p.id)}
+                    className={`flex items-center gap-3 p-3 border text-left transition-all ${selected ? "border-gold bg-gold/10" : "border-white/10 hover:border-white/30"}`}
+                  >
+                    <img src={p.hero_image} alt="" className="w-12 h-12 object-cover flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm text-cream truncate">{p.name.split(" — ")[0]}</div>
+                      <div className="text-[10px] uppercase tracking-luxury text-cream/40 truncate">{p.is_hero ? "Hero" : p.size}</div>
+                    </div>
+                    <input type="checkbox" checked={selected} readOnly className="accent-gold" />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Section>
+
+      {/* Reviews section */}
+      <Section icon={MessageSquareQuote} title="Verified Collectors reviews" subtitle="Homepage reviews block. Tick which reviews should appear — leave all unchecked to show every review.">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Fld label="Eyebrow (small caps)"><input value={data.reviews_section?.eyebrow || ""} onChange={(e) => upd("reviews_section.eyebrow")(e.target.value)} className={inp} /></Fld>
+          <Fld label="Average rating (display only)"><input value={data.reviews_section?.average_rating || ""} onChange={(e) => upd("reviews_section.average_rating")(e.target.value)} className={inp} placeholder="4.98" /></Fld>
+          <Fld label="Headline line 1"><input value={data.reviews_section?.headline_line_1 || ""} onChange={(e) => upd("reviews_section.headline_line_1")(e.target.value)} className={inp} /></Fld>
+          <Fld label="Italic word / accent"><input value={data.reviews_section?.headline_italic || ""} onChange={(e) => upd("reviews_section.headline_italic")(e.target.value)} className={inp} /></Fld>
+        </div>
+        <div className="mt-6">
+          <div className="text-[10px] uppercase tracking-luxury text-cream/50 mb-2">Featured reviews on homepage <span className="text-cream/30 normal-case">— {(data.reviews_section?.featured_review_ids || []).length} selected.</span></div>
+          {reviewList.length === 0 ? (
+            <div className="text-xs text-cream/40">No reviews yet.</div>
+          ) : (
+            <div className="grid sm:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-2">
+              {reviewList.map((r) => {
+                const selected = (data.reviews_section?.featured_review_ids || []).includes(r.id);
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    data-testid={`cms-featured-review-${r.id}`}
+                    onClick={() => toggleInList("reviews_section.featured_review_ids", r.id)}
+                    className={`p-3 border text-left transition-all ${selected ? "border-gold bg-gold/10" : "border-white/10 hover:border-white/30"}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-gold text-xs">{r.rating}★</span>
+                      <input type="checkbox" checked={selected} readOnly className="accent-gold" />
+                    </div>
+                    <div className="text-sm text-cream mt-1 truncate">{r.title}</div>
+                    <div className="text-xs text-cream/50 line-clamp-2 mt-1">{r.body}</div>
+                    <div className="text-[10px] uppercase tracking-luxury text-cream/40 mt-2">{r.author} · {r.location}</div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Section>
+
+      {/* Important note */}
+      <Section icon={AlertTriangle} title="Footer — Important note" subtitle="The disclaimer paragraph shown just above the giant ArtyFex watermark in the footer.">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <label className="flex items-center gap-2 text-sm text-cream/70">
+            <input type="checkbox" data-testid="cms-note-enabled" checked={data.important_note?.enabled !== false} onChange={(e) => upd("important_note.enabled")(e.target.checked)} className="accent-gold" /> Show important note in footer
+          </label>
+          <div />
+          <Fld label="Small caps label"><input value={data.important_note?.label || ""} onChange={(e) => upd("important_note.label")(e.target.value)} className={inp} placeholder="Important note" /></Fld>
+          <div />
+          <div className="sm:col-span-2"><Fld label="Body text"><textarea rows={4} value={data.important_note?.body || ""} onChange={(e) => upd("important_note.body")(e.target.value)} className={inp} data-testid="cms-note-body" /></Fld></div>
         </div>
       </Section>
 

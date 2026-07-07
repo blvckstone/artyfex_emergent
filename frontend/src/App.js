@@ -89,13 +89,13 @@ function Home() {
       <main>
         <Hero content={homepage?.hero} />
         <ProductShowcase product={hero} />
-        <Craftsmanship />
-        <Collection products={products} />
+        <Craftsmanship content={homepage?.craft} />
+        <Collection products={products} content={homepage?.collection_section} />
         <SaleBanner content={homepage?.sale_banner} />
-        <Reviews reviews={reviews} />
+        <Reviews reviews={reviews} content={homepage?.reviews_section} />
         <B2B />
       </main>
-      <Footer />
+      <Footer importantNote={homepage?.important_note} />
     </>
   );
 }

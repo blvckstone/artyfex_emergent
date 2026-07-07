@@ -687,6 +687,19 @@ async def admin_create_review(payload: ReviewIn, admin=Depends(get_current_admin
     return r
 
 
+class ReviewFeaturedIn(BaseModel):
+    featured: bool
+
+
+@api_router.patch("/admin/reviews/{review_id}", response_model=Review)
+async def admin_update_review_featured(review_id: str, payload: ReviewFeaturedIn, admin=Depends(get_current_admin)):
+    res = await db.reviews.update_one({"id": review_id}, {"$set": {"featured": payload.featured}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Review not found")
+    doc = await db.reviews.find_one({"id": review_id}, {"_id": 0})
+    return doc
+
+
 @api_router.delete("/admin/reviews/{review_id}")
 async def admin_delete_review(review_id: str, admin=Depends(get_current_admin)):
     res = await db.reviews.delete_one({"id": review_id})
@@ -1260,11 +1273,73 @@ class SaleBanner(BaseModel):
     image: str = ""
 
 
+class CraftStep(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    title: str = ""
+    body: str = ""
+
+
+class CraftSection(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    eyebrow: str = "Craft & Materials"
+    headline_line_1: str = "No two are alike."
+    headline_italic: str = "That is the point."
+    body: str = (
+        "Each ArtyFex mirror is poured, inlaid and framed entirely by hand in our Mumbai atelier. "
+        "No moulds. No stamps. No two identical currents of resin. What arrives at your door will never exist again."
+    )
+    section_image: str = "https://images.pexels.com/photos/18325786/pexels-photo-18325786.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    image_overlay_label: str = "Atelier"
+    image_overlay_title: str = "The 120-hour ritual"
+    steps: List[CraftStep] = Field(default_factory=lambda: [
+        CraftStep(title="01 · Design", body="A moodboard is composed with the collector. Dimensions, palette and crystal density are set."),
+        CraftStep(title="02 · Pour", body="Anti-yellowing epoxy is poured in layered veins. Every current is directed by hand."),
+        CraftStep(title="03 · Inlay", body="Real crushed crystal (5–10mm) is placed grain by grain into the wet resin surface."),
+        CraftStep(title="04 · Frame", body="A 1-inch hand-brushed golden aluminum border is fitted over 5mm scatter-proof glass."),
+    ])
+
+
+class CollectionSection(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    eyebrow: str = "The Collection"
+    headline_line_1: str = "Companion"
+    headline_italic: str = "pieces"
+    subtitle: str = "Smaller edits from the atelier — each still 100% handpoured, still one of one."
+    # Which non-hero products to show on the homepage. Empty list = show all non-hero (backward compat).
+    featured_product_ids: List[str] = Field(default_factory=list)
+
+
+class ReviewsSection(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    eyebrow: str = "Verified Collectors"
+    headline_line_1: str = "Voices from"
+    headline_italic: str = "the collectors"
+    average_rating: str = "4.98"
+    # If empty, homepage falls back to showing all reviews (backward compat).
+    featured_review_ids: List[str] = Field(default_factory=list)
+
+
+class ImportantNote(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    enabled: bool = True
+    label: str = "Important note"
+    body: str = (
+        "No inbuilt LED lighting is included with any ArtyFex piece. Ambient light shown in "
+        "product and lifestyle imagery is for styling visualisation only. Every piece is 100% handmade "
+        "and one of one — subtle organic variations in resin currents and crystal placement are the "
+        "signature of the atelier."
+    )
+
+
 class HomepageContent(BaseModel):
     model_config = ConfigDict(extra="ignore")
     announcement: AnnouncementBar = Field(default_factory=AnnouncementBar)
     hero: HeroContent = Field(default_factory=HeroContent)
     sale_banner: SaleBanner = Field(default_factory=SaleBanner)
+    craft: CraftSection = Field(default_factory=CraftSection)
+    collection_section: CollectionSection = Field(default_factory=CollectionSection)
+    reviews_section: ReviewsSection = Field(default_factory=ReviewsSection)
+    important_note: ImportantNote = Field(default_factory=ImportantNote)
     custom_css: str = ""
 
 

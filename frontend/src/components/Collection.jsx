@@ -7,9 +7,23 @@ import { IDS } from "@/constants/testIds";
 
 const formatINR = (n) => `₹${n.toLocaleString("en-IN")}`;
 
-export const Collection = ({ products = [] }) => {
+export const Collection = ({ products = [], content }) => {
   const { addItem } = useCart();
-  const items = products.filter((p) => !p.is_hero);
+  const c = content || {};
+  const eyebrow = c.eyebrow || "The Collection";
+  const line1 = c.headline_line_1 || "Companion";
+  const italic = c.headline_italic || "pieces";
+  const subtitle = c.subtitle || "Smaller edits from the atelier — each still 100% handpoured, still one of one.";
+  const featuredIds = Array.isArray(c.featured_product_ids) ? c.featured_product_ids : [];
+
+  // Filter items: exclude hero product. If admin has picked specific products, honour that order + limit to those.
+  let items;
+  if (featuredIds.length > 0) {
+    const map = new Map(products.map((p) => [p.id, p]));
+    items = featuredIds.map((id) => map.get(id)).filter(Boolean);
+  } else {
+    items = products.filter((p) => !p.is_hero);
+  }
 
   return (
     <section id="collection" data-testid={IDS.collection.section} className="relative bg-ink-950 py-24 md:py-40">
@@ -18,14 +32,14 @@ export const Collection = ({ products = [] }) => {
           <div>
             <div className="flex items-center gap-3 mb-6">
               <span className="gold-line w-10" />
-              <span className="text-[10px] uppercase tracking-luxury text-gold-soft">The Collection</span>
+              <span className="text-[10px] uppercase tracking-luxury text-gold-soft">{eyebrow}</span>
             </div>
             <h2 className="font-serif text-4xl md:text-5xl lg:text-6xl leading-[0.95] text-cream text-balance">
-              Companion <span className="italic font-display text-gold">pieces</span>.
+              {line1} <span className="italic font-display text-gold">{italic}</span>.
             </h2>
           </div>
           <p className="max-w-md text-cream/60 font-light">
-            Smaller edits from the atelier — each still 100% handpoured, still one of one.
+            {subtitle}
           </p>
         </div>
 

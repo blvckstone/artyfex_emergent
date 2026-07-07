@@ -1,0 +1,47 @@
+{
+  "summary": "Phase B (Dynamic CMS Expansion + featured-review toggle + visual Product/Variation editor) fully verified. Backend: 15/15 pytest passed (homepage schema, PATCH persistence for craft/collection/important_note, PATCH /admin/reviews/{id} featured=true/false + 404, and full products CRUD with array-based Variant payload). Frontend: admin login OK; Homepage tab exposes all 7 sections (Announcement, Hero, Sale banner, Craft & Materials, Collection, Verified Collectors reviews, Important note); Craft field edit persists after reload; Review star-toggle button per row updates featured flag via API; Product editor modal replaces old JSON textarea with visual variation editor (label / internal key / size / colour picker / stock / price+MRP override / image URL + live preview); Add-variation persists as List[Variant] on PUT; storefront homepage renders craft eyebrow live and footer important note visible.",
+  "tested_scope": ["backend", "frontend"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "passed_tests": [
+    "Backend: GET /api/homepage returns all 8 keys (announcement, hero, sale_banner, craft, collection_section, reviews_section, important_note, custom_css)",
+    "Backend: Craft/Collection/Reviews/ImportantNote sub-schemas contain all documented fields (eyebrow, headline_line_1, headline_italic, body, section_image, image_overlay_label, image_overlay_title, steps / featured_product_ids / featured_review_ids / enabled+label+body)",
+    "Backend: PATCH /api/admin/homepage with mutated craft persists and reflects on GET /api/homepage",
+    "Backend: PATCH /api/admin/homepage with collection_section.featured_product_ids=[<existing id>] persists",
+    "Backend: PATCH /api/admin/homepage with important_note.enabled=false + body='Test note' persists",
+    "Backend: PATCH /api/admin/reviews/{id} {featured:true} returns 200 with updated Review; GET /api/reviews reflects it",
+    "Backend: PATCH /api/admin/reviews/{id} {featured:false} unfeatures; 404 for invalid id",
+    "Backend: POST /api/admin/products with array-based variants (List[Variant]) → 200 with all overrides preserved (size, stock, price_inr, mrp_inr)",
+    "Backend: PUT /api/admin/products/{id} appends new variant via array payload; GET /api/products/{slug} reflects 3 variants",
+    "Backend: DELETE /api/admin/products/{id} returns 200 and GET /api/products/{slug} → 404",
+    "Frontend Admin: admin login via /api/admin/login OK; Homepage tab exposes cms-announce-*, cms-hero-*, cms-sale-*, cms-craft-*, cms-note-*, cms-custom-css testids",
+    "Frontend Admin: Editing cms-craft-eyebrow, clicking admin-homepage-save, reloading — value persists (verified 'TEST_UI Craft eyebrow' after full page reload)",
+    "Frontend Admin: Reviews tab renders admin-review-feature-toggle-<id> buttons for every review (6 seeded); click toggles featured=true on backend",
+    "Frontend Admin: Products tab → Edit → product-editor-modal opens; pe-has-variations checkbox present; NO 'Variants JSON' textarea in DOM (0 occurrences)",
+    "Frontend Admin: pe-add-variation appends pe-variant-row-<idx> with pe-variant-label/stock/image/color; filling and saving persists via PUT — verified via subsequent GET /api/products that new variant entry appears with correct hex/label/stock/image",
+    "Frontend Storefront: / renders craft eyebrow live from CMS; footer shows the dynamic important-note copy"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_phase_b_homepage_reviews.py",
+    "/app/test_reports/pytest/phase_b_homepage_results.xml"
+  ],
+  "action_items": [
+    "None — Phase B backend + frontend flows all pass. Retest not required."
+  ],
+  "critical_code_review_comments": [
+    "server.py PATCH /admin/homepage uses HomepageContent Pydantic model directly as body — this means the client MUST send the full document; partial PATCHes will erase any un-sent nested fields (frontend HomepageEditor loads the doc first then re-sends full which is fine, but any future partial API caller would silently drop fields). Consider switching to a partial/merge PATCH.",
+    "AdminPage.jsx uses a heuristic (variants length===1 && key==='default') to compute has_variations for existing products — brittle if seed data ever uses another single-variant key. Persist an explicit has_variations flag if this becomes a real requirement.",
+    "ReviewFeaturedIn model is a single-field body {featured:bool}; PATCH /admin/reviews/{id} only supports this one field. If future admin edits need author/body/rating updates, extend to a partial ReviewUpdate model.",
+    "CraftSection.steps is not editable from the current HomepageEditor UI (only the 7 top-level fields are). Backend accepts it via PATCH, so a follow-up UI addition can expose the 4 steps.",
+    "Product.stock (base) and per-variant stock coexist — cart/PDP already reads per-variant stock, but ensure admin knows the base 'Stock (base)' field only matters when no variations exist. UI hint could clarify."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase_b_homepage_reviews.py (new)"
+  ],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% critical Phase B flows"},
+  "test_credentials": "Admin: admin@artyfex.in / ArtyFex@2026 (verified working). /app/memory/test_credentials.md is empty — main agent may want to record this for future sessions.",
+  "seed_data_creation": "Backend test creates a TEST product (slug=test-phase-b-mirror) which is deleted in the same test class. Homepage mutations (craft eyebrow / featured lists / important-note) restored to defaults in teardown_module. Featured review toggle also restored to featured=false at end of frontend run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase B verified. New backend surfaces: PATCH /api/admin/reviews/{id} body {featured:bool}; homepage doc has 4 new keys — craft (steps[]), collection_section (featured_product_ids), reviews_section (featured_review_ids), important_note (enabled/label/body). Admin frontend testids for Phase B: cms-craft-eyebrow/headline_line_1/headline_italic/body/image/label/title, cms-featured-product-<slug>, cms-featured-review-<id>, cms-note-enabled/body, admin-review-feature-toggle-<id>, product-editor-modal, pe-has-variations, pe-add-variation, pe-variant-row-<idx>, pe-variant-label/stock/image-<idx>, pe-save. Regression pytest still lives at /app/backend/tests/test_wishlist_and_email.py + test_returns.py from earlier phases."
+}
