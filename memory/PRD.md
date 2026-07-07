@@ -51,3 +51,5 @@ Build a highly attractive, ultra-premium, fully functional SPA e-commerce websit
 - Admin: admin@artyfex.in / ArtyFex@2026
 - Razorpay test: rzp_test_T8wuUhk6q4NKFz (secret in backend/.env)
 - Test card: 4111 1111 1111 1111 · 12/28 · 123
+
+- **[Phase A3 — Jul 2026] Credit-Preserve Session**: Applied the only remaining Phase A gap — footer credit updated to "Developed & Maintain By Er. MD. Shoeb" (was "Mohammad Shoeb"), and fixed a residual desktop bug on `/product/:slug` where the top-center `1 / 4` counter overlapped the top-left `SIGNATURE EDITION` badge (both badges lived in the same top-row region). Counter is now anchored `bottom-4 left-4` on all breakpoints — clear of Signature edition (top-left), Hover-to-zoom (top-right) and 120 artisan hours (bottom-right). Files touched: `frontend/src/components/Footer.jsx`, `frontend/src/components/ProductGallery.jsx`. ✅

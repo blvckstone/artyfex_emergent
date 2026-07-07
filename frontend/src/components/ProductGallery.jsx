@@ -203,9 +203,9 @@ export default function ProductGallery({ product, variantImage }) {
 
         {/* (Fullscreen open button removed — the entire image is clickable now) */}
 
-        {/* Index counter — bottom-left on mobile (avoids craft-hours badge), top-center on desktop */}
+        {/* Index counter — bottom-left on all screens (avoids collision with Signature edition top-left and Hover-to-zoom top-right) */}
         {allImages.length > 1 && (
-          <div className="absolute bottom-4 left-4 md:bottom-auto md:top-4 md:left-1/2 md:-translate-x-1/2 z-10 glass px-2.5 py-1 text-[10px] tracking-luxury text-cream/70 pointer-events-none">
+          <div className="absolute bottom-4 left-4 z-10 glass px-2.5 py-1 text-[10px] tracking-luxury text-cream/70 pointer-events-none">
             {activeIdx + 1} / {allImages.length}
           </div>
         )}

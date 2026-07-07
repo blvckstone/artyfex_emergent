@@ -98,7 +98,7 @@ export const Footer = () => {
             <Link to="/policies/refund" className="hover:text-gold">Refunds</Link>
           </div>
           <div className="pt-3 text-[10px] uppercase tracking-luxury text-gold-soft" data-testid="footer-credit">
-            Developed &amp; Maintain By Mohammad Shoeb
+            Developed &amp; Maintain By Er. MD. Shoeb
           </div>
         </div>
       </div>
