@@ -53,3 +53,11 @@ Build a highly attractive, ultra-premium, fully functional SPA e-commerce websit
 - Test card: 4111 1111 1111 1111 · 12/28 · 123
 
 - **[Phase A3 — Jul 2026] Credit-Preserve Session**: Applied the only remaining Phase A gap — footer credit updated to "Developed & Maintain By Er. MD. Shoeb" (was "Mohammad Shoeb"), and fixed a residual desktop bug on `/product/:slug` where the top-center `1 / 4` counter overlapped the top-left `SIGNATURE EDITION` badge (both badges lived in the same top-row region). Counter is now anchored `bottom-4 left-4` on all breakpoints — clear of Signature edition (top-left), Hover-to-zoom (top-right) and 120 artisan hours (bottom-right). Files touched: `frontend/src/components/Footer.jsx`, `frontend/src/components/ProductGallery.jsx`. ✅
+
+- **[Phase B — Jul 2026] Dynamic CMS Expansion + Visual Product Editor**:
+  - **Homepage CMS** — 4 new admin-editable sections wired end-to-end (`HomepageContent` extended: `craft` w/ 4 steps + image, `collection_section` w/ `featured_product_ids[]`, `reviews_section` w/ `featured_review_ids[]`, `important_note` w/ enable-toggle). `Craftsmanship.jsx`, `Collection.jsx`, `Reviews.jsx`, `Footer.jsx` now consume homepage settings; App.js pipes them down.
+  - **Featured reviews** — new `PATCH /api/admin/reviews/{id}` (body `{featured:bool}`) + Reviews admin tab star-toggle button (data-testid `admin-review-feature-toggle-<id>`). Homepage now filters: admin picks > `featured` flag > all reviews (fallback).
+  - **Visual product editor** — removed the raw Variants JSON textarea. New "Does this product have variations?" checkbox: unchecked → simple main image + thumbnails; checked → Shopify-style variation cards (label/key/size/colour picker/stock/price+MRP override/image URL with preview) — no code editing.
+  - Testing agent iteration_11: **100% pass** (15/15 backend, all Phase B frontend flows).
+  - Files touched: `backend/server.py`, `frontend/src/App.js`, `frontend/src/components/{Craftsmanship,Collection,Reviews,Footer,admin/HomepageEditor}.jsx`, `frontend/src/pages/AdminPage.jsx`.
+  - Deferred (won't fix now — noted in code review): partial-merge PATCH for `/admin/homepage`; explicit `has_variations` persisted on Product model.
