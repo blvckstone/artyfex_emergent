@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any, List
 
 # Backend URL from environment
-BACKEND_URL = "https://artyfex-main.preview.emergentagent.com/api"
+BACKEND_URL = "https://artyfex-preview.preview.emergentagent.com/api"
 
 # Admin credentials
 ADMIN_EMAIL = "admin@artyfex.in"
