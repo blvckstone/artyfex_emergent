@@ -28,6 +28,10 @@ SEED_PRODUCTS = [
             {"key": "silver", "label": "Silver Frost", "hex": "#C0C0C0", "image": "https://images.pexels.com/photos/18325786/pexels-photo-18325786.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"},
         ],
         "is_hero": True, "stock": 3,
+        "category": "mirrors", "hsn_code": "7009",
+        "sku": "ARF-OBS-2X3", "weight_grams": 12000,
+        "length_cm": 95.0, "width_cm": 65.0, "height_cm": 8.0,
+        "tags": ["signature", "statement", "geode", "handmade"],
     },
     {
         "slug": "moon-crystal-24",
@@ -49,6 +53,10 @@ SEED_PRODUCTS = [
             {"key": "silver-30", "label": "Silver Frost · 30\"", "hex": "#C0C0C0", "image": "https://images.pexels.com/photos/8068653/pexels-photo-8068653.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", "size": "30\" diameter", "stock": 3, "price_inr": 24999, "mrp_inr": 36999},
         ],
         "stock": 18,
+        "category": "mirrors", "hsn_code": "7009",
+        "sku": "ARF-MOON-CRY", "weight_grams": 7500,
+        "length_cm": 65.0, "width_cm": 65.0, "height_cm": 6.0,
+        "tags": ["round", "celestial", "handmade"],
     },
     {
         "slug": "rose-geode-oval",
@@ -68,6 +76,10 @@ SEED_PRODUCTS = [
             {"key": "lavender", "label": "Lavender", "hex": "#B8A1D4", "image": "https://images.pexels.com/photos/37955298/pexels-photo-37955298.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"},
         ],
         "stock": 4,
+        "category": "mirrors", "hsn_code": "7009",
+        "sku": "ARF-ROSE-OVAL", "weight_grams": 8000,
+        "length_cm": 78.0, "width_cm": 58.0, "height_cm": 6.0,
+        "tags": ["oval", "romance", "rose", "handmade"],
     },
     {
         "slug": "emerald-lagoon-round",
@@ -87,6 +99,10 @@ SEED_PRODUCTS = [
             {"key": "silver", "label": "Silver Mist", "hex": "#C0C0C0", "image": "https://images.pexels.com/photos/8068653/pexels-photo-8068653.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"},
         ],
         "stock": 5,
+        "category": "mirrors", "hsn_code": "7009",
+        "sku": "ARF-EMR-LAG", "weight_grams": 9500,
+        "length_cm": 75.0, "width_cm": 75.0, "height_cm": 7.0,
+        "tags": ["round", "bold", "emerald", "handmade"],
     },
 ]
 

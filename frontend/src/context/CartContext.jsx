@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState, useRef } from "react";
+import { api } from "@/lib/api";
 
 const CartContext = createContext(null);
 
@@ -113,11 +114,63 @@ export const CartProvider = ({ children }) => {
   const shipping = items.length === 0 ? 0 : discountedSubtotal >= 25000 ? 0 : 1499;
   const total = discountedSubtotal + shipping;
 
+  // ---------- Phase A (Jul 2025) · GST computation ----------
+  // Prices are GST-inclusive, so the tax figure is extracted from `discountedSubtotal`.
+  // We ask the backend to compute the authoritative breakdown (respects HSN → category priority + Maharashtra intra vs inter-state split).
+  const [taxBreakdown, setTaxBreakdown] = useState({
+    gst_total_inr: 0, cgst_inr: 0, sgst_inr: 0, igst_inr: 0,
+    gst_lines: [], intra_state: false, ship_state: null,
+  });
+  const [shipState, setShipState] = useState(null);
+  const taxReqRef = useRef(0);
+  useEffect(() => {
+    if (!items.length) {
+      setTaxBreakdown({ gst_total_inr: 0, cgst_inr: 0, sgst_inr: 0, igst_inr: 0, gst_lines: [], intra_state: false, ship_state: shipState });
+      return;
+    }
+    const rid = ++taxReqRef.current;
+    api.post("/cart/compute-tax", {
+      items: items.map((i) => ({ product_id: i.product_id, variant_key: i.variant_key, quantity: i.quantity })),
+      ship_state: shipState || null,
+    })
+      .then(({ data }) => {
+        // ignore stale responses
+        if (rid !== taxReqRef.current) return;
+        setTaxBreakdown({
+          gst_total_inr: data.gst_total_inr || 0,
+          cgst_inr: data.cgst_inr || 0,
+          sgst_inr: data.sgst_inr || 0,
+          igst_inr: data.igst_inr || 0,
+          gst_lines: data.gst_lines || [],
+          intra_state: !!data.intra_state,
+          ship_state: data.ship_state || shipState || null,
+        });
+      })
+      .catch(() => {
+        if (rid !== taxReqRef.current) return;
+        // silent fallback — display no GST line if backend unreachable
+        setTaxBreakdown({ gst_total_inr: 0, cgst_inr: 0, sgst_inr: 0, igst_inr: 0, gst_lines: [], intra_state: false, ship_state: shipState });
+      });
+  }, [items, shipState]);
+
+  // Scale the extracted tax proportionally when a discount is applied so the "included GST"
+  // stays consistent with the reduced (payable) subtotal that customer actually pays.
+  const gstScale = subtotal > 0 ? discountedSubtotal / subtotal : 0;
+  const gstIncluded = Math.round((taxBreakdown.gst_total_inr || 0) * gstScale);
+  const cgstIncluded = Math.round((taxBreakdown.cgst_inr || 0) * gstScale);
+  const sgstIncluded = Math.round((taxBreakdown.sgst_inr || 0) * gstScale);
+  const igstIncluded = Math.round((taxBreakdown.igst_inr || 0) * gstScale);
+
   const value = {
     items, isOpen, setIsOpen,
     addItem, updateQty, removeItem, clear,
     subtotal, shipping, total, count,
     coupon, discount, applyCoupon, clearCoupon,
+    // GST (inclusive treatment)
+    gstIncluded, cgstIncluded, sgstIncluded, igstIncluded,
+    gstIntraState: taxBreakdown.intra_state,
+    gstLines: taxBreakdown.gst_lines,
+    setShipState, shipState,
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

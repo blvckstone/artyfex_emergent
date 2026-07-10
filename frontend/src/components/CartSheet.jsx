@@ -13,6 +13,7 @@ export const CartSheet = ({ onCheckout }) => {
     updateQty, removeItem,
     subtotal, shipping, total,
     coupon, discount, applyCoupon, clearCoupon,
+    gstIncluded, gstIntraState, cgstIncluded, sgstIncluded, igstIncluded,
   } = useCart();
 
   const [codeInput, setCodeInput] = useState("");
@@ -184,6 +185,16 @@ export const CartSheet = ({ onCheckout }) => {
                     <span className="text-[10px] uppercase tracking-luxury text-cream/50">Total</span>
                     <span data-testid={IDS.cart.total} className="font-serif text-3xl text-cream">{formatINR(total)}</span>
                   </div>
+                  {gstIncluded > 0 && (
+                    <div data-testid="cart-gst-included" className="text-[10px] text-cream/40 text-right leading-relaxed">
+                      Inclusive of GST · {formatINR(gstIncluded)}
+                      {gstIntraState ? (
+                        <> · CGST {formatINR(cgstIncluded)} + SGST {formatINR(sgstIncluded)}</>
+                      ) : igstIncluded > 0 ? (
+                        <> · IGST {formatINR(igstIncluded)}</>
+                      ) : null}
+                    </div>
+                  )}
                   <button
                     data-testid={IDS.cart.checkout}
                     onClick={onCheckout}

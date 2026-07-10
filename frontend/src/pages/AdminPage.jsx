@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast, Toaster } from "sonner";
-import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2, Settings as SettingsIcon, Truck, Palette, ShieldCheck } from "lucide-react";
+import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2, Settings as SettingsIcon, Truck, Palette, ShieldCheck, Percent } from "lucide-react";
 import HomepageEditor from "@/components/admin/HomepageEditor";
 import ShippingEditor from "@/components/admin/ShippingEditor";
 import AnalyticsDashboard from "@/components/admin/AnalyticsDashboard";
 import EmployeesTab from "@/components/admin/EmployeesTab";
 import PasswordChangeCard from "@/components/admin/PasswordChangeCard";
 import CustomersTab from "@/components/admin/CustomersTab";
+import GstManagementTab from "@/components/admin/GstManagementTab";
 
 const TOKEN_KEY = "artyfex_admin_token";
 
@@ -62,7 +63,7 @@ function useAuthedApi(token) {
   }, [token]);
 }
 
-const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: [{ key: "default", label: "Default", hex: "#333333", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null }], has_variations: false, stock: 5, is_hero: false };
+const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: [{ key: "default", label: "Default", hex: "#333333", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null }], has_variations: false, stock: 5, is_hero: false, category: "", hsn_code: "", sku: "", weight_grams: "", length_cm: "", width_cm: "", height_cm: "", tags: "" };
 
 export default function AdminPage() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
@@ -83,6 +84,7 @@ export default function AdminPage() {
   const [editing, setEditing] = useState(null); // null | product obj | "new"
   const [saving, setSaving] = useState(false);
   const [me, setMe] = useState(null); // current admin (for RBAC gating)
+  const [categories, setCategories] = useState([]); // Phase A — product categories for editor dropdown
 
   const authed = useAuthedApi(token);
 
@@ -107,6 +109,7 @@ export default function AdminPage() {
       ["products", "manage_products", false],
       ["orders", "manage_orders", false],
       ["shipping", "manage_shipping", false],
+      ["gst", "manage_gst", false],
       ["returns", "manage_returns", false],
       ["users", "manage_customers", false],
       ["leads", "manage_leads", false],
@@ -129,16 +132,18 @@ export default function AdminPage() {
   const reload = React.useCallback(async () => {
     if (!token) return;
     try {
-      const [s, p, o, l, r, rt, u, c, fp, st] = await Promise.all([
+      const [s, p, o, l, r, rt, u, c, fp, st, cats] = await Promise.all([
         authed.get("/admin/stats"), authed.get("/products"),
         authed.get("/admin/orders"), authed.get("/admin/leads"), authed.get("/reviews"),
         authed.get("/admin/returns"), authed.get("/admin/users"),
         authed.get("/admin/coupons"), authed.get("/admin/failed-payments"),
         authed.get("/admin/settings"),
+        authed.get("/admin/product-categories").catch(() => ({ data: [] })),
       ]);
       setStats(s.data); setProducts(p.data); setOrders(o.data); setLeads(l.data);
       setReviews(r.data); setReturns(rt.data); setUsers(u.data);
       setCoupons(c.data); setFailedPayments(fp.data); setSettings(st.data);
+      setCategories(cats.data || []);
     } catch (err) {
       if (err?.response?.status === 401) { localStorage.removeItem(TOKEN_KEY); setToken(""); }
     }
@@ -169,6 +174,8 @@ export default function AdminPage() {
         : [{ key: "default", label: "Default", hex: "#333333", image: form.hero_image || "", size: form.size || "", stock: Number(form.stock || 0), price_inr: null, mrp_inr: null }];
 
       const { has_variations, ...rest } = form;
+      const parseTags = (t) => Array.isArray(t) ? t : (typeof t === "string" ? t.split(",").map((s) => s.trim()).filter(Boolean) : []);
+      const numOrNull = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
       const payload = {
         ...rest,
         price_inr: Number(form.price_inr), mrp_inr: Number(form.mrp_inr),
@@ -176,6 +183,15 @@ export default function AdminPage() {
         materials: typeof form.materials === "string" ? form.materials.split("\n").map(s=>s.trim()).filter(Boolean) : form.materials,
         gallery: typeof form.gallery === "string" ? form.gallery.split("\n").map(s=>s.trim()).filter(Boolean) : form.gallery,
         variants: finalVariants,
+        // Phase A commerce/GST/logistics fields
+        category: form.category || null,
+        hsn_code: (form.hsn_code || "").toString().trim() || null,
+        sku: (form.sku || "").toString().trim() || null,
+        weight_grams: numOrNull(form.weight_grams),
+        length_cm: numOrNull(form.length_cm),
+        width_cm: numOrNull(form.width_cm),
+        height_cm: numOrNull(form.height_cm),
+        tags: parseTags(form.tags),
       };
       if (form.id) await authed.put(`/admin/products/${form.id}`, payload);
       else await authed.post("/admin/products", payload);
@@ -218,6 +234,7 @@ export default function AdminPage() {
     { key: "products", label: "Products", icon: Package, perm: "manage_products" },
     { key: "orders", label: "Orders", icon: ShoppingBag, perm: "manage_orders" },
     { key: "shipping", label: "Shipping", icon: Truck, perm: "manage_shipping" },
+    { key: "gst", label: "GST", icon: Percent, perm: "manage_gst" },
     { key: "returns", label: "Returns", icon: RotateCcw, perm: "manage_returns" },
     { key: "users", label: "Customers", icon: UserCircle, perm: "manage_customers" },
     { key: "leads", label: "B2B Leads", icon: Users, perm: "manage_leads" },
@@ -369,13 +386,22 @@ export default function AdminPage() {
                       gallery: p.gallery.join("\n"),
                       variants: Array.isArray(p.variants) ? p.variants : [],
                       has_variations: hasVar,
+                      // Phase A — convert list/nullable fields to editor-friendly strings
+                      category: p.category || "",
+                      hsn_code: p.hsn_code || "",
+                      sku: p.sku || "",
+                      weight_grams: p.weight_grams ?? "",
+                      length_cm: p.length_cm ?? "",
+                      width_cm: p.width_cm ?? "",
+                      height_cm: p.height_cm ?? "",
+                      tags: Array.isArray(p.tags) ? p.tags.join(", ") : (p.tags || ""),
                     });
                   }} className="text-xs text-gold hover:text-cream border border-gold/30 px-3 py-1.5">Edit</button>
                   <button onClick={()=>deleteProduct(p.id)} className="text-red-400 hover:text-red-300 p-2"><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
             </div>
-            {editing && <ProductEditor initial={editing} onCancel={()=>setEditing(null)} onSave={saveProduct} saving={saving} />}
+            {editing && <ProductEditor initial={editing} categories={categories} onCancel={()=>setEditing(null)} onSave={saveProduct} saving={saving} />}
           </>
         )}
 
@@ -397,6 +423,10 @@ export default function AdminPage() {
 
         {tab === "shipping" && (
           <ShippingEditor authed={authed} api={api} />
+        )}
+
+        {tab === "gst" && (
+          <GstManagementTab authed={authed} />
         )}
 
         {tab === "leads" && (
@@ -770,7 +800,7 @@ function Stat({ label, value, sub, accent }) {
   );
 }
 
-function ProductEditor({ initial, onCancel, onSave, saving }) {
+function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
   const [f, setF] = useState(initial);
   const upd = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
 
@@ -818,6 +848,58 @@ function ProductEditor({ initial, onCancel, onSave, saving }) {
           </Fld>
           <Fld label="Description"><textarea rows={3} value={f.description} onChange={upd("description")} className={inp} /></Fld>
           <Fld label="Materials (one per line)"><textarea rows={3} value={f.materials} onChange={upd("materials")} className={inp} /></Fld>
+        </div>
+
+        {/* Phase A · Commerce, Tax & Logistics fields */}
+        <div className="mt-8 border border-white/10 p-5 bg-ink-950/40">
+          <div className="text-[10px] uppercase tracking-luxury text-gold-soft flex items-center gap-2">
+            <Percent className="w-3 h-3" /> Commerce · Tax · Logistics
+          </div>
+          <div className="mt-1 text-xs text-cream/50">Category &amp; HSN drive the GST calculation at checkout. Weight and packaging dimensions power shipping quotes.</div>
+
+          <div className="mt-6 grid sm:grid-cols-2 gap-4">
+            <Fld label="Category" hint="Manage the list under the GST tab → Categories.">
+              <select value={f.category || ""} onChange={upd("category")} className={inp} data-testid="pe-category">
+                <option value="">— Uncategorised —</option>
+                {categories.filter((c) => c.active !== false).map((c) => (
+                  <option key={c.slug} value={c.slug} className="bg-ink-900">{c.name}</option>
+                ))}
+              </select>
+            </Fld>
+            <Fld label="HSN code" hint="4–8 digit Harmonised System of Nomenclature. Priority target for GST lookup.">
+              <input list="pe-hsn-datalist" value={f.hsn_code || ""} onChange={upd("hsn_code")} className={`${inp} font-mono`} placeholder="e.g. 7009" data-testid="pe-hsn" />
+              <datalist id="pe-hsn-datalist">
+                <option value="7009">Mirrors (glass)</option>
+                <option value="9701">Handmade paintings / art</option>
+                <option value="3926">Articles of plastics / resin</option>
+                <option value="9403">Furniture</option>
+                <option value="9405">Lamps &amp; lighting</option>
+                <option value="4414">Wooden frames</option>
+                <option value="6913">Ceramic ornaments</option>
+              </datalist>
+            </Fld>
+            <Fld label="SKU (Stock Keeping Unit)" hint="Internal reference — e.g. ARF-OBS-2X3.">
+              <input value={f.sku || ""} onChange={upd("sku")} className={`${inp} font-mono`} placeholder="ARF-XXX-0001" data-testid="pe-sku" />
+            </Fld>
+            <Fld label="Weight (grams)" hint="Used by the shipping engine.">
+              <input type="number" min="0" value={f.weight_grams ?? ""} onChange={upd("weight_grams")} className={inp} placeholder="e.g. 8500" data-testid="pe-weight" />
+            </Fld>
+          </div>
+
+          <div className="mt-4">
+            <div className="text-[10px] uppercase tracking-luxury text-cream/50 mb-2">Package dimensions (cm)</div>
+            <div className="grid grid-cols-3 gap-3">
+              <Fld label="Length"><input type="number" min="0" step="0.1" value={f.length_cm ?? ""} onChange={upd("length_cm")} className={inp} data-testid="pe-length" /></Fld>
+              <Fld label="Width"><input type="number" min="0" step="0.1" value={f.width_cm ?? ""} onChange={upd("width_cm")} className={inp} data-testid="pe-width" /></Fld>
+              <Fld label="Height"><input type="number" min="0" step="0.1" value={f.height_cm ?? ""} onChange={upd("height_cm")} className={inp} data-testid="pe-height" /></Fld>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <Fld label="Tags (comma separated)" hint="Free-form labels e.g. bestseller, gifting, oversized.">
+              <input value={f.tags || ""} onChange={upd("tags")} className={inp} placeholder="signature, statement, geode" data-testid="pe-tags" />
+            </Fld>
+          </div>
         </div>
 
         {/* Variations toggle */}

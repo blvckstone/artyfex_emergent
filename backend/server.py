@@ -128,6 +128,15 @@ class Product(BaseModel):
     price_inr: int; mrp_inr: int; size: str; craft_hours: int
     materials: List[str]; hero_image: str; gallery: List[str]
     variants: List[Variant]; is_hero: bool = False; stock: int = 5
+    # --- Phase A (Jul 2025) — Commerce / GST / Logistics fields ---
+    category: Optional[str] = None            # e-commerce category (matches Category.slug)
+    hsn_code: Optional[str] = None            # HSN classification for GST lookup
+    sku: Optional[str] = None                 # Stock Keeping Unit
+    weight_grams: Optional[int] = None        # shipping weight
+    length_cm: Optional[float] = None         # package L (for shipping logistics)
+    width_cm: Optional[float] = None          # package W
+    height_cm: Optional[float] = None         # package H
+    tags: List[str] = Field(default_factory=list)  # custom product tags
     created_at: str = Field(default_factory=now_iso)
 
 class ProductIn(BaseModel):
@@ -135,6 +144,15 @@ class ProductIn(BaseModel):
     price_inr: int; mrp_inr: int; size: str; craft_hours: int
     materials: List[str]; hero_image: str; gallery: List[str]
     variants: List[Variant]; is_hero: bool = False; stock: int = 5
+    # Optional Phase A commerce fields (all backward-compat)
+    category: Optional[str] = None
+    hsn_code: Optional[str] = None
+    sku: Optional[str] = None
+    weight_grams: Optional[int] = None
+    length_cm: Optional[float] = None
+    width_cm: Optional[float] = None
+    height_cm: Optional[float] = None
+    tags: List[str] = Field(default_factory=list)
 
 class OrderCustomer(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -156,6 +174,11 @@ class OrderIn(BaseModel):
     subtotal_inr: int; shipping_inr: int; total_inr: int
     coupon_code: Optional[str] = None
     discount_inr: int = 0
+    # Phase A (Jul 2025) — GST (server recomputes authoritatively)
+    gst_total_inr: int = 0
+    cgst_inr: int = 0
+    sgst_inr: int = 0
+    igst_inr: int = 0
 
 class Order(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -166,6 +189,13 @@ class Order(BaseModel):
     subtotal_inr: int; shipping_inr: int; total_inr: int
     coupon_code: Optional[str] = None
     discount_inr: int = 0
+    # Phase A — GST breakdown (INR paise-safe integers)
+    gst_total_inr: int = 0
+    cgst_inr: int = 0
+    sgst_inr: int = 0
+    igst_inr: int = 0
+    gst_lines: List[dict] = Field(default_factory=list)
+    gst_treatment: str = "inclusive"  # inclusive | exclusive
     status: str = "pending_payment"  # pending_payment | confirmed | packed | shipped | delivered | cancelled | payment_failed
     razorpay_order_id: Optional[str] = None
     razorpay_payment_id: Optional[str] = None
@@ -336,6 +366,55 @@ class FailedPayment(FailedPaymentIn):
 RETURN_WINDOW_DAYS = 3
 
 
+# ---------- CATEGORIES (Phase A · Jul 2025) ----------
+class CategoryIn(BaseModel):
+    name: str
+    slug: Optional[str] = None
+    description: Optional[str] = None
+    active: bool = True
+
+
+class Category(CategoryIn):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: str = Field(default_factory=now_iso)
+
+
+# ---------- GST RULES (Phase A · Jul 2025) ----------
+# A rule maps a product-attribute → tax rate.
+# Priority: hsn_code match > category match. Only one of the two should
+# typically be set on any rule.
+class GstRuleIn(BaseModel):
+    hsn_code: Optional[str] = None
+    category: Optional[str] = None   # matches Category.slug (or free-text)
+    rate_percent: float               # e.g. 5, 12, 18, 28
+    description: Optional[str] = None
+    active: bool = True
+
+
+class GstRule(GstRuleIn):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: str = Field(default_factory=now_iso)
+
+
+class CartTaxItem(BaseModel):
+    product_id: str
+    variant_key: Optional[str] = None
+    quantity: int = 1
+
+
+class CartTaxIn(BaseModel):
+    items: List[CartTaxItem]
+    ship_state: Optional[str] = None   # Indian state name, e.g. "Maharashtra"
+
+
+# Business registered in Maharashtra → intra-state gets CGST + SGST split,
+# inter-state gets a single IGST at the full rate.
+BUSINESS_STATE = "MAHARASHTRA"
+
+
+# ---------- COUPONS ----------
+
+
 # ---------- SEED ---------- #
 from server_seed import SEED_PRODUCTS, SEED_REVIEWS, SEED_COUPONS  # noqa: E402
 
@@ -350,6 +429,57 @@ async def seed_if_empty():
     if await db.coupons.count_documents({}) == 0:
         await db.coupons.insert_many([Coupon(**c).model_dump() for c in SEED_COUPONS])
         logging.info(f"Seeded {len(SEED_COUPONS)} coupons")
+    # --- Phase A (Jul 2025): seed product categories on empty DB ---
+    if await db.product_categories.count_documents({}) == 0:
+        seed_cats = [
+            {"name": "Mirrors", "slug": "mirrors", "description": "Statement & round crystal mirrors"},
+            {"name": "Wall Art", "slug": "wall-art", "description": "Resin wall pieces & panels"},
+            {"name": "Sculpture", "slug": "sculpture", "description": "Free-standing resin sculptures"},
+            {"name": "Tabletop", "slug": "tabletop", "description": "Trays, coasters, table décor"},
+            {"name": "Lighting", "slug": "lighting", "description": "Resin lamps & lighting"},
+            {"name": "Companion", "slug": "companion", "description": "Smaller companion pieces"},
+            {"name": "Gifting", "slug": "gifting", "description": "Curated gifting selections"},
+            {"name": "Custom", "slug": "custom", "description": "Bespoke commissions"},
+        ]
+        await db.product_categories.insert_many([Category(**c).model_dump() for c in seed_cats])
+        logging.info(f"Seeded {len(seed_cats)} product categories")
+    # --- Phase A: seed GST rules mapping HSN + categories → tax slab ---
+    if await db.gst_rules.count_documents({}) == 0:
+        seed_rules = [
+            {"hsn_code": "7009", "rate_percent": 18, "description": "Mirrors (glass) — HSN 7009"},
+            {"hsn_code": "9701", "rate_percent": 12, "description": "Handmade paintings / art — HSN 9701"},
+            {"hsn_code": "3926", "rate_percent": 18, "description": "Other articles of plastics/resin — HSN 3926"},
+            {"category": "mirrors", "rate_percent": 18, "description": "Fallback for uncoded mirrors"},
+            {"category": "wall-art", "rate_percent": 12, "description": "Fallback for wall art"},
+            {"category": "sculpture", "rate_percent": 12, "description": "Fallback for sculpture"},
+            {"category": "tabletop", "rate_percent": 18, "description": "Fallback for tabletop décor"},
+            {"category": "lighting", "rate_percent": 18, "description": "Fallback for lighting"},
+            {"category": "companion", "rate_percent": 12, "description": "Fallback for companion pieces"},
+            {"category": "gifting", "rate_percent": 12, "description": "Fallback for gifting"},
+            {"category": "custom", "rate_percent": 18, "description": "Fallback for bespoke"},
+        ]
+        await db.gst_rules.insert_many([GstRule(**r).model_dump() for r in seed_rules])
+        logging.info(f"Seeded {len(seed_rules)} GST rules")
+    # Backfill category/HSN on legacy products (idempotent — only sets if missing).
+    # We assume all seed mirrors match HSN 7009 / category 'mirrors'. Admin can edit any product later.
+    try:
+        legacy = await db.products.find({"$or": [{"category": {"$in": [None, ""]}}, {"category": {"$exists": False}}]}, {"_id": 0, "id": 1, "slug": 1}).to_list(500)
+        for lp in legacy:
+            slug = lp.get("slug", "")
+            # everything we ship right now is a mirror
+            await db.products.update_one(
+                {"id": lp["id"]},
+                {"$set": {
+                    "category": "mirrors",
+                    "hsn_code": "7009",
+                    "sku": f"ARF-{slug[:12].upper().replace('-','')}" if slug else None,
+                    "tags": [],
+                }},
+            )
+        if legacy:
+            logging.info(f"Backfilled category/HSN on {len(legacy)} legacy products")
+    except Exception as e:
+        logging.warning(f"Product backfill skipped: {e}")
     # Seed admin (idempotent) - owner has all permissions
     if not await db.admins.find_one({"email": ADMIN_EMAIL}):
         pw_hash = bcrypt.hashpw(ADMIN_PASSWORD.encode(), bcrypt.gensalt()).decode()
@@ -380,6 +510,7 @@ ALL_PERMISSIONS = [
     "manage_coupons",
     "manage_homepage",
     "manage_shipping",
+    "manage_gst",
     "view_analytics",
     "manage_employees",
 ]
@@ -511,6 +642,242 @@ async def log_failed_payment(payload: FailedPaymentIn):
     return fp
 
 
+# ---------- GST / TAX ENGINE (Phase A · Jul 2025) ----------
+async def _resolve_gst_rate(product: dict) -> tuple[float, str]:
+    """Return (rate_percent, source) for a product using HSN > category priority.
+    Only active rules are considered. Returns (0.0, "none") if no match.
+    """
+    if not product:
+        return 0.0, "none"
+    hsn = (product.get("hsn_code") or "").strip()
+    cat = (product.get("category") or "").strip().lower()
+    if hsn:
+        rule = await db.gst_rules.find_one(
+            {"hsn_code": hsn, "active": True}, {"_id": 0}, sort=[("created_at", -1)]
+        )
+        if rule:
+            return float(rule.get("rate_percent") or 0), f"hsn:{hsn}"
+    if cat:
+        rule = await db.gst_rules.find_one(
+            {"category": cat, "active": True}, {"_id": 0}, sort=[("created_at", -1)]
+        )
+        if rule:
+            return float(rule.get("rate_percent") or 0), f"category:{cat}"
+    return 0.0, "none"
+
+
+def _price_for_variant(product: dict, variant_key: Optional[str]) -> int:
+    """Resolve the effective per-unit price (variant override > product base)."""
+    variants = product.get("variants") or []
+    v = None
+    if variant_key:
+        v = next((x for x in variants if x.get("key") == variant_key), None)
+    if v is None and variants:
+        v = variants[0]
+    if v and v.get("price_inr") is not None:
+        try:
+            return int(v.get("price_inr"))
+        except Exception:
+            pass
+    return int(product.get("price_inr") or 0)
+
+
+async def compute_taxes_for_cart(
+    items: list[dict],
+    ship_state: Optional[str] = None,
+    treatment: str = "inclusive",
+) -> dict:
+    """Compute a per-line and aggregate GST breakdown for a cart payload.
+
+    items: list of {product_id, variant_key?, quantity}
+    treatment:
+      - "inclusive": GST is baked into the shown INR price → tax extracted out
+                     tax_line = line_total * rate / (100 + rate)
+      - "exclusive": GST is added on top → tax_line = line_total * rate / 100
+
+    ship_state controls CGST+SGST vs IGST split (business is Maharashtra).
+    """
+    gst_lines: list[dict] = []
+    gst_total = 0
+    for it in items:
+        pid = it.get("product_id")
+        qty = int(it.get("quantity") or 1)
+        vk = it.get("variant_key")
+        prod = await db.products.find_one({"id": pid}, {"_id": 0}) if pid else None
+        if not prod or qty <= 0:
+            continue
+        unit_price = _price_for_variant(prod, vk)
+        line_total = unit_price * qty
+        rate, source = await _resolve_gst_rate(prod)
+        if rate <= 0 or line_total <= 0:
+            gst_lines.append({
+                "product_id": pid,
+                "variant_key": vk,
+                "quantity": qty,
+                "unit_price_inr": unit_price,
+                "line_total_inr": line_total,
+                "hsn_code": prod.get("hsn_code"),
+                "category": prod.get("category"),
+                "rate_percent": rate,
+                "source": source,
+                "tax_inr": 0,
+                "taxable_value_inr": line_total,
+            })
+            continue
+        if treatment == "exclusive":
+            tax = int(round(line_total * rate / 100.0))
+            taxable = line_total
+        else:  # inclusive (default)
+            tax = int(round(line_total * rate / (100.0 + rate)))
+            taxable = line_total - tax
+        gst_total += tax
+        gst_lines.append({
+            "product_id": pid,
+            "variant_key": vk,
+            "quantity": qty,
+            "unit_price_inr": unit_price,
+            "line_total_inr": line_total,
+            "hsn_code": prod.get("hsn_code"),
+            "category": prod.get("category"),
+            "rate_percent": rate,
+            "source": source,
+            "tax_inr": tax,
+            "taxable_value_inr": taxable,
+        })
+
+    # Split: intra-state (Maharashtra) → CGST + SGST, inter-state → IGST
+    ss = (ship_state or "").strip().upper()
+    if ss == BUSINESS_STATE:
+        cgst = gst_total // 2
+        sgst = gst_total - cgst  # keep rounding-safe sum
+        igst = 0
+    else:
+        cgst = 0
+        sgst = 0
+        igst = gst_total
+    return {
+        "gst_total_inr": gst_total,
+        "cgst_inr": cgst,
+        "sgst_inr": sgst,
+        "igst_inr": igst,
+        "gst_lines": gst_lines,
+        "treatment": treatment,
+        "ship_state": ship_state or None,
+        "business_state": BUSINESS_STATE.title(),
+        "intra_state": ss == BUSINESS_STATE,
+    }
+
+
+@api_router.post("/cart/compute-tax")
+async def cart_compute_tax(payload: CartTaxIn):
+    """Public endpoint used by cart & checkout to preview the GST breakdown."""
+    items = [it.model_dump() for it in payload.items]
+    result = await compute_taxes_for_cart(items, ship_state=payload.ship_state, treatment="inclusive")
+    return result
+
+
+# ---------- CATEGORIES · public + admin ----------
+@api_router.get("/product-categories", response_model=List[Category])
+async def list_product_categories_public():
+    return await db.product_categories.find({"active": True}, {"_id": 0}).sort("name", 1).to_list(200)
+
+
+@api_router.get("/admin/product-categories", response_model=List[Category])
+async def admin_list_categories(admin=Depends(get_current_admin)):
+    return await db.product_categories.find({}, {"_id": 0}).sort("name", 1).to_list(200)
+
+
+@api_router.post("/admin/product-categories", response_model=Category)
+async def admin_create_category(payload: CategoryIn, admin=Depends(require_permission("manage_products"))):
+    slug = (payload.slug or payload.name).strip().lower().replace(" ", "-")
+    slug = "".join(ch for ch in slug if ch.isalnum() or ch == "-")
+    if not slug:
+        raise HTTPException(status_code=400, detail="Category slug is required.")
+    if await db.product_categories.find_one({"slug": slug}):
+        raise HTTPException(status_code=400, detail="A category with this slug already exists.")
+    cat = Category(**{**payload.model_dump(), "slug": slug})
+    await db.product_categories.insert_one(cat.model_dump())
+    return cat
+
+
+@api_router.patch("/admin/product-categories/{cat_id}", response_model=Category)
+async def admin_update_category(cat_id: str, payload: CategoryIn, admin=Depends(require_permission("manage_products"))):
+    existing = await db.product_categories.find_one({"id": cat_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Category not found.")
+    updates = payload.model_dump(exclude_unset=True)
+    if "slug" in updates and updates["slug"]:
+        s = updates["slug"].strip().lower().replace(" ", "-")
+        s = "".join(ch for ch in s if ch.isalnum() or ch == "-")
+        if s != existing.get("slug") and await db.product_categories.find_one({"slug": s}):
+            raise HTTPException(status_code=400, detail="A category with this slug already exists.")
+        updates["slug"] = s
+    merged = {**existing, **updates}
+    await db.product_categories.update_one({"id": cat_id}, {"$set": merged})
+    return merged
+
+
+@api_router.delete("/admin/product-categories/{cat_id}")
+async def admin_delete_category(cat_id: str, admin=Depends(require_permission("manage_products"))):
+    res = await db.product_categories.delete_one({"id": cat_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Category not found.")
+    return {"deleted": True}
+
+
+# ---------- GST RULES · admin CRUD ----------
+@api_router.get("/admin/gst-rules", response_model=List[GstRule])
+async def admin_list_gst_rules(admin=Depends(require_permission("manage_gst"))):
+    return await db.gst_rules.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api_router.post("/admin/gst-rules", response_model=GstRule)
+async def admin_create_gst_rule(payload: GstRuleIn, admin=Depends(require_permission("manage_gst"))):
+    data = payload.model_dump()
+    if not data.get("hsn_code") and not data.get("category"):
+        raise HTTPException(status_code=400, detail="A rule must target either an HSN code or a category.")
+    if data.get("rate_percent") is None or data["rate_percent"] < 0 or data["rate_percent"] > 100:
+        raise HTTPException(status_code=400, detail="Rate must be between 0 and 100.")
+    # normalize
+    if data.get("hsn_code"):
+        data["hsn_code"] = data["hsn_code"].strip()
+    if data.get("category"):
+        data["category"] = data["category"].strip().lower()
+    # uniqueness on (hsn_code, category)
+    q = {"hsn_code": data.get("hsn_code"), "category": data.get("category")}
+    if await db.gst_rules.find_one(q):
+        raise HTTPException(status_code=400, detail="A rule already exists for this target. Edit it instead.")
+    rule = GstRule(**data)
+    await db.gst_rules.insert_one(rule.model_dump())
+    return rule
+
+
+@api_router.patch("/admin/gst-rules/{rule_id}", response_model=GstRule)
+async def admin_update_gst_rule(rule_id: str, payload: GstRuleIn, admin=Depends(require_permission("manage_gst"))):
+    existing = await db.gst_rules.find_one({"id": rule_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="GST rule not found.")
+    data = payload.model_dump(exclude_unset=True)
+    if "hsn_code" in data and data["hsn_code"]:
+        data["hsn_code"] = data["hsn_code"].strip()
+    if "category" in data and data["category"]:
+        data["category"] = data["category"].strip().lower()
+    if "rate_percent" in data and data["rate_percent"] is not None:
+        if data["rate_percent"] < 0 or data["rate_percent"] > 100:
+            raise HTTPException(status_code=400, detail="Rate must be between 0 and 100.")
+    merged = {**existing, **data}
+    await db.gst_rules.update_one({"id": rule_id}, {"$set": merged})
+    return merged
+
+
+@api_router.delete("/admin/gst-rules/{rule_id}")
+async def admin_delete_gst_rule(rule_id: str, admin=Depends(require_permission("manage_gst"))):
+    res = await db.gst_rules.delete_one({"id": rule_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="GST rule not found.")
+    return {"deleted": True}
+
+
 @api_router.get("/products", response_model=List[Product])
 async def list_products():
     return await db.products.find({}, {"_id": 0}).to_list(200)
@@ -542,6 +909,21 @@ async def create_order(payload: OrderIn):
     order = Order(**payload.model_dump())
     if payload.coupon_code:
         order.coupon_code = payload.coupon_code.upper().strip()
+    # --- Phase A (Jul 2025): compute GST authoritatively (server is source of truth) ---
+    try:
+        tax = await compute_taxes_for_cart(
+            [i.model_dump() for i in payload.items],
+            ship_state=(order.customer.state if getattr(order.customer, "state", None) else None),
+            treatment="inclusive",
+        )
+        order.gst_total_inr = int(tax.get("gst_total_inr") or 0)
+        order.cgst_inr = int(tax.get("cgst_inr") or 0)
+        order.sgst_inr = int(tax.get("sgst_inr") or 0)
+        order.igst_inr = int(tax.get("igst_inr") or 0)
+        order.gst_lines = tax.get("gst_lines") or []
+        order.gst_treatment = "inclusive"
+    except Exception as e:
+        logging.warning(f"GST computation failed on order create: {e}")
     if payload.payment_method == "razorpay":
         if not rzp_client:
             raise HTTPException(status_code=500, detail="Razorpay not configured")

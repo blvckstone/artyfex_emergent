@@ -121,6 +121,153 @@ backend:
   6) Admin password reset from Settings tab.
 
 backend:
+  - task: "Phase A Jul 2025 · Product schema expansion (category, HSN, SKU, weight, dims, tags)"
+    implemented: true
+    working: true
+    file: "backend/server.py, backend/server_seed.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Extended Product / ProductIn models with optional commerce+logistics fields.
+          Seed products now carry category/hsn_code/sku/weight/dims/tags.
+          Startup backfill sets category='mirrors' + hsn_code='7009' on any legacy product missing category.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (4/4 tests passed):
+          - GET /api/products → 4 products returned
+          - All products have new schema fields: category, hsn_code, sku, weight_grams, length_cm, width_cm, height_cm, tags
+          - All 4 seed products have category='mirrors'
+          - All 4 mirror products have hsn_code='7009'
+          Product schema expansion working correctly with proper backfill.
+
+  - task: "Phase A Jul 2025 · Product Categories CRUD"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Public: GET /api/product-categories. Admin: GET/POST/PATCH/DELETE /api/admin/product-categories.
+          Slug uniqueness enforced. Seeded 8 defaults (Mirrors, Wall Art, Sculpture, Tabletop, Lighting, Companion, Gifting, Custom).
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (6/6 tests passed):
+          - GET /api/product-categories (public, no auth) → 8 categories
+          - GET /api/admin/product-categories (admin auth) → 8 categories
+          - POST /api/admin/product-categories with {"name":"Test Cat","active":true} → created with auto-slug "test-cat"
+          - POST duplicate slug → 400 "already exists"
+          - PATCH /api/admin/product-categories/{id} with {"name":"Test Cat","description":"Updated"} → description updated
+          - DELETE /api/admin/product-categories/{id} → deleted successfully
+          Note: PATCH endpoint requires 'name' field even for partial updates (CategoryIn model has name as required field).
+          All product category CRUD operations working correctly.
+
+  - task: "Phase A Jul 2025 · GST Rules CRUD"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Admin CRUD under /api/admin/gst-rules with new `manage_gst` permission (owner bypasses).
+          Fields: hsn_code | category | rate_percent | description | active. Uniqueness on (hsn+category).
+          Rate 0–100 validated. 11 default rules seeded (HSN 7009→18, HSN 9701→12, HSN 3926→18, plus one per category fallback).
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (9/9 tests passed):
+          - GET /api/admin/gst-rules → 11 seeded rules returned
+          - POST /api/admin/gst-rules with {"hsn_code":"9999","rate_percent":5,"description":"Test","active":true} → created successfully
+          - POST duplicate (same hsn+category) → 400 "already exists"
+          - POST with rate_percent=-5 → 400 (validation working)
+          - POST with rate_percent=150 → 400 (validation working)
+          - POST with neither hsn_code nor category → 400 "must target either an HSN code or a category"
+          - PATCH /api/admin/gst-rules/{id} with rate_percent=8 → updated successfully
+          - DELETE /api/admin/gst-rules/{id} → deleted successfully
+          - Permission check: anonymous request → 401, admin request → 200
+          All GST Rules CRUD operations working correctly with proper validation and permission checks.
+
+  - task: "Phase A Jul 2025 · GST tax engine + POST /api/cart/compute-tax"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          compute_taxes_for_cart(items, ship_state, treatment='inclusive'):
+          - Resolves rate via HSN > category priority, else 0
+          - Extracts tax = line_total * rate / (100 + rate) (INCLUSIVE model)
+          - Split: ship_state == Maharashtra → CGST + SGST halves, else IGST
+          - Returns gst_total_inr, cgst_inr, sgst_inr, igst_inr, gst_lines[], intra_state flag
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (10/10 tests passed):
+          Test A - Intra-state (Maharashtra):
+          - intra_state=True, gst_total=6559, cgst=3279, sgst=3280, igst=0
+          - CGST + SGST = gst_total (halves with rounding-safe sum)
+          
+          Test B - Inter-state (Karnataka):
+          - intra_state=False, gst_total=6559, cgst=0, sgst=0, igst=6559
+          - IGST = gst_total, CGST and SGST = 0
+          
+          Test C - Multi-item cart (2 products, qty 2 each):
+          - gst_total=18914 == sum of line taxes (2 gst_lines)
+          
+          Test D - Unknown product / qty=0:
+          - No crash, invalid items skipped gracefully
+          
+          Test E - No ship_state:
+          - Treated as inter-state (IGST), intra_state=False
+          
+          Test F - HSN vs Category Priority:
+          - Created temp category="mirrors" rule with 5%
+          - Product with HSN 7009 (18%) correctly uses HSN rule over category rule
+          - source="hsn:7009", rate=18% (not category 5%)
+          
+          All tax engine scenarios working correctly with proper GST split logic.
+
+  - task: "Phase A Jul 2025 · Order create computes GST server-side authoritatively"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Order model expanded with gst_total_inr, cgst_inr, sgst_inr, igst_inr, gst_lines[], gst_treatment.
+          POST /api/orders now overrides client-provided GST fields with server-computed values from compute_taxes_for_cart(customer.state).
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (5/5 tests passed):
+          - POST /api/orders with payment_method="cod" and gst_total_inr=0 (wrong value) → order created
+          - Server recomputed GST: gst_total_inr=6559 (> 0, not the client's 0)
+          - Order has gst_lines[] populated (1 line)
+          - Intra-state order (Maharashtra): cgst=3279, sgst=3280, igst=0 (correct split)
+          - GET /api/orders/{order_number} → all GST fields persisted correctly
+          Server-side GST computation working correctly, client values overridden as expected.
+
   - task: "Phase B: Analytics overview endpoint"
     implemented: true
     working: true
@@ -1724,20 +1871,140 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "2.3"
-  test_sequence: 10
-  run_ui: true
+  version: "2.4"
+  test_sequence: 11
+  run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Phase A · Product Attributes (category, HSN, SKU, weight, dims, tags)"
+    - "Phase A · GST Management CRUD + Tax Engine"
+    - "Phase A · Cart tax preview + order creation with GST split"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      🆕 PHASE A · Task 28 + Task 30 (Part 1) implemented — needs backend testing.
+
+      SCOPE JUST ADDED:
+
+      1. Product schema extended (backward-compat, all fields optional):
+         - `category` (matches ProductCategory.slug)
+         - `hsn_code`, `sku`
+         - `weight_grams`, `length_cm`, `width_cm`, `height_cm`
+         - `tags: List[str]`
+
+      2. Two new admin-managed collections:
+         - `product_categories` (seeded 8 defaults) — public GET /api/product-categories, admin CRUD under /api/admin/product-categories
+         - `gst_rules` (seeded 11 defaults) — admin CRUD under /api/admin/gst-rules with new `manage_gst` permission
+
+      3. Tax engine (backend/server.py `compute_taxes_for_cart`):
+         - Priority: HSN match > Category match; else 0%
+         - GST-INCLUSIVE treatment: tax extracted from listed price with `tax = line_total * rate / (100 + rate)`
+         - Ship-state split: Maharashtra → CGST + SGST (halves); else IGST (full)
+         - Publicly reachable at POST /api/cart/compute-tax
+
+      4. Order model expanded with `gst_total_inr`, `cgst_inr`, `sgst_inr`, `igst_inr`, `gst_lines[]`, `gst_treatment`.
+         Server recomputes tax authoritatively on order create (client values are ignored/overwritten).
+
+      SEED / BACKFILL:
+      - Fresh install seeds 8 categories + 11 GST rules.
+      - On startup we backfill legacy products missing `category` → set `category="mirrors"`, `hsn_code="7009"` (all seed products are mirrors).
+
+      ADMIN CREDS: admin@artyfex.in / ArtyFex@2026 (in /app/memory/test_credentials.md).
+
+      PLEASE TEST:
+      - `GET /api/product-categories` returns 8 items
+      - Admin CRUD on categories (create/patch/delete, slug uniqueness)
+      - Admin CRUD on GST rules (create/patch/delete, uniqueness on hsn+category, rate 0–100 validation)
+      - `POST /api/cart/compute-tax` with ship_state="Maharashtra" (intra) vs "Karnataka" (inter) — verify CGST+SGST vs IGST split
+      - Verify HSN-first priority (a product with matching HSN wins over category rule)
+      - Order create end-to-end: `POST /api/orders` (COD) — response should include populated gst_total_inr / cgst_inr / sgst_inr / igst_inr / gst_lines
+      - Existing regression: products, coupons, reviews, admin login, existing order endpoints still work.
+
+  - agent: "testing"
+    message: |
+      ✅ PHASE A (JUL 2025) BACKEND TESTING COMPLETE - ALL TESTS PASSED (39/39)
+      
+      Comprehensive testing completed for all Phase A Jul 2025 backend features per review request specifications.
+      Test file: /app/backend_test_phase_a_jul2025.py
+      Results: /app/backend_test_phase_a_jul2025_results.json
+      
+      SECTION 1 - PRODUCT SCHEMA EXPANSION (4/4 passed):
+      ✅ GET /api/products → 4 products with all new fields (category, hsn_code, sku, weight_grams, length_cm, width_cm, height_cm, tags)
+      ✅ All 4 seed products have category='mirrors'
+      ✅ All 4 mirror products have hsn_code='7009'
+      ✅ Backfill working correctly
+      
+      SECTION 2 - PRODUCT CATEGORIES CRUD (6/6 passed):
+      ✅ GET /api/product-categories (public) → 8 seeded categories
+      ✅ GET /api/admin/product-categories (admin) → 8 categories
+      ✅ POST /api/admin/product-categories → creates with auto-slug "test-cat"
+      ✅ POST duplicate slug → 400 "already exists"
+      ✅ PATCH /api/admin/product-categories/{id} → description updated
+      ✅ DELETE /api/admin/product-categories/{id} → deleted successfully
+      
+      SECTION 3 - GST RULES CRUD (9/9 passed):
+      ✅ GET /api/admin/gst-rules → 11 seeded rules (3 HSN + 8 category)
+      ✅ POST /api/admin/gst-rules with HSN 9999, rate 5% → created
+      ✅ POST duplicate (same hsn+category) → 400 "already exists"
+      ✅ POST invalid rate (rate_percent=-5) → 400
+      ✅ POST invalid rate (rate_percent=150) → 400
+      ✅ POST with neither hsn_code nor category → 400
+      ✅ PATCH /api/admin/gst-rules/{id} with rate_percent=8 → updated
+      ✅ DELETE /api/admin/gst-rules/{id} → deleted
+      ✅ Permission check: anonymous → 401, admin → 200
+      
+      SECTION 4 - TAX ENGINE (5/5 passed):
+      ✅ Test A: ship_state="Maharashtra" (INTRA-STATE)
+         - intra_state=True, gst_total=6559
+         - cgst=3279 + sgst=3280 = gst_total (halves with rounding-safe sum)
+         - igst=0
+      ✅ Test B: ship_state="Karnataka" (INTER-STATE)
+         - intra_state=False, gst_total=6559
+         - cgst=0, sgst=0, igst=6559
+      ✅ Test C: Multi-item cart (2 products, qty 2 each)
+         - gst_total=18914 == sum of per-line tax_inr in gst_lines[]
+      ✅ Test D: Unknown product_id / quantity=0
+         - No crash, invalid items skipped gracefully
+      ✅ Test E: No ship_state
+         - Treated as inter-state (IGST), intra_state=False
+      
+      SECTION 5 - HSN vs CATEGORY PRIORITY (5/5 passed):
+      ✅ Temporarily deleted existing category="mirrors" rule (18%)
+      ✅ Created temp category="mirrors" rule with 5%
+      ✅ Product with HSN 7009 correctly uses HSN rule (18%) over category rule (5%)
+         - source="hsn:7009", rate=18%
+      ✅ Cleanup: deleted temp rule
+      ✅ Restored original category="mirrors" rule (18%)
+      
+      SECTION 6 - ORDER CREATE COMPUTES GST SERVER-SIDE (5/5 passed):
+      ✅ POST /api/orders with payment_method="cod" and wrong gst_total_inr=0
+         - Server recomputed: gst_total_inr=6559 (> 0, not client's 0)
+      ✅ Order has gst_lines[] populated (1 line)
+      ✅ Intra-state order (Maharashtra): cgst=3279, sgst=3280, igst=0
+      ✅ GET /api/orders/{order_number} → all GST fields persisted correctly
+      ✅ Server-side computation working, client values overridden
+      
+      SECTION 7 - PERMISSION CHECK (2/2 passed):
+      ✅ Anonymous request to /api/admin/gst-rules → 401
+      ✅ Admin token request → 200
+      
+      MINOR OBSERVATION:
+      - PATCH /api/admin/product-categories/{id} requires 'name' field even for partial updates (CategoryIn model has name as required field, not Optional). This is a minor backend design issue but doesn't affect functionality - workaround is to send full payload.
+      
+      CONCLUSION:
+      All Phase A (Jul 2025) backend features working correctly. No critical issues found.
+      Ready for main agent to summarize and finish.
+
   - agent: "testing"
     message: |
       ✅ PHASE A UI BUG-FIX VERIFICATION COMPLETE - ALL TESTS PASSED (7/7)
+
+      (Older frontend test log — preserved for historical context. See sections above.)
       
       Conducted comprehensive single-session testing of all 7 Phase A UI fixes per review request.
       Credit-efficient testing with minimal screenshots, focused verification.

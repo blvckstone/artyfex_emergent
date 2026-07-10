@@ -1,0 +1,202 @@
+{
+  "total": 39,
+  "passed": 39,
+  "failed": 0,
+  "results": [
+    {
+      "test": "Admin login",
+      "passed": true,
+      "details": "Token received"
+    },
+    {
+      "test": "GET /api/products",
+      "passed": true,
+      "details": "Returned 4 products"
+    },
+    {
+      "test": "Product has new schema fields",
+      "passed": true,
+      "details": "All fields present: ['category', 'hsn_code', 'sku', 'weight_grams', 'length_cm', 'width_cm', 'height_cm', 'tags']"
+    },
+    {
+      "test": "Seed products have category='mirrors'",
+      "passed": true,
+      "details": "4 mirror products found"
+    },
+    {
+      "test": "Mirror products have hsn_code='7009'",
+      "passed": true,
+      "details": "All 4 mirrors have HSN 7009"
+    },
+    {
+      "test": "GET /api/product-categories (public)",
+      "passed": true,
+      "details": "Returned 8 categories"
+    },
+    {
+      "test": "8 seeded categories present",
+      "passed": true,
+      "details": "Found 8 categories"
+    },
+    {
+      "test": "GET /api/admin/product-categories (admin)",
+      "passed": true,
+      "details": "Returned 8 categories"
+    },
+    {
+      "test": "POST /api/admin/product-categories (create)",
+      "passed": true,
+      "details": "Created category with auto-slug: test-cat"
+    },
+    {
+      "test": "POST duplicate category slug",
+      "passed": true,
+      "details": "400 error as expected"
+    },
+    {
+      "test": "PATCH /api/admin/product-categories/{id}",
+      "passed": true,
+      "details": "Description updated"
+    },
+    {
+      "test": "DELETE /api/admin/product-categories/{id}",
+      "passed": true,
+      "details": "Category deleted"
+    },
+    {
+      "test": "GET /api/admin/gst-rules",
+      "passed": true,
+      "details": "Returned 11 rules"
+    },
+    {
+      "test": "11 seeded GST rules present",
+      "passed": true,
+      "details": "Found 11 rules"
+    },
+    {
+      "test": "POST /api/admin/gst-rules (create)",
+      "passed": true,
+      "details": "Created rule with HSN 9999, rate 5%"
+    },
+    {
+      "test": "POST duplicate GST rule",
+      "passed": true,
+      "details": "400 error as expected"
+    },
+    {
+      "test": "POST GST rule with invalid rate (negative)",
+      "passed": true,
+      "details": "400 error as expected"
+    },
+    {
+      "test": "POST GST rule with invalid rate (>100)",
+      "passed": true,
+      "details": "400 error as expected"
+    },
+    {
+      "test": "POST GST rule without hsn_code or category",
+      "passed": true,
+      "details": "400 error as expected"
+    },
+    {
+      "test": "PATCH /api/admin/gst-rules/{id}",
+      "passed": true,
+      "details": "Rate updated to 8%"
+    },
+    {
+      "test": "DELETE /api/admin/gst-rules/{id}",
+      "passed": true,
+      "details": "Rule deleted"
+    },
+    {
+      "test": "Find product with HSN 7009",
+      "passed": true,
+      "details": "Found product: Obsidian Aurora \u2014 2\u00d73 ft Statement Geode Mirror"
+    },
+    {
+      "test": "Tax Engine: Intra-state (Maharashtra) \u2192 CGST+SGST",
+      "passed": true,
+      "details": "intra_state=True, gst_total=6559, cgst=3279, sgst=3280, igst=0"
+    },
+    {
+      "test": "Tax Engine: Inter-state (Karnataka) \u2192 IGST",
+      "passed": true,
+      "details": "intra_state=False, gst_total=6559, cgst=0, sgst=0, igst=6559"
+    },
+    {
+      "test": "Tax Engine: Multi-item cart",
+      "passed": true,
+      "details": "gst_total=18914 == sum of line taxes=18914, 2 lines"
+    },
+    {
+      "test": "Tax Engine: Unknown product / qty=0",
+      "passed": true,
+      "details": "No crash, returned 1 lines (skipped invalid items)"
+    },
+    {
+      "test": "Tax Engine: No ship_state \u2192 inter-state (IGST)",
+      "passed": true,
+      "details": "intra_state=False, igst=6559"
+    },
+    {
+      "test": "Temporarily delete existing mirrors category rule",
+      "passed": true,
+      "details": "Deleted rule with rate 18.0%"
+    },
+    {
+      "test": "Create temp category rule",
+      "passed": true,
+      "details": "Created category='mirrors' rule with 5%"
+    },
+    {
+      "test": "HSN priority over category",
+      "passed": true,
+      "details": "HSN 7009 (18%) wins over category (5%), source=hsn:7009"
+    },
+    {
+      "test": "Cleanup temp GST rule",
+      "passed": true,
+      "details": "Deleted temp rule"
+    },
+    {
+      "test": "Restore original mirrors rule",
+      "passed": true,
+      "details": "Restored rule with rate 18.0%"
+    },
+    {
+      "test": "POST /api/orders",
+      "passed": true,
+      "details": "Order created: ARF-7D0F6C03"
+    },
+    {
+      "test": "Server recomputed GST (gst_total_inr > 0)",
+      "passed": true,
+      "details": "gst_total=6559, cgst=3279, sgst=3280, igst=0"
+    },
+    {
+      "test": "Order has gst_lines[]",
+      "passed": true,
+      "details": "1 lines"
+    },
+    {
+      "test": "Intra-state order has CGST+SGST",
+      "passed": true,
+      "details": "cgst=3279, sgst=3280, igst=0"
+    },
+    {
+      "test": "GET /api/orders/{n} returns persisted GST",
+      "passed": true,
+      "details": "gst_total=6559, 1 lines"
+    },
+    {
+      "test": "Anonymous request to /api/admin/gst-rules \u2192 401",
+      "passed": true,
+      "details": "Unauthorized as expected"
+    },
+    {
+      "test": "Admin request to /api/admin/gst-rules \u2192 200",
+      "passed": true,
+      "details": "Authorized"
+    }
+  ]
+}

@@ -30,7 +30,11 @@ const loadRazorpay = () =>
 const MAX_RETRIES = 3;
 
 export const CheckoutDialog = ({ open, onClose }) => {
-  const { items, subtotal, shipping: defaultShipping, coupon, discount, clear } = useCart();
+  const {
+    items, subtotal, shipping: defaultShipping, coupon, discount, clear,
+    gstIncluded, gstIntraState, cgstIncluded, sgstIncluded, igstIncluded,
+    setShipState,
+  } = useCart();
   const [step, setStep] = useState("form"); // form | processing | success | error
   const [orderNumber, setOrderNumber] = useState("");
   const [errorTitle, setErrorTitle] = useState("Payment could not be completed");
@@ -85,6 +89,11 @@ export const CheckoutDialog = ({ open, onClose }) => {
     });
     return () => { cancelled = true; };
   }, [open, form.state, form.pincode, form.country, discountedSubtotal, subtotal]);
+
+  // Sync ship state → cart context so GST split (CGST/SGST vs IGST) updates as user types
+  useEffect(() => {
+    if (setShipState) setShipState(form.state || null);
+  }, [form.state, setShipState]);
 
   const validate = () => {
     if (!form.name || !form.email || !form.phone || !form.pincode || !form.line1 || !form.city || !form.state)
@@ -240,6 +249,11 @@ export const CheckoutDialog = ({ open, onClose }) => {
       total_inr: total,
       coupon_code: coupon?.code || null,
       discount_inr: discount || 0,
+      // Phase A (Jul 2025) · GST — server will recompute authoritatively, but we pass what the buyer sees for parity
+      gst_total_inr: gstIncluded || 0,
+      cgst_inr: cgstIncluded || 0,
+      sgst_inr: sgstIncluded || 0,
+      igst_inr: igstIncluded || 0,
     };
     setLastOrderPayload(payload);
     initiateCheckout(payload);
@@ -355,6 +369,16 @@ export const CheckoutDialog = ({ open, onClose }) => {
                       <span className="text-[10px] uppercase tracking-luxury text-cream/50">Total</span>
                       <span className="font-serif text-3xl text-cream">{formatINR(total)}</span>
                     </div>
+                    {gstIncluded > 0 && (
+                      <div data-testid="checkout-gst-included" className="text-[10px] text-cream/40 text-right leading-relaxed pt-1">
+                        Inclusive of GST · {formatINR(gstIncluded)}
+                        {gstIntraState ? (
+                          <> · CGST {formatINR(cgstIncluded)} + SGST {formatINR(sgstIncluded)}</>
+                        ) : igstIncluded > 0 ? (
+                          <> · IGST {formatINR(igstIncluded)}</>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                   <button type="submit" data-testid={IDS.checkout.payButton}
                     className="mt-8 w-full bg-gold text-ink-950 px-6 py-5 text-xs uppercase tracking-luxury hover:bg-cream transition-colors">
