@@ -1,17 +1,19 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, AlertCircle } from "lucide-react";
-import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 
 /**
  * AuthCallback
  * ------------
- * Landed here after Emergent Google OAuth redirect. The session_id arrives in the URL
- * fragment (e.g. `#session_id=xxxx`). We exchange it server-side for our own JWT.
+ * Landing route after our custom Google OAuth flow (Phase B).
+ * The backend redirects here with a URL fragment like:
+ *   #token=<jwt>&email=...&name=...&picture=...&next=/account
+ * or on failure:
+ *   #error=<code>
  *
- * REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+ * We parse it, hand the JWT to AuthContext, then bounce to `next` (default /account).
  */
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -20,39 +22,47 @@ export default function AuthCallback() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // Guard against React StrictMode double-invoke — synchronously mark processed
     if (hasProcessed.current) return;
     hasProcessed.current = true;
 
-    const parseFragment = () => {
-      const raw = window.location.hash?.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
-      if (!raw) return {};
-      const params = new URLSearchParams(raw);
-      const obj = {};
-      params.forEach((v, k) => { obj[k] = v; });
-      return obj;
-    };
+    const raw = window.location.hash?.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+    if (!raw) {
+      setError("Missing session — please try signing in again.");
+      return;
+    }
 
-    const run = async () => {
-      const { session_id } = parseFragment();
-      if (!session_id) {
-        setError("Missing session — please try signing in again.");
-        return;
-      }
-      try {
-        const { data } = await api.post("/auth/google/session", { session_id });
-        applyGoogleSession(data.token, data.user);
-        toast.success(`Welcome, ${data.user?.name?.split(" ")[0] || "friend"}`);
-        // Clean the fragment before navigating so a refresh does not re-process
-        window.history.replaceState({}, document.title, window.location.pathname);
-        navigate("/account", { replace: true });
-      } catch (err) {
-        const msg = err?.response?.data?.detail || err?.message || "Could not sign you in with Google.";
-        setError(msg);
-        toast.error(msg);
-      }
-    };
-    run();
+    const params = new URLSearchParams(raw);
+    const errCode = params.get("error");
+    if (errCode) {
+      const map = {
+        missing_code: "Google did not return an authorisation code.",
+        invalid_state: "Sign-in link expired. Please try again.",
+        token_exchange_failed: "Google rejected the sign-in. Please try again.",
+        no_email: "Your Google account did not share an email.",
+        server_not_configured: "Google sign-in is not yet configured on the server.",
+      };
+      const msg = map[errCode] || `Sign-in failed (${errCode}).`;
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    const token = params.get("token");
+    const email = params.get("email");
+    const name = params.get("name") || "";
+    const picture = params.get("picture") || "";
+    const next = params.get("next") || "/account";
+
+    if (!token || !email) {
+      setError("Missing token — please try signing in again.");
+      return;
+    }
+
+    applyGoogleSession(token, { name, email, phone: "", picture });
+    toast.success(`Welcome, ${(name && name.split(" ")[0]) || "friend"}`);
+    // Clean the fragment so a refresh does not re-process.
+    window.history.replaceState({}, document.title, window.location.pathname);
+    navigate(next, { replace: true });
   }, [applyGoogleSession, navigate]);
 
   return (

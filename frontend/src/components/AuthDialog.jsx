@@ -71,9 +71,12 @@ export default function AuthDialog() {
                 type="button"
                 data-testid="auth-google"
                 onClick={() => {
-                  // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-                  const redirectUrl = window.location.origin + "/auth/callback";
-                  window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+                  // Phase B: custom Google OAuth (server redirect flow).
+                  // Backend endpoint /api/auth/google/login redirects to Google, then back to /api/auth/google/callback,
+                  // which finally lands at <frontend>/auth/callback#token=...&email=...&name=...&picture=...&next=...
+                  const backend = process.env.REACT_APP_BACKEND_URL || "";
+                  const next = window.location.pathname + window.location.search;
+                  window.location.href = `${backend}/api/auth/google/login?next=${encodeURIComponent(next)}`;
                 }}
                 className="mt-4 w-full flex items-center justify-center gap-3 border border-white/15 bg-white text-ink-950 py-4 text-xs uppercase tracking-luxury hover:bg-cream transition-colors"
               >

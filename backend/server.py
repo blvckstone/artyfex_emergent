@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request
+from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -6,6 +7,8 @@ import os
 import logging
 import hmac
 import hashlib
+import json
+from urllib.parse import urlencode
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import List, Optional
@@ -27,9 +30,18 @@ db = client[os.environ['DB_NAME']]
 
 RZP_KEY = os.environ.get('RAZORPAY_KEY_ID', '')
 RZP_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '')
+RZP_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', '')
 JWT_SECRET = os.environ.get('JWT_SECRET', 'change-me')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@artyfex.in')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'ArtyFex@2026')
+
+# Google OAuth (custom, Phase B). If unset, /auth/google/login returns 500.
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
+# Public URLs used to build OAuth redirect + final frontend hand-off.
+# In production set BACKEND_PUBLIC_URL to your Render URL and FRONTEND_PUBLIC_URL to https://www.artyfex.in.
+BACKEND_PUBLIC_URL = (os.environ.get('BACKEND_PUBLIC_URL', '') or 'http://localhost:8001').rstrip('/')
+FRONTEND_PUBLIC_URL = (os.environ.get('FRONTEND_PUBLIC_URL', '') or 'http://localhost:3000').rstrip('/')
 
 rzp_client = razorpay.Client(auth=(RZP_KEY, RZP_SECRET)) if RZP_KEY else None
 
@@ -927,8 +939,15 @@ async def create_order(payload: OrderIn):
     if payload.payment_method == "razorpay":
         if not rzp_client:
             raise HTTPException(status_code=500, detail="Razorpay not configured")
+        # --- Phase B: recompute total server-side (subtotal - discount + shipping; GST is inclusive) ---
+        server_total = max(0, int(payload.subtotal_inr) - int(payload.discount_inr or 0) + int(payload.shipping_inr))
+        if abs(server_total - int(payload.total_inr)) > 1:
+            logging.warning(
+                f"Order total mismatch (client={payload.total_inr}, server={server_total}). Trusting server."
+            )
+            order.total_inr = server_total
         rzp_order = rzp_client.order.create({
-            "amount": order.total_inr * 100,
+            "amount": int(order.total_inr) * 100,
             "currency": "INR",
             "receipt": order.order_number[:40],
             "payment_capture": 1,
@@ -958,10 +977,83 @@ async def verify_order(payload: RzpVerify):
         {"order_number": payload.order_number},
         {"$set": {"status": "confirmed", "razorpay_payment_id": payload.razorpay_payment_id}},
     )
+    # Phase B: decrement stock on successful client-side verification (idempotent guard via status change)
+    if order.get("status") != "confirmed":
+        for it in order.get("items", []):
+            try:
+                await db.products.update_one(
+                    {"id": it.get("product_id")},
+                    {"$inc": {"stock_count": -int(it.get("quantity", 1))}},
+                )
+            except Exception as _e:
+                logging.warning(f"Stock decrement failed for {it}: {_e}")
     # Increment coupon usage counter on successful verification
     if order.get("coupon_code"):
         await db.coupons.update_one({"code": order["coupon_code"]}, {"$inc": {"used_count": 1}})
     return {"status": "confirmed", "order_number": payload.order_number}
+
+
+# ---------- RAZORPAY WEBHOOK (Phase B) ---------- #
+# Configure in Razorpay Dashboard → Settings → Webhooks:
+#   URL:    https://<your-render-backend>/api/razorpay/webhook
+#   Secret: whatever you paste into env var RAZORPAY_WEBHOOK_SECRET
+#   Events: payment.captured, payment.failed
+@api_router.post("/razorpay/webhook")
+async def razorpay_webhook(request: Request):
+    raw = await request.body()
+    signature = request.headers.get("X-Razorpay-Signature", "")
+    if not RZP_WEBHOOK_SECRET:
+        logging.error("Razorpay webhook received but RAZORPAY_WEBHOOK_SECRET is not set")
+        raise HTTPException(status_code=500, detail="Webhook secret not configured on server")
+    expected = hmac.new(RZP_WEBHOOK_SECRET.encode(), raw, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+    try:
+        payload_json = json.loads(raw.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    event = payload_json.get("event", "")
+    entity = ((payload_json.get("payload") or {}).get("payment") or {}).get("entity") or {}
+    rzp_order_id = entity.get("order_id")
+    rzp_payment_id = entity.get("id")
+
+    if not rzp_order_id:
+        return {"status": "ignored", "reason": "no order_id"}
+
+    order = await db.orders.find_one({"razorpay_order_id": rzp_order_id}, {"_id": 0})
+    if not order:
+        # Webhook may arrive before order finishes writing OR for a stale order. Ack to prevent retries.
+        return {"status": "ignored", "reason": "order not found", "razorpay_order_id": rzp_order_id}
+
+    if event == "payment.captured":
+        # Only apply stock/coupon side-effects once; guard via status change.
+        was_confirmed = order.get("status") == "confirmed"
+        await db.orders.update_one(
+            {"razorpay_order_id": rzp_order_id},
+            {"$set": {"status": "confirmed", "razorpay_payment_id": rzp_payment_id, "tracking_updated_at": now_iso()}},
+        )
+        if not was_confirmed:
+            for it in order.get("items", []):
+                try:
+                    await db.products.update_one(
+                        {"id": it.get("product_id")},
+                        {"$inc": {"stock_count": -int(it.get("quantity", 1))}},
+                    )
+                except Exception as _e:
+                    logging.warning(f"Webhook stock decrement failed for {it}: {_e}")
+            if order.get("coupon_code"):
+                await db.coupons.update_one({"code": order["coupon_code"]}, {"$inc": {"used_count": 1}})
+    elif event == "payment.failed":
+        await db.orders.update_one(
+            {"razorpay_order_id": rzp_order_id},
+            {"$set": {"status": "payment_failed"}},
+        )
+    else:
+        # Unhandled events (order.paid, refunds, etc.) — ack without action for now.
+        return {"status": "ok", "event": event, "handled": False}
+
+    return {"status": "ok", "event": event, "handled": True, "order_number": order.get("order_number")}
 
 
 @api_router.get("/orders/{order_number}", response_model=Order)
@@ -1208,6 +1300,144 @@ async def user_login(payload: UserLogin):
 @api_router.get("/auth/me")
 async def user_me(user=Depends(get_current_user)):
     return {"name": user["name"], "email": user["email"], "phone": user.get("phone", ""), "picture": user.get("picture")}
+
+
+# ---------- GOOGLE OAUTH (Custom, Phase B) ----------
+# Server-side OAuth 2.0 code flow. Prod redirect URI = {BACKEND_PUBLIC_URL}/api/auth/google/callback
+# Whitelist in Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID.
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+
+
+def _google_redirect_uri() -> str:
+    return f"{BACKEND_PUBLIC_URL}/api/auth/google/callback"
+
+
+@api_router.get("/auth/google/login")
+async def google_login(next: Optional[str] = "/account"):
+    """Kick off Google OAuth. Redirects the browser to Google's consent screen."""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(status_code=500, detail="Google OAuth not configured on server")
+    # Signed state carries the intended landing path so it survives the round-trip.
+    state = pyjwt.encode(
+        {
+            "next": next or "/account",
+            "nonce": uuid.uuid4().hex,
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=10),
+        },
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": _google_redirect_uri(),
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "online",
+        "include_granted_scopes": "true",
+        "prompt": "select_account",
+        "state": state,
+    }
+    return RedirectResponse(url=f"{GOOGLE_AUTH_URL}?{urlencode(params)}", status_code=302)
+
+
+def _frontend_callback_redirect(hash_params: dict) -> RedirectResponse:
+    return RedirectResponse(
+        url=f"{FRONTEND_PUBLIC_URL}/auth/callback#{urlencode(hash_params)}",
+        status_code=302,
+    )
+
+
+@api_router.get("/auth/google/callback")
+async def google_callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """Google redirects back here. We exchange the code, upsert the user, issue our JWT."""
+    if error:
+        return _frontend_callback_redirect({"error": error})
+    if not code:
+        return _frontend_callback_redirect({"error": "missing_code"})
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return _frontend_callback_redirect({"error": "server_not_configured"})
+
+    # Validate state
+    next_path = "/account"
+    try:
+        st = pyjwt.decode(state or "", JWT_SECRET, algorithms=["HS256"])
+        next_path = st.get("next") or "/account"
+    except Exception:
+        return _frontend_callback_redirect({"error": "invalid_state"})
+
+    # Exchange authorization code for access token
+    try:
+        async with httpx.AsyncClient(timeout=15) as http:
+            tok_resp = await http.post(
+                GOOGLE_TOKEN_URL,
+                data={
+                    "code": code,
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": _google_redirect_uri(),
+                    "grant_type": "authorization_code",
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            if tok_resp.status_code != 200:
+                logging.error(f"Google token exchange failed: {tok_resp.status_code} {tok_resp.text[:200]}")
+                return _frontend_callback_redirect({"error": "token_exchange_failed"})
+            tok = tok_resp.json()
+            access_token = tok.get("access_token")
+            if not access_token:
+                return _frontend_callback_redirect({"error": "no_access_token"})
+
+            ui_resp = await http.get(
+                GOOGLE_USERINFO_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            if ui_resp.status_code != 200:
+                logging.error(f"Google userinfo failed: {ui_resp.status_code} {ui_resp.text[:200]}")
+                return _frontend_callback_redirect({"error": "userinfo_failed"})
+            info = ui_resp.json()
+    except Exception as e:
+        logging.exception("Google OAuth exchange error")
+        return _frontend_callback_redirect({"error": f"exchange_error"})
+
+    email = (info.get("email") or "").lower()
+    name = info.get("name") or (email.split("@")[0] if email else "user")
+    picture = info.get("picture")
+    if not email:
+        return _frontend_callback_redirect({"error": "no_email"})
+
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    if existing:
+        upd = {"name": name or existing.get("name"), "auth_provider": "google"}
+        if picture:
+            upd["picture"] = picture
+        await db.users.update_one({"email": email}, {"$set": upd})
+        user_doc = {**existing, **upd}
+    else:
+        user_doc = {
+            "id": str(uuid.uuid4()),
+            "name": name,
+            "email": email,
+            "phone": "",
+            "picture": picture,
+            "auth_provider": "google",
+            "created_at": now_iso(),
+        }
+        await db.users.insert_one(user_doc)
+
+    token = create_token(email, role="user")
+    return _frontend_callback_redirect({
+        "token": token,
+        "email": email,
+        "name": user_doc.get("name") or "",
+        "picture": user_doc.get("picture") or "",
+        "next": next_path,
+    })
 
 
 # ---------- GOOGLE (EMERGENT) AUTH ---------- #
@@ -2209,7 +2439,7 @@ async def analytics_wishlist_usage(admin=Depends(require_permission("view_analyt
     entries = []
     per_customer = {}
     per_product = {}
-    async for w in db.wishlists.find({}, {"_id": 0}):
+    async for w in db.wishlist.find({}, {"_id": 0}):
         email = w.get("user_email") or w.get("email") or ""
         pid = w.get("product_id") or ""
         prod = await db.products.find_one({"id": pid}, {"_id": 0, "name": 1, "slug": 1, "images": 1, "price_inr": 1, "id": 1}) if pid else None
