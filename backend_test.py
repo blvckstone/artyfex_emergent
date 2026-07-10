@@ -13,7 +13,7 @@ import uuid
 import os
 
 # Configuration
-BACKEND_URL = "https://emergent-dev-38.preview.emergentagent.com/api"
+BACKEND_URL = "https://artyfex-main.preview.emergentagent.com/api"
 MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "artyfex"
 
