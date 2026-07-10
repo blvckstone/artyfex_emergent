@@ -72,11 +72,13 @@ export default function AuthDialog() {
                 data-testid="auth-google"
                 onClick={() => {
                   // Phase B: custom Google OAuth (server redirect flow).
-                  // Backend endpoint /api/auth/google/login redirects to Google, then back to /api/auth/google/callback,
-                  // which finally lands at <frontend>/auth/callback#token=...&email=...&name=...&picture=...&next=...
+                  // Backend derives redirect_uri from THIS request (works on prod/preview/local without env vars).
+                  // We also pass `origin` so the callback knows exactly which front-end to bounce back to.
                   const backend = process.env.REACT_APP_BACKEND_URL || "";
                   const next = window.location.pathname + window.location.search;
-                  window.location.href = `${backend}/api/auth/google/login?next=${encodeURIComponent(next)}`;
+                  const origin = window.location.origin;
+                  const url = `${backend}/api/auth/google/login?next=${encodeURIComponent(next)}&origin=${encodeURIComponent(origin)}`;
+                  window.location.href = url;
                 }}
                 className="mt-4 w-full flex items-center justify-center gap-3 border border-white/15 bg-white text-ink-950 py-4 text-xs uppercase tracking-luxury hover:bg-cream transition-colors"
               >

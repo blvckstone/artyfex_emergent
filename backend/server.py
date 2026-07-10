@@ -1303,26 +1303,77 @@ async def user_me(user=Depends(get_current_user)):
 
 
 # ---------- GOOGLE OAUTH (Custom, Phase B) ----------
-# Server-side OAuth 2.0 code flow. Prod redirect URI = {BACKEND_PUBLIC_URL}/api/auth/google/callback
-# Whitelist in Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID.
+# Server-side OAuth 2.0 code flow. redirect_uri is derived from the INCOMING request
+# (honors X-Forwarded-Proto / X-Forwarded-Host that Render/Vercel add), so it works
+# on prod, preview, and local WITHOUT setting BACKEND_PUBLIC_URL/FRONTEND_PUBLIC_URL.
+# `BACKEND_PUBLIC_URL` remains an optional explicit override if you want to force one.
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 
+# Front-end origins we are allowed to redirect the browser back to after OAuth.
+# Prevents open-redirect abuse; anything outside falls back to FRONTEND_PUBLIC_URL.
+ALLOWED_FRONTEND_ORIGINS = {
+    "https://www.artyfex.in",
+    "https://artyfex.in",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+}
 
-def _google_redirect_uri() -> str:
-    return f"{BACKEND_PUBLIC_URL}/api/auth/google/callback"
+
+def _resolve_backend_base(request: Request) -> str:
+    """Return the public base URL of THIS backend, e.g. https://artyfex-backend.onrender.com.
+    Priority: explicit env override → X-Forwarded-* (proxy) → request.url."""
+    override = os.environ.get('BACKEND_PUBLIC_URL', '').strip()
+    if override:
+        return override.rstrip('/')
+    proto = (request.headers.get('x-forwarded-proto') or request.url.scheme or 'http').split(',')[0].strip()
+    host = (request.headers.get('x-forwarded-host') or request.headers.get('host') or request.url.netloc).split(',')[0].strip()
+    return f"{proto}://{host}".rstrip('/')
+
+
+def _resolve_frontend_base(origin_hint: Optional[str], referer: Optional[str]) -> str:
+    """Pick the front-end base URL to bounce back to. Only allow known origins."""
+    for candidate in (origin_hint, referer):
+        if not candidate:
+            continue
+        # Strip any path from referer → keep only scheme+host
+        try:
+            from urllib.parse import urlparse
+            u = urlparse(candidate)
+            if u.scheme and u.netloc:
+                origin = f"{u.scheme}://{u.netloc}"
+                if origin in ALLOWED_FRONTEND_ORIGINS:
+                    return origin
+        except Exception:
+            pass
+    # Fallback to explicit env override, else the canonical prod domain
+    return (os.environ.get('FRONTEND_PUBLIC_URL', '').strip() or "https://www.artyfex.in").rstrip('/')
+
+
+def _google_redirect_uri(request: Request) -> str:
+    return f"{_resolve_backend_base(request)}/api/auth/google/callback"
 
 
 @api_router.get("/auth/google/login")
-async def google_login(next: Optional[str] = "/account"):
+async def google_login(
+    request: Request,
+    next: Optional[str] = "/account",
+    origin: Optional[str] = None,
+):
     """Kick off Google OAuth. Redirects the browser to Google's consent screen."""
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="Google OAuth not configured on server")
-    # Signed state carries the intended landing path so it survives the round-trip.
+    # Resolve the front-end origin now (from ?origin= query, Referer header, or Origin header).
+    # We embed it in state so the callback knows where to bounce back to.
+    frontend_base = _resolve_frontend_base(
+        origin_hint=origin or request.headers.get('origin'),
+        referer=request.headers.get('referer'),
+    )
     state = pyjwt.encode(
         {
             "next": next or "/account",
+            "fe": frontend_base,
             "nonce": uuid.uuid4().hex,
             "exp": datetime.now(timezone.utc) + timedelta(minutes=10),
         },
@@ -1331,7 +1382,7 @@ async def google_login(next: Optional[str] = "/account"):
     )
     params = {
         "client_id": GOOGLE_CLIENT_ID,
-        "redirect_uri": _google_redirect_uri(),
+        "redirect_uri": _google_redirect_uri(request),
         "response_type": "code",
         "scope": "openid email profile",
         "access_type": "online",
@@ -1342,34 +1393,43 @@ async def google_login(next: Optional[str] = "/account"):
     return RedirectResponse(url=f"{GOOGLE_AUTH_URL}?{urlencode(params)}", status_code=302)
 
 
-def _frontend_callback_redirect(hash_params: dict) -> RedirectResponse:
+def _frontend_callback_redirect(frontend_base: str, hash_params: dict) -> RedirectResponse:
     return RedirectResponse(
-        url=f"{FRONTEND_PUBLIC_URL}/auth/callback#{urlencode(hash_params)}",
+        url=f"{frontend_base.rstrip('/')}/auth/callback#{urlencode(hash_params)}",
         status_code=302,
     )
 
 
 @api_router.get("/auth/google/callback")
 async def google_callback(
+    request: Request,
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
 ):
     """Google redirects back here. We exchange the code, upsert the user, issue our JWT."""
-    if error:
-        return _frontend_callback_redirect({"error": error})
-    if not code:
-        return _frontend_callback_redirect({"error": "missing_code"})
-    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        return _frontend_callback_redirect({"error": "server_not_configured"})
-
-    # Validate state
+    # Decode state early so we know where to bounce (even on errors).
+    frontend_base = "https://www.artyfex.in"
     next_path = "/account"
+    state_valid = False
     try:
         st = pyjwt.decode(state or "", JWT_SECRET, algorithms=["HS256"])
         next_path = st.get("next") or "/account"
+        fe = st.get("fe")
+        if fe and fe in ALLOWED_FRONTEND_ORIGINS:
+            frontend_base = fe
+        state_valid = True
     except Exception:
-        return _frontend_callback_redirect({"error": "invalid_state"})
+        pass  # frontend_base stays at canonical prod fallback
+
+    if error:
+        return _frontend_callback_redirect(frontend_base, {"error": error})
+    if not state_valid:
+        return _frontend_callback_redirect(frontend_base, {"error": "invalid_state"})
+    if not code:
+        return _frontend_callback_redirect(frontend_base, {"error": "missing_code"})
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return _frontend_callback_redirect(frontend_base, {"error": "server_not_configured"})
 
     # Exchange authorization code for access token
     try:
@@ -1380,18 +1440,18 @@ async def google_callback(
                     "code": code,
                     "client_id": GOOGLE_CLIENT_ID,
                     "client_secret": GOOGLE_CLIENT_SECRET,
-                    "redirect_uri": _google_redirect_uri(),
+                    "redirect_uri": _google_redirect_uri(request),
                     "grant_type": "authorization_code",
                 },
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             if tok_resp.status_code != 200:
                 logging.error(f"Google token exchange failed: {tok_resp.status_code} {tok_resp.text[:200]}")
-                return _frontend_callback_redirect({"error": "token_exchange_failed"})
+                return _frontend_callback_redirect(frontend_base, {"error": "token_exchange_failed"})
             tok = tok_resp.json()
             access_token = tok.get("access_token")
             if not access_token:
-                return _frontend_callback_redirect({"error": "no_access_token"})
+                return _frontend_callback_redirect(frontend_base, {"error": "no_access_token"})
 
             ui_resp = await http.get(
                 GOOGLE_USERINFO_URL,
@@ -1399,17 +1459,17 @@ async def google_callback(
             )
             if ui_resp.status_code != 200:
                 logging.error(f"Google userinfo failed: {ui_resp.status_code} {ui_resp.text[:200]}")
-                return _frontend_callback_redirect({"error": "userinfo_failed"})
+                return _frontend_callback_redirect(frontend_base, {"error": "userinfo_failed"})
             info = ui_resp.json()
-    except Exception as e:
+    except Exception:
         logging.exception("Google OAuth exchange error")
-        return _frontend_callback_redirect({"error": f"exchange_error"})
+        return _frontend_callback_redirect(frontend_base, {"error": "exchange_error"})
 
     email = (info.get("email") or "").lower()
     name = info.get("name") or (email.split("@")[0] if email else "user")
     picture = info.get("picture")
     if not email:
-        return _frontend_callback_redirect({"error": "no_email"})
+        return _frontend_callback_redirect(frontend_base, {"error": "no_email"})
 
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     if existing:
@@ -1431,7 +1491,7 @@ async def google_callback(
         await db.users.insert_one(user_doc)
 
     token = create_token(email, role="user")
-    return _frontend_callback_redirect({
+    return _frontend_callback_redirect(frontend_base, {
         "token": token,
         "email": email,
         "name": user_doc.get("name") or "",

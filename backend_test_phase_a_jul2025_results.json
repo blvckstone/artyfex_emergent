@@ -166,7 +166,7 @@
     {
       "test": "POST /api/orders",
       "passed": true,
-      "details": "Order created: ARF-651E77FD"
+      "details": "Order created: ARF-CA01F8B7"
     },
     {
       "test": "Server recomputed GST (gst_total_inr > 0)",
