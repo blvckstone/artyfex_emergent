@@ -146,7 +146,7 @@ export const ProductShowcase = ({ product }) => {
                 Save {formatINR(product.mrp_inr - product.price_inr)}
               </span>
             </div>
-            <p className="text-xs text-cream/50 mt-2">Inclusive of all taxes · Insured white-glove delivery</p>
+            <p className="text-xs text-cream/50 mt-2">Excl. GST (added at checkout) · Insured white-glove delivery</p>
             {lowStock && (
               <div className="mt-3 inline-flex items-center gap-2 text-xs uppercase tracking-luxury text-yellow-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" /> Only {product.stock} left

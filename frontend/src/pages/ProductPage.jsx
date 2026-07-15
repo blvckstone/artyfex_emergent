@@ -240,7 +240,7 @@ export default function ProductPage() {
                 </>
               )}
             </div>
-            <p className="text-xs text-cream/50 mt-2">Inclusive of all taxes · Insured white-glove delivery</p>
+            <p className="text-xs text-cream/50 mt-2">Excl. GST (added at checkout) · Insured white-glove delivery</p>
 
             {/* Stock */}
             <div className="mt-5" data-testid="product-stock">

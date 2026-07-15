@@ -12,6 +12,7 @@ import GstManagementTab from "@/components/admin/GstManagementTab";
 import WhitelistCard from "@/components/admin/WhitelistCard";
 import BroadcastCard from "@/components/admin/BroadcastCard";
 import OrderNotifyDialog from "@/components/admin/OrderNotifyDialog";
+import CloudinaryUpload from "@/components/admin/CloudinaryUpload";
 
 const TOKEN_KEY = "artyfex_admin_token";
 
@@ -914,11 +915,26 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
         </div>
 
         <div className="mt-6 grid gap-4">
-          <Fld label="Main image URL" hint="Shown on shop cards and as the hero on the product page.">
-            <input value={f.hero_image} onChange={upd("hero_image")} className={inp} required data-testid="pe-hero-image" placeholder="https://..." />
+          <Fld label="Main image" hint="Shown on shop cards and as the hero on the product page.">
+            <CloudinaryUpload
+              value={f.hero_image}
+              onChange={(url) => setF({ ...f, hero_image: url })}
+              folder="artyfex/products"
+              label="Drop main image or click to upload"
+              testid="pe-hero-image"
+            />
+            <input value={f.hero_image} onChange={upd("hero_image")} className={`${inp} mt-2 font-mono text-xs`} required data-testid="pe-hero-image-url" placeholder="or paste Cloudinary/CDN URL" />
           </Fld>
-          <Fld label="Thumbnail image URLs (one per line)" hint="Extra photos shown in the gallery under the main image.">
-            <textarea rows={3} value={f.gallery} onChange={upd("gallery")} className={inp} placeholder="https://image1.jpg&#10;https://image2.jpg" data-testid="pe-gallery" />
+          <Fld label="Gallery images" hint="Extra photos shown in the gallery under the main image.">
+            <CloudinaryUpload
+              value={(f.gallery || "").split("\n").map(s => s.trim()).filter(Boolean)}
+              onChange={(urls) => setF({ ...f, gallery: (urls || []).join("\n") })}
+              multiple
+              folder="artyfex/products"
+              label="Drop gallery images or click to upload"
+              testid="pe-gallery"
+            />
+            <textarea rows={2} value={f.gallery} onChange={upd("gallery")} className={`${inp} mt-2 font-mono text-xs`} placeholder="or paste one URL per line" data-testid="pe-gallery-urls" />
           </Fld>
           <Fld label="Description"><textarea rows={3} value={f.description} onChange={upd("description")} className={inp} /></Fld>
           <Fld label="Materials (one per line)"><textarea rows={3} value={f.materials} onChange={upd("materials")} className={inp} /></Fld>
@@ -1034,10 +1050,16 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
                       </Fld>
                     </div>
                     <div className="sm:col-span-2">
-                      <Fld label="Image URL for this variation" hint="Shown when the buyer picks this variation.">
-                        <input value={v.image || ""} onChange={updVariant(idx, "image")} className={inp} placeholder="https://..." data-testid={`pe-variant-image-${idx}`} />
+                      <Fld label="Image for this variation" hint="Shown when the buyer picks this variation.">
+                        <CloudinaryUpload
+                          value={v.image || ""}
+                          onChange={(url) => updVariant(idx, "image")({ target: { value: url } })}
+                          folder="artyfex/products/variants"
+                          label="Drop variation image or click to upload"
+                          testid={`pe-variant-image-${idx}`}
+                        />
+                        <input value={v.image || ""} onChange={updVariant(idx, "image")} className={`${inp} mt-2 font-mono text-xs`} placeholder="or paste URL" data-testid={`pe-variant-image-url-${idx}`} />
                       </Fld>
-                      {v.image && <img src={v.image} alt="" className="mt-2 w-24 h-24 object-cover border border-white/10" />}
                     </div>
                   </div>
                 </div>

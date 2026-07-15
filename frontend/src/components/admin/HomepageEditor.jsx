@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Save, Image as ImageIcon, Megaphone, Sparkles, Star, Hammer, LayoutGrid, MessageSquareQuote, AlertTriangle } from "lucide-react";
+import CloudinaryUpload from "@/components/admin/CloudinaryUpload";
 
 const inp = "w-full bg-ink-950 border border-white/15 focus:border-gold focus:outline-none px-3 py-2.5 text-sm text-cream outline-none";
 const Fld = ({ label, children, hint }) => (
@@ -139,8 +140,8 @@ export default function HomepageEditor({ authed }) {
           <Fld label="Primary CTA link"><input value={data.hero.primary_cta_link} onChange={(e) => upd("hero.primary_cta_link")(e.target.value)} className={inp} placeholder="#product or /shop" /></Fld>
           <Fld label="Secondary CTA text"><input value={data.hero.secondary_cta_text} onChange={(e) => upd("hero.secondary_cta_text")(e.target.value)} className={inp} /></Fld>
           <Fld label="Secondary CTA link"><input value={data.hero.secondary_cta_link} onChange={(e) => upd("hero.secondary_cta_link")(e.target.value)} className={inp} /></Fld>
-          <div className="sm:col-span-2"><Fld label="Background image URL" hint="High-resolution ambient image. Displayed at ~40% opacity behind copy."><input value={data.hero.background_image} onChange={(e) => upd("hero.background_image")(e.target.value)} className={inp} /></Fld></div>
-          <div className="sm:col-span-2"><Fld label="Mirror image URL" hint="The featured product/mirror shown on the right side."><input value={data.hero.mirror_image} onChange={(e) => upd("hero.mirror_image")(e.target.value)} className={inp} /></Fld></div>
+          <div className="sm:col-span-2"><Fld label="Background image" hint="High-resolution ambient image. Displayed at ~40% opacity behind copy."><CloudinaryUpload value={data.hero.background_image} onChange={(url) => upd("hero.background_image")(url)} folder="artyfex/homepage" testid="cms-hero-bg" /><input value={data.hero.background_image} onChange={(e) => upd("hero.background_image")(e.target.value)} className={`${inp} mt-2 font-mono text-xs`} placeholder="or paste URL" /></Fld></div>
+          <div className="sm:col-span-2"><Fld label="Mirror image" hint="The featured product/mirror shown on the right side."><CloudinaryUpload value={data.hero.mirror_image} onChange={(url) => upd("hero.mirror_image")(url)} folder="artyfex/homepage" testid="cms-hero-mirror" /><input value={data.hero.mirror_image} onChange={(e) => upd("hero.mirror_image")(e.target.value)} className={`${inp} mt-2 font-mono text-xs`} placeholder="or paste URL" /></Fld></div>
           <Fld label="Edition label"><input value={data.hero.edition_label} onChange={(e) => upd("hero.edition_label")(e.target.value)} className={inp} /></Fld>
           <Fld label="Edition text"><input value={data.hero.edition_text} onChange={(e) => upd("hero.edition_text")(e.target.value)} className={inp} /></Fld>
           <Fld label="Text color"><input value={data.hero.text_color} onChange={(e) => upd("hero.text_color")(e.target.value)} className={inp} /></Fld>
@@ -170,7 +171,7 @@ export default function HomepageEditor({ authed }) {
           <Fld label="CTA text"><input value={data.sale_banner.cta_text} onChange={(e) => upd("sale_banner.cta_text")(e.target.value)} className={inp} /></Fld>
           <div className="sm:col-span-2"><Fld label="Subtitle"><textarea rows={2} value={data.sale_banner.subtitle} onChange={(e) => upd("sale_banner.subtitle")(e.target.value)} className={inp} /></Fld></div>
           <Fld label="CTA link"><input value={data.sale_banner.cta_link} onChange={(e) => upd("sale_banner.cta_link")(e.target.value)} className={inp} placeholder="/shop" /></Fld>
-          <Fld label="Background image (optional)"><input value={data.sale_banner.image || ""} onChange={(e) => upd("sale_banner.image")(e.target.value)} className={inp} /></Fld>
+          <Fld label="Background image (optional)"><CloudinaryUpload value={data.sale_banner.image || ""} onChange={(url) => upd("sale_banner.image")(url)} folder="artyfex/homepage" testid="cms-sale-image" /><input value={data.sale_banner.image || ""} onChange={(e) => upd("sale_banner.image")(e.target.value)} className={`${inp} mt-2 font-mono text-xs`} placeholder="or paste URL" /></Fld>
           <Fld label="Background color"><input value={data.sale_banner.bg_color} onChange={(e) => upd("sale_banner.bg_color")(e.target.value)} className={inp} /></Fld>
           <Fld label="Text color"><input value={data.sale_banner.text_color} onChange={(e) => upd("sale_banner.text_color")(e.target.value)} className={inp} /></Fld>
           <Fld label="Accent color"><input value={data.sale_banner.accent_color} onChange={(e) => upd("sale_banner.accent_color")(e.target.value)} className={inp} /></Fld>
@@ -184,7 +185,7 @@ export default function HomepageEditor({ authed }) {
           <Fld label="Headline line 1"><input value={data.craft?.headline_line_1 || ""} onChange={(e) => upd("craft.headline_line_1")(e.target.value)} className={inp} /></Fld>
           <Fld label="Italic word / accent"><input value={data.craft?.headline_italic || ""} onChange={(e) => upd("craft.headline_italic")(e.target.value)} className={inp} /></Fld>
           <div className="sm:col-span-2"><Fld label="Body paragraph"><textarea rows={3} value={data.craft?.body || ""} onChange={(e) => upd("craft.body")(e.target.value)} className={inp} /></Fld></div>
-          <div className="sm:col-span-2"><Fld label="Section image URL" hint="The 4:5 image shown on the left (above 'Craft & Materials')."><input value={data.craft?.section_image || ""} onChange={(e) => upd("craft.section_image")(e.target.value)} className={inp} data-testid="cms-craft-image" /></Fld></div>
+          <div className="sm:col-span-2"><Fld label="Section image" hint="The 4:5 image shown on the left (above 'Craft & Materials')."><CloudinaryUpload value={data.craft?.section_image || ""} onChange={(url) => upd("craft.section_image")(url)} folder="artyfex/homepage" testid="cms-craft-image" /><input value={data.craft?.section_image || ""} onChange={(e) => upd("craft.section_image")(e.target.value)} className={`${inp} mt-2 font-mono text-xs`} placeholder="or paste URL" data-testid="cms-craft-image-url" /></Fld></div>
           <Fld label="Image overlay label (small caps)"><input value={data.craft?.image_overlay_label || ""} onChange={(e) => upd("craft.image_overlay_label")(e.target.value)} className={inp} /></Fld>
           <Fld label="Image overlay title"><input value={data.craft?.image_overlay_title || ""} onChange={(e) => upd("craft.image_overlay_title")(e.target.value)} className={inp} /></Fld>
         </div>

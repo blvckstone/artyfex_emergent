@@ -729,6 +729,21 @@ agent_communication:
       
       Do NOT test frontend. Admin creds: admin@artyfex.in / ArtyFex@2026.
       Additional test-only credentials: no customer credentials available for full order flow — use existing product IDs from GET /api/products and a synthesized OrderIn payload.
+  - agent: "testing"
+    message: |
+      Phase A Enterprise ALL 23 backend tests PASSED (100%). GST exclusive verified: intra ₹42999 → ₹50739 total (subtotal+shipping+gst). Cloudinary signature ok. Admin whitelist CRUD ok. Google login rejects invalid sessions. Order emails queue without error.
+  - agent: "main"
+    message: |
+      Frontend integration verified via screenshots:
+      - Admin login page shows "Continue with Google" button + email/password fallback.
+      - PDP: price note now reads "Excl. GST (added at checkout) · Insured white-glove delivery".
+      - Cart drawer: Subtotal ₹42999, Shipping Complimentary, GST (IGST) + ₹7740, Total ₹50739 (matches server math).
+      - ReviewPromptBanner repositioned below fixed navbar (top-[84px] md:top-[96px], z-40) — no more header overlap.
+      - Cloudinary uploader wired into: product hero image, gallery, variant image; homepage hero background/mirror, craft section, sale banner background.
+      - Admin Orders: new expand-details view with line items (name, variant, size, qty, unit price, line total), coupon badge with discount, GST breakdown, total paid, tracking meta, "Email customer" button opens OrderNotifyDialog.
+      - Admin Settings tab: added WhitelistCard + BroadcastCard alongside existing PasswordChangeCard.
+      
+      Phase A complete. Ready for production deploy (git → Vercel+Render auto-deploy).
 
   - agent: "testing"
     message: |
