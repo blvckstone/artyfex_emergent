@@ -112,11 +112,10 @@ export const CartProvider = ({ children }) => {
 
   const discountedSubtotal = Math.max(0, subtotal - discount);
   const shipping = items.length === 0 ? 0 : discountedSubtotal >= 25000 ? 0 : 1499;
-  const total = discountedSubtotal + shipping;
 
   // ---------- Phase A (Jul 2025) · GST computation ----------
-  // Prices are GST-inclusive, so the tax figure is extracted from `discountedSubtotal`.
-  // We ask the backend to compute the authoritative breakdown (respects HSN → category priority + Maharashtra intra vs inter-state split).
+  // GST is EXCLUSIVE — added on top of the shown INR price (standard e-commerce practice).
+  // Total = subtotal - discount + shipping + gst
   const [taxBreakdown, setTaxBreakdown] = useState({
     gst_total_inr: 0, cgst_inr: 0, sgst_inr: 0, igst_inr: 0,
     gst_lines: [], intra_state: false, ship_state: null,
@@ -134,7 +133,6 @@ export const CartProvider = ({ children }) => {
       ship_state: shipState || null,
     })
       .then(({ data }) => {
-        // ignore stale responses
         if (rid !== taxReqRef.current) return;
         setTaxBreakdown({
           gst_total_inr: data.gst_total_inr || 0,
@@ -148,25 +146,26 @@ export const CartProvider = ({ children }) => {
       })
       .catch(() => {
         if (rid !== taxReqRef.current) return;
-        // silent fallback — display no GST line if backend unreachable
         setTaxBreakdown({ gst_total_inr: 0, cgst_inr: 0, sgst_inr: 0, igst_inr: 0, gst_lines: [], intra_state: false, ship_state: shipState });
       });
   }, [items, shipState]);
 
-  // Scale the extracted tax proportionally when a discount is applied so the "included GST"
-  // stays consistent with the reduced (payable) subtotal that customer actually pays.
+  // Scale tax proportionally when a discount is applied so the GST reflects the payable subtotal
   const gstScale = subtotal > 0 ? discountedSubtotal / subtotal : 0;
   const gstIncluded = Math.round((taxBreakdown.gst_total_inr || 0) * gstScale);
   const cgstIncluded = Math.round((taxBreakdown.cgst_inr || 0) * gstScale);
   const sgstIncluded = Math.round((taxBreakdown.sgst_inr || 0) * gstScale);
   const igstIncluded = Math.round((taxBreakdown.igst_inr || 0) * gstScale);
 
+  // Total INCLUDES GST (exclusive treatment)
+  const total = discountedSubtotal + shipping + gstIncluded;
+
   const value = {
     items, isOpen, setIsOpen,
     addItem, updateQty, removeItem, clear,
     subtotal, shipping, total, count,
     coupon, discount, applyCoupon, clearCoupon,
-    // GST (inclusive treatment)
+    // GST (exclusive treatment — added on top)
     gstIncluded, cgstIncluded, sgstIncluded, igstIncluded,
     gstIntraState: taxBreakdown.intra_state,
     gstLines: taxBreakdown.gst_lines,

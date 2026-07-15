@@ -181,17 +181,23 @@ export const CartSheet = ({ onCheckout }) => {
                     testid={IDS.cart.shipping}
                     accent={shipping === 0}
                   />
+                  {gstIncluded > 0 && (
+                    <Row
+                      label={gstIntraState ? "GST (CGST + SGST)" : "GST (IGST)"}
+                      value={`+ ${formatINR(gstIncluded)}`}
+                      testid="cart-gst"
+                    />
+                  )}
                   <div className="pt-3 border-t border-white/5 flex items-baseline justify-between">
                     <span className="text-[10px] uppercase tracking-luxury text-cream/50">Total</span>
                     <span data-testid={IDS.cart.total} className="font-serif text-3xl text-cream">{formatINR(total)}</span>
                   </div>
                   {gstIncluded > 0 && (
-                    <div data-testid="cart-gst-included" className="text-[10px] text-cream/40 text-right leading-relaxed">
-                      Inclusive of GST · {formatINR(gstIncluded)}
+                    <div data-testid="cart-gst-breakdown" className="text-[10px] text-cream/40 text-right leading-relaxed">
                       {gstIntraState ? (
-                        <> · CGST {formatINR(cgstIncluded)} + SGST {formatINR(sgstIncluded)}</>
+                        <>CGST {formatINR(cgstIncluded)} + SGST {formatINR(sgstIncluded)}</>
                       ) : igstIncluded > 0 ? (
-                        <> · IGST {formatINR(igstIncluded)}</>
+                        <>IGST {formatINR(igstIncluded)}</>
                       ) : null}
                     </div>
                   )}

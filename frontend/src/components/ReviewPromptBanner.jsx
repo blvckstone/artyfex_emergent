@@ -24,7 +24,7 @@ export default function ReviewPromptBanner() {
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
           data-testid="review-prompt-banner"
-          className="sticky top-0 z-[45] bg-gradient-to-r from-gold/20 via-gold/10 to-gold/20 border-b border-gold/30 backdrop-blur"
+          className="fixed left-0 right-0 top-[84px] md:top-[96px] z-[40] bg-gradient-to-r from-gold/20 via-gold/10 to-gold/20 border-y border-gold/30 backdrop-blur pointer-events-auto"
         >
           <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-2.5 flex items-center gap-3">
             <div className="p-1.5 border border-gold/40 hidden sm:inline-flex">

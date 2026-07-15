@@ -58,7 +58,7 @@ export const CheckoutDialog = ({ open, onClose }) => {
 
   const discountedSubtotal = Math.max(0, subtotal - (discount || 0));
   const activeShipping = computedShipping ?? defaultShipping;
-  const total = discountedSubtotal + activeShipping;
+  const total = discountedSubtotal + activeShipping + (gstIncluded || 0);
 
   // Recompute shipping whenever address key inputs change
   useEffect(() => {
@@ -365,17 +365,22 @@ export const CheckoutDialog = ({ open, onClose }) => {
                     {shippingNotes && (
                       <div className="text-[10px] text-cream/40 italic">{shippingNotes}</div>
                     )}
+                    {gstIncluded > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-cream/50">{gstIntraState ? "GST (CGST + SGST)" : "GST (IGST)"}</span>
+                        <span className="text-cream">+ {formatINR(gstIncluded)}</span>
+                      </div>
+                    )}
                     <div className="pt-4 border-t border-white/5 flex items-baseline justify-between">
                       <span className="text-[10px] uppercase tracking-luxury text-cream/50">Total</span>
                       <span className="font-serif text-3xl text-cream">{formatINR(total)}</span>
                     </div>
                     {gstIncluded > 0 && (
-                      <div data-testid="checkout-gst-included" className="text-[10px] text-cream/40 text-right leading-relaxed pt-1">
-                        Inclusive of GST · {formatINR(gstIncluded)}
+                      <div data-testid="checkout-gst-breakdown" className="text-[10px] text-cream/40 text-right leading-relaxed pt-1">
                         {gstIntraState ? (
-                          <> · CGST {formatINR(cgstIncluded)} + SGST {formatINR(sgstIncluded)}</>
+                          <>CGST {formatINR(cgstIncluded)} + SGST {formatINR(sgstIncluded)}</>
                         ) : igstIncluded > 0 ? (
-                          <> · IGST {formatINR(igstIncluded)}</>
+                          <>IGST {formatINR(igstIncluded)}</>
                         ) : null}
                       </div>
                     )}

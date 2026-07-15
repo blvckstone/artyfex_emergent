@@ -1,0 +1,122 @@
+{
+  "total": 23,
+  "passed": 23,
+  "failed": 0,
+  "results": [
+    {
+      "test": "GST Exclusive - Intra-state",
+      "passed": true,
+      "details": "treatment=exclusive, gst_total=7740, cgst=3870, sgst=3870, igst=0"
+    },
+    {
+      "test": "GST Exclusive - Inter-state",
+      "passed": true,
+      "details": "intra_state=false, igst=7740, cgst=0, sgst=0"
+    },
+    {
+      "test": "Order Create - GST Exclusive Intra",
+      "passed": true,
+      "details": "gst_treatment=exclusive, total=50739 (includes gst=7740), cgst=3870, sgst=3870"
+    },
+    {
+      "test": "Order Create - GST Exclusive Inter",
+      "passed": true,
+      "details": "igst=7740, cgst=0, sgst=0 (inter-state)"
+    },
+    {
+      "test": "Cloudinary - No Auth",
+      "passed": true,
+      "details": "401 Unauthorized as expected"
+    },
+    {
+      "test": "Cloudinary - With Auth",
+      "passed": true,
+      "details": "All keys present, signature=251b18e32eebc3ff..., folder=artyfex, resource_type=image"
+    },
+    {
+      "test": "Cloudinary - Invalid Folder",
+      "passed": true,
+      "details": "400 Bad Request as expected"
+    },
+    {
+      "test": "Cloudinary - Invalid Resource Type",
+      "passed": true,
+      "details": "400 Bad Request as expected"
+    },
+    {
+      "test": "Whitelist - Get Defaults",
+      "passed": true,
+      "details": "Found 2 readonly entries including {'virusisstandhere@gmail.com', 'iblvckstone@gmail.com'}"
+    },
+    {
+      "test": "Whitelist - Add New",
+      "passed": true,
+      "details": "Added testadd@example.com with id=b8718b24-16cd-4da1-a277-2b9c77415e1e"
+    },
+    {
+      "test": "Whitelist - Get Contains New",
+      "passed": true,
+      "details": "Found testadd@example.com with readonly=false, id=b8718b24-16cd-4da1-a277-2b9c77415e1e"
+    },
+    {
+      "test": "Whitelist - Add Duplicate",
+      "passed": true,
+      "details": "400 Bad Request as expected"
+    },
+    {
+      "test": "Whitelist - Delete Default",
+      "passed": true,
+      "details": "400 Bad Request as expected (cannot delete built-ins)"
+    },
+    {
+      "test": "Whitelist - Delete Custom",
+      "passed": true,
+      "details": "Deleted entry b8718b24-16cd-4da1-a277-2b9c77415e1e"
+    },
+    {
+      "test": "Whitelist - Get After Delete",
+      "passed": true,
+      "details": "testadd@example.com successfully removed"
+    },
+    {
+      "test": "Google Login - Empty Session",
+      "passed": true,
+      "details": "400 Bad Request as expected"
+    },
+    {
+      "test": "Google Login - Fake Session",
+      "passed": true,
+      "details": "401 Unauthorized as expected (Emergent rejects)"
+    },
+    {
+      "test": "Order Email - Cancel",
+      "passed": true,
+      "details": "Order ARF-751DABF0 cancelled, email queued (200 OK)"
+    },
+    {
+      "test": "Order Email - Cancel",
+      "passed": true,
+      "details": "Order ARF-CB8266A3 cancelled, email queued (200 OK)"
+    },
+    {
+      "test": "Order Email - Custom Notify",
+      "passed": true,
+      "details": "Custom email queued (200 OK, queued=true)"
+    },
+    {
+      "test": "Order Email - Missing Subject",
+      "passed": true,
+      "details": "404 as expected (validation working)"
+    },
+    {
+      "test": "Broadcast Email - Valid",
+      "passed": true,
+      "details": "Broadcast queued (200 OK, queued=0)"
+    },
+    {
+      "test": "Broadcast Email - Missing Subject",
+      "passed": true,
+      "details": "400 Bad Request as expected"
+    }
+  ]
+}

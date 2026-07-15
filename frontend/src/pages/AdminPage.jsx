@@ -9,6 +9,9 @@ import EmployeesTab from "@/components/admin/EmployeesTab";
 import PasswordChangeCard from "@/components/admin/PasswordChangeCard";
 import CustomersTab from "@/components/admin/CustomersTab";
 import GstManagementTab from "@/components/admin/GstManagementTab";
+import WhitelistCard from "@/components/admin/WhitelistCard";
+import BroadcastCard from "@/components/admin/BroadcastCard";
+import OrderNotifyDialog from "@/components/admin/OrderNotifyDialog";
 
 const TOKEN_KEY = "artyfex_admin_token";
 
@@ -18,6 +21,8 @@ function LoginView({ onLogin }) {
   const [email, setEmail] = useState("admin@artyfex.in");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [gLoading, setGLoading] = useState(false);
+
   const submit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -29,12 +34,67 @@ function LoginView({ onLogin }) {
       toast.error(err?.response?.data?.detail || "Invalid credentials");
     } finally { setLoading(false); }
   };
+
+  // Emergent Google OAuth → session_id lands on /admin#session_id=…
+  const startGoogle = () => {
+    const returnUrl = `${window.location.origin}/admin`;
+    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(returnUrl)}`;
+  };
+
+  useEffect(() => {
+    const hash = window.location.hash || "";
+    if (!hash.includes("session_id=")) return;
+    const sid = new URLSearchParams(hash.replace(/^#/, "")).get("session_id");
+    if (!sid) return;
+    // Clean hash so refresh doesn't retry
+    window.history.replaceState({}, "", window.location.pathname);
+    (async () => {
+      setGLoading(true);
+      try {
+        const { data } = await api.post("/admin/auth/google", { session_id: sid });
+        localStorage.setItem(TOKEN_KEY, data.token);
+        toast.success(`Signed in as ${data.admin?.email || "admin"}`);
+        onLogin(data.token);
+      } catch (err) {
+        toast.error(err?.response?.data?.detail || "Google admin sign-in failed");
+      } finally { setGLoading(false); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="min-h-screen bg-ink-950 flex items-center justify-center p-6">
       <form onSubmit={submit} className="w-full max-w-md hairline p-10 bg-ink-900">
         <div className="text-[10px] uppercase tracking-luxury text-gold-soft">ArtyFex</div>
         <h1 className="mt-2 font-serif text-4xl text-cream">Atelier <span className="italic text-gold">Admin</span></h1>
-        <div className="mt-8 space-y-5">
+
+        <button
+          type="button"
+          onClick={startGoogle}
+          disabled={gLoading}
+          data-testid="admin-google-login"
+          className="mt-8 w-full inline-flex items-center justify-center gap-3 bg-cream text-ink-950 py-3.5 text-xs uppercase tracking-luxury hover:bg-white disabled:opacity-60"
+        >
+          {gLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+            </svg>
+          )}
+          {gLoading ? "Verifying…" : "Continue with Google"}
+        </button>
+
+        <div className="mt-6 flex items-center gap-4">
+          <div className="flex-1 h-px bg-white/10"></div>
+          <span className="text-[10px] uppercase tracking-luxury text-cream/40">or with password</span>
+          <div className="flex-1 h-px bg-white/10"></div>
+        </div>
+
+        <div className="mt-6 space-y-5">
           <label className="block">
             <span className="text-[10px] uppercase tracking-luxury text-cream/50">Email</span>
             <input data-testid="admin-login-email" required type="email" value={email} onChange={(e)=>setEmail(e.target.value)}
@@ -85,6 +145,7 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [me, setMe] = useState(null); // current admin (for RBAC gating)
   const [categories, setCategories] = useState([]); // Phase A — product categories for editor dropdown
+  const [notifyOrder, setNotifyOrder] = useState(null); // order object for custom email dialog
 
   const authed = useAuthedApi(token);
 
@@ -411,7 +472,7 @@ export default function AdminPage() {
             <div className="mt-6 grid gap-3">
               {orders.length === 0 && <div className="text-cream/40 text-sm">No orders yet.</div>}
               {orders.map((o) => (
-                <OrderRow key={o.order_number} o={o} onStatus={updateOrderStatus} onTracking={updateOrderTracking} />
+                <OrderRow key={o.order_number} o={o} onStatus={updateOrderStatus} onTracking={updateOrderTracking} onNotify={setNotifyOrder} />
               ))}
             </div>
           </>
@@ -707,6 +768,16 @@ export default function AdminPage() {
             <div className="mt-8">
               <PasswordChangeCard authed={authed} />
             </div>
+
+            {/* Admin Google whitelist */}
+            <div className="mt-8">
+              <WhitelistCard authed={authed} />
+            </div>
+
+            {/* Broadcast email */}
+            <div className="mt-8">
+              <BroadcastCard authed={authed} />
+            </div>
           </>
         )}
 
@@ -714,6 +785,9 @@ export default function AdminPage() {
           <EmployeesTab authed={authed} me={me} />
         )}
       </main>
+      {notifyOrder && (
+        <OrderNotifyDialog authed={authed} order={notifyOrder} onClose={() => setNotifyOrder(null)} />
+      )}
       <Toaster theme="dark" position="bottom-center" />
     </div>
   );
@@ -1042,11 +1116,12 @@ function CouponEditor({ initial, onCancel, onSave, saving }) {
   );
 }
 
-function OrderRow({ o, onStatus, onTracking }) {
+function OrderRow({ o, onStatus, onTracking, onNotify }) {
   const [trackingId, setTrackingId] = useState(o.tracking_id || "");
   const [trackingUrl, setTrackingUrl] = useState(o.tracking_url || "");
   const [trackingCarrier, setTrackingCarrier] = useState(o.tracking_carrier || "");
   const [showTracking, setShowTracking] = useState(!!o.tracking_id);
+  const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const c = o.customer || {};
@@ -1064,6 +1139,10 @@ function OrderRow({ o, onStatus, onTracking }) {
     } finally { setSaving(false); }
   };
 
+  const itemsCount = (o.items || []).reduce((s, i) => s + (i.quantity || 1), 0);
+  const gstTotal = o.gst_total_inr || 0;
+  const gstIntra = (o.igst_inr || 0) === 0 && ((o.cgst_inr || 0) + (o.sgst_inr || 0)) > 0;
+
   return (
     <div className="hairline p-4" data-testid={`admin-order-${o.order_number}`}>
       <div className="flex flex-wrap items-center gap-4">
@@ -1072,21 +1151,48 @@ function OrderRow({ o, onStatus, onTracking }) {
           <div className="text-xs text-cream/50">{new Date(o.created_at).toLocaleString()}</div>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm">{c.name} · {c.phone}</div>
+          <div className="text-sm">{c.name} · <a href={`mailto:${c.email}`} className="text-cream/70 hover:text-gold">{c.email}</a> · <a href={`tel:${c.phone}`} className="text-cream/70 hover:text-gold">{c.phone}</a></div>
           <div className="text-xs text-cream/50 truncate">{addrLine}</div>
           <div className="text-xs text-cream/40 truncate">{stateLine}{c.country && c.country !== "India" ? ` · ${c.country}` : ""}</div>
         </div>
-        <div className="text-cream">₹{(o.total_inr || 0).toLocaleString("en-IN")}</div>
+        <div className="text-right">
+          <div className="text-cream text-lg font-serif">₹{(o.total_inr || 0).toLocaleString("en-IN")}</div>
+          <div className="text-[10px] text-cream/40 uppercase tracking-luxury">{itemsCount} item{itemsCount === 1 ? "" : "s"}</div>
+        </div>
         <select value={o.status} onChange={(e) => onStatus(o.order_number, e.target.value)}
-          className="bg-ink-950 border border-white/15 text-xs text-cream px-3 py-2 uppercase tracking-luxury">
+          className="bg-ink-950 border border-white/15 text-xs text-cream px-3 py-2 uppercase tracking-luxury"
+          data-testid={`admin-order-status-${o.order_number}`}>
           {["pending_payment", "confirmed", "packed", "shipped", "delivered", "cancelled", "payment_failed"].map(s => (
             <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
           ))}
         </select>
       </div>
+
+      {/* Meta row */}
       <div className="mt-3 flex items-center gap-3 flex-wrap text-xs text-cream/50">
-        <span>{o.items.length} item(s) · Payment: {o.payment_method}</span>
-        {o.razorpay_payment_id && <span>· rzp: {o.razorpay_payment_id}</span>}
+        <span>Payment: <span className="text-cream/70">{o.payment_method}</span></span>
+        {o.razorpay_payment_id && <span>· rzp: <span className="font-mono text-cream/70">{o.razorpay_payment_id}</span></span>}
+        {o.coupon_code && (
+          <span className="text-gold border border-gold/30 px-2 py-0.5 uppercase tracking-luxury text-[10px]">
+            Coupon · {o.coupon_code} (-₹{(o.discount_inr || 0).toLocaleString("en-IN")})
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          data-testid={`admin-order-expand-${o.order_number}`}
+          className="text-[10px] uppercase tracking-luxury text-cream/60 hover:text-gold border border-white/10 px-3 py-1"
+        >
+          {expanded ? "Hide details" : "View details"}
+        </button>
+        <button
+          type="button"
+          onClick={() => onNotify?.(o)}
+          data-testid={`admin-order-notify-${o.order_number}`}
+          className="text-[10px] uppercase tracking-luxury text-gold border border-gold/30 px-3 py-1 hover:bg-gold/10 inline-flex items-center gap-1.5"
+        >
+          Email customer
+        </button>
         <button
           type="button"
           data-testid={`admin-order-toggle-tracking-${o.order_number}`}
@@ -1096,6 +1202,54 @@ function OrderRow({ o, onStatus, onTracking }) {
           {o.tracking_id ? `Tracking: ${o.tracking_id}` : (showTracking ? "Hide tracking" : "Add tracking")}
         </button>
       </div>
+
+      {/* Expanded market-standard details */}
+      {expanded && (
+        <div className="mt-4 border-t border-white/5 pt-4 grid gap-4 md:grid-cols-[2fr_1fr]" data-testid={`admin-order-details-${o.order_number}`}>
+          <div>
+            <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-2">Line items</div>
+            <div className="space-y-2">
+              {(o.items || []).map((it, idx) => (
+                <div key={idx} className="flex items-center gap-3 bg-ink-950/60 border border-white/5 px-3 py-2 text-xs">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-cream truncate">{it.name || it.product_name || `Item ${idx + 1}`}</div>
+                    <div className="text-cream/40 text-[10px]">
+                      {(it.variant_label || it.variant_key) && (<>Variant · <span className="text-cream/60">{it.variant_label || it.variant_key}</span> · </>)}
+                      {it.size && (<>Size · <span className="text-cream/60">{it.size}</span> · </>)}
+                      Qty · <span className="text-cream/60">{it.quantity}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-cream/70 font-mono">₹{(it.price_inr || 0).toLocaleString("en-IN")}</div>
+                    <div className="text-cream/40 text-[10px]">× {it.quantity} = ₹{((it.price_inr || 0) * (it.quantity || 1)).toLocaleString("en-IN")}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="text-xs">
+            <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-2">Totals</div>
+            <div className="space-y-1">
+              <Row2 k="Subtotal" v={`₹${(o.subtotal_inr || 0).toLocaleString("en-IN")}`} />
+              {(o.discount_inr || 0) > 0 && <Row2 k={`Discount${o.coupon_code ? ` (${o.coupon_code})` : ""}`} v={`- ₹${(o.discount_inr || 0).toLocaleString("en-IN")}`} accent />}
+              <Row2 k="Shipping" v={`₹${(o.shipping_inr || 0).toLocaleString("en-IN")}`} />
+              {gstTotal > 0 && <Row2 k={gstIntra ? "GST (CGST+SGST)" : "GST (IGST)"} v={`₹${gstTotal.toLocaleString("en-IN")}`} />}
+              <div className="pt-2 mt-2 border-t border-white/5 flex items-center justify-between">
+                <span className="text-cream/70 uppercase tracking-luxury text-[10px]">Total paid</span>
+                <span className="text-gold font-serif text-lg">₹{(o.total_inr || 0).toLocaleString("en-IN")}</span>
+              </div>
+              {gstTotal > 0 && (
+                <div className="text-[10px] text-cream/40 mt-2 leading-relaxed">
+                  {gstIntra ? (<>CGST ₹{(o.cgst_inr || 0).toLocaleString("en-IN")} + SGST ₹{(o.sgst_inr || 0).toLocaleString("en-IN")}</>) : (<>IGST ₹{(o.igst_inr || 0).toLocaleString("en-IN")}</>)}
+                </div>
+              )}
+              {o.delivered_at && <div className="text-[10px] text-cream/40 mt-3">Delivered · {new Date(o.delivered_at).toLocaleString()}</div>}
+              {o.tracking_updated_at && <div className="text-[10px] text-cream/40">Tracking updated · {new Date(o.tracking_updated_at).toLocaleString()}</div>}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showTracking && (
         <div className="mt-3 grid sm:grid-cols-[1fr_1fr_1.5fr_auto] gap-2 items-end border-t border-white/5 pt-3">
           <label className="block">
@@ -1120,6 +1274,15 @@ function OrderRow({ o, onStatus, onTracking }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function Row2({ k, v, accent }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-cream/50">{k}</span>
+      <span className={accent ? "text-gold font-mono" : "text-cream/80 font-mono"}>{v}</span>
     </div>
   );
 }

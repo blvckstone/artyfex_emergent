@@ -20,6 +20,10 @@ import razorpay
 import asyncio
 import httpx
 import resend
+import time
+import cloudinary
+import cloudinary.utils
+import cloudinary.uploader
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -51,6 +55,21 @@ SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
 SENDER_NAME = os.environ.get('SENDER_NAME', 'ArtyFex Atelier')
 if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
+
+# --- Cloudinary configuration (Phase A · admin image uploads) ---
+CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', '')
+CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '')
+CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET', '')
+if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=CLOUDINARY_API_KEY,
+        api_secret=CLOUDINARY_API_SECRET,
+        secure=True,
+    )
+
+# --- Default admin whitelist (used by Google admin login) ---
+DEFAULT_ADMIN_WHITELIST = {"iblvckstone@gmail.com", "virusisstandhere@gmail.com"}
 
 
 async def send_email(to_email: str, subject: str, html: str):
@@ -115,6 +134,155 @@ def render_return_email(status: str, customer_name: str, order_number: str, admi
 </body></html>'''
     return subject, html
 
+
+# ==== Phase A (Jul 2025): Order transactional emails ====
+def _fmt_inr(amount) -> str:
+    try:
+        return "\u20b9" + f"{int(amount):,}"
+    except Exception:
+        return "\u20b9" + str(amount or 0)
+
+
+def render_order_email(kind: str, order: dict, custom_subject: Optional[str] = None, custom_body_html: Optional[str] = None) -> tuple[str, str]:
+    """Render transactional email for order lifecycle.
+
+    kind in {"placed", "dispatched", "cancelled", "custom"}
+    """
+    MID = "\u00b7"
+    ARROW = "\u2192"
+    customer = order.get("customer") or {}
+    name = customer.get("name") or "there"
+    order_number = order.get("order_number") or ""
+    items = order.get("items") or []
+    accent = "#D4AF37"
+    if kind == "placed":
+        headline = "Thank you for your order"
+        intro = "We have received your order and our atelier is preparing your piece with care. You will receive another note once it ships."
+        subject = f"[ArtyFex] Order confirmed {MID} {order_number}"
+    elif kind == "dispatched":
+        headline = "Your order is on its way"
+        intro = "Your piece has left our atelier. Tracking details are below \u2014 please allow 3\u20137 business days for delivery."
+        subject = f"[ArtyFex] Order dispatched {MID} {order_number}"
+    elif kind == "cancelled":
+        headline = "Your order has been cancelled"
+        intro = "As requested, we have cancelled your order. Any charge captured by our payment provider will be refunded within 5\u20137 business days."
+        subject = f"[ArtyFex] Order cancelled {MID} {order_number}"
+    else:  # custom
+        headline = custom_subject or "A note from the ArtyFex atelier"
+        intro = ""
+        subject = f"[ArtyFex] {custom_subject or 'Update'} {MID} {order_number}" if order_number else f"[ArtyFex] {custom_subject or 'Update'}"
+
+    # Items block
+    item_rows = ""
+    for it in items:
+        pname = it.get("name") or it.get("product_name") or "Piece"
+        variant = it.get("variant_label") or it.get("variant") or ""
+        qty = it.get("quantity") or 1
+        price = it.get("price_inr") or it.get("unit_price_inr") or 0
+        line_total = int(price) * int(qty)
+        variant_html = f' <span style="color:#888;">{MID} {variant}</span>' if variant else ''
+        item_rows += f"""
+        <tr>
+          <td style="padding:10px 0;border-bottom:1px solid #1f1f1f;color:#e8e2d5;font-size:14px;">
+            {pname}{variant_html}
+            <div style="color:#888;font-size:11px;margin-top:2px;">Qty {qty}</div>
+          </td>
+          <td style="padding:10px 0;border-bottom:1px solid #1f1f1f;color:#e8e2d5;font-size:14px;text-align:right;font-family:monospace;">{_fmt_inr(line_total)}</td>
+        </tr>"""
+
+    # Totals block
+    subtotal = int(order.get("subtotal_inr") or 0)
+    discount = int(order.get("discount_inr") or 0)
+    shipping = int(order.get("shipping_inr") or 0)
+    gst = int(order.get("gst_total_inr") or 0)
+    total = int(order.get("total_inr") or 0)
+    coupon = order.get("coupon_code")
+
+    coupon_row = ""
+    if discount > 0:
+        coupon_row = f'<tr><td style="color:{accent};font-size:13px;padding:4px 0;">Coupon ({coupon})</td><td style="color:{accent};font-size:13px;text-align:right;padding:4px 0;font-family:monospace;">- {_fmt_inr(discount)}</td></tr>'
+    gst_row = ""
+    if gst > 0:
+        gst_row = f'<tr><td style="color:#888;font-size:13px;padding:4px 0;">GST</td><td style="color:#e8e2d5;font-size:13px;text-align:right;padding:4px 0;font-family:monospace;">{_fmt_inr(gst)}</td></tr>'
+
+    totals_block = f"""
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:24px;">
+      <tr><td style="color:#888;font-size:13px;padding:4px 0;">Subtotal</td><td style="color:#e8e2d5;font-size:13px;text-align:right;padding:4px 0;font-family:monospace;">{_fmt_inr(subtotal)}</td></tr>
+      {coupon_row}
+      <tr><td style="color:#888;font-size:13px;padding:4px 0;">Shipping</td><td style="color:#e8e2d5;font-size:13px;text-align:right;padding:4px 0;font-family:monospace;">{_fmt_inr(shipping)}</td></tr>
+      {gst_row}
+      <tr><td style="color:{accent};font-size:15px;padding:12px 0 4px 0;border-top:1px solid #1f1f1f;text-transform:uppercase;letter-spacing:2px;">Total</td><td style="color:{accent};font-size:18px;text-align:right;padding:12px 0 4px 0;border-top:1px solid #1f1f1f;font-family:monospace;">{_fmt_inr(total)}</td></tr>
+    </table>
+    """
+
+    tracking_block = ""
+    if kind == "dispatched":
+        t_id = order.get("tracking_id")
+        t_url = order.get("tracking_url")
+        t_car = order.get("tracking_carrier")
+        if t_id or t_car:
+            carrier_html = f'<div style="color:#e8e2d5;font-size:14px;">Carrier {MID} <span style="color:{accent};">{t_car}</span></div>' if t_car else ''
+            id_html = f'<div style="color:#e8e2d5;font-size:14px;font-family:monospace;margin-top:4px;">{t_id}</div>' if t_id else ''
+            url_html = f'<div style="margin-top:10px;"><a href="{t_url}" style="color:{accent};font-size:12px;text-decoration:underline;letter-spacing:1.5px;text-transform:uppercase;">Track your order {ARROW}</a></div>' if t_url else ''
+            tracking_block = f"""
+            <div style="margin-top:28px;padding:20px;background:#141414;border-left:3px solid {accent};">
+              <div style="font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:#888;margin-bottom:8px;">Tracking</div>
+              {carrier_html}
+              {id_html}
+              {url_html}
+            </div>"""
+
+    body_html = custom_body_html or ""
+    if body_html:
+        body_html = f'<div style="margin-top:24px;color:#c9c2b1;font-size:14px;line-height:1.7;">{body_html}</div>'
+
+    order_number_line = ""
+    if order_number:
+        order_number_line = f'<div style="margin-top:8px;font-size:12px;color:#888;">Order {MID} <span style="font-family:monospace;color:{accent};">{order_number}</span></div>'
+    intro_line = f'<p style="margin:16px 0 0 0;font-size:15px;line-height:1.7;color:#c9c2b1;">{intro}</p>' if intro else ''
+    items_table = f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:28px;">{item_rows}</table>' if item_rows else ''
+    totals_final = totals_block if items else ''
+
+    html = f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#0a0a0a;font-family:Georgia,serif;color:#e8e2d5;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0a0a0a;padding:48px 24px;">
+    <tr><td align="center">
+      <table role="presentation" width="580" cellspacing="0" cellpadding="0" style="max-width:580px;background:#111;border:1px solid #1f1f1f;">
+        <tr><td style="padding:40px 40px 24px 40px;border-bottom:1px solid #1f1f1f;">
+          <div style="font-size:11px;letter-spacing:2.4px;text-transform:uppercase;color:{accent};">ArtyFex {MID} Atelier</div>
+          <h1 style="margin:16px 0 0 0;font-size:28px;font-weight:normal;color:#f5efdf;font-family:Georgia,serif;">{headline}</h1>
+          {order_number_line}
+        </td></tr>
+        <tr><td style="padding:32px 40px 40px 40px;">
+          <p style="margin:0;font-size:15px;line-height:1.7;color:#e8e2d5;">Dear {name},</p>
+          {intro_line}
+          {body_html}
+          {tracking_block}
+          {items_table}
+          {totals_final}
+          <div style="margin-top:32px;padding-top:24px;border-top:1px solid #1f1f1f;font-size:12px;color:#888;line-height:1.8;">
+            Track your order in <a href="https://artyfex.in/account" style="color:{accent};text-decoration:none;">your account</a>.
+          </div>
+          <p style="margin-top:32px;font-size:14px;color:#c9c2b1;">With care,<br/><span style="color:{accent};font-style:italic;">The ArtyFex Atelier</span></p>
+        </td></tr>
+      </table>
+      <div style="margin-top:24px;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:#555;">100% Handmade {MID} Mumbai</div>
+    </td></tr>
+  </table>
+</body></html>"""
+    return subject, html
+
+
+async def send_order_email(order: dict, kind: str, custom_subject: Optional[str] = None, custom_body_html: Optional[str] = None):
+    """Fire-and-forget order email; silent-fails."""
+    to_email = (order.get("customer") or {}).get("email")
+    if not to_email:
+        return
+    try:
+        subject, html = render_order_email(kind, order, custom_subject=custom_subject, custom_body_html=custom_body_html)
+        await send_email(to_email, subject, html)
+    except Exception as _e:
+        logging.error(f"Order email render/send failed ({kind}): {_e}")
 app = FastAPI(title="ArtyFex API")
 api_router = APIRouter(prefix="/api")
 
@@ -784,7 +952,7 @@ async def compute_taxes_for_cart(
 async def cart_compute_tax(payload: CartTaxIn):
     """Public endpoint used by cart & checkout to preview the GST breakdown."""
     items = [it.model_dump() for it in payload.items]
-    result = await compute_taxes_for_cart(items, ship_state=payload.ship_state, treatment="inclusive")
+    result = await compute_taxes_for_cart(items, ship_state=payload.ship_state, treatment="exclusive")
     return result
 
 
@@ -922,25 +1090,33 @@ async def create_order(payload: OrderIn):
     if payload.coupon_code:
         order.coupon_code = payload.coupon_code.upper().strip()
     # --- Phase A (Jul 2025): compute GST authoritatively (server is source of truth) ---
+    # Treatment = EXCLUSIVE — GST is added on top of the shown price (standard e-commerce behaviour).
     try:
         tax = await compute_taxes_for_cart(
             [i.model_dump() for i in payload.items],
             ship_state=(order.customer.state if getattr(order.customer, "state", None) else None),
-            treatment="inclusive",
+            treatment="exclusive",
         )
         order.gst_total_inr = int(tax.get("gst_total_inr") or 0)
         order.cgst_inr = int(tax.get("cgst_inr") or 0)
         order.sgst_inr = int(tax.get("sgst_inr") or 0)
         order.igst_inr = int(tax.get("igst_inr") or 0)
         order.gst_lines = tax.get("gst_lines") or []
-        order.gst_treatment = "inclusive"
+        order.gst_treatment = "exclusive"
     except Exception as e:
         logging.warning(f"GST computation failed on order create: {e}")
     if payload.payment_method == "razorpay":
         if not rzp_client:
             raise HTTPException(status_code=500, detail="Razorpay not configured")
-        # --- Phase B: recompute total server-side (subtotal - discount + shipping; GST is inclusive) ---
-        server_total = max(0, int(payload.subtotal_inr) - int(payload.discount_inr or 0) + int(payload.shipping_inr))
+        # --- Phase A (Jul 2025): recompute total server-side incl. GST (exclusive) ---
+        # total = subtotal - discount + shipping + gst_total (GST is added on top)
+        server_total = max(
+            0,
+            int(payload.subtotal_inr)
+            - int(payload.discount_inr or 0)
+            + int(payload.shipping_inr)
+            + int(order.gst_total_inr or 0),
+        )
         if abs(server_total - int(payload.total_inr)) > 1:
             logging.warning(
                 f"Order total mismatch (client={payload.total_inr}, server={server_total}). Trusting server."
@@ -955,7 +1131,21 @@ async def create_order(payload: OrderIn):
         order.razorpay_order_id = rzp_order["id"]
     else:
         order.status = "confirmed"
+        # For COD orders, also recompute total incl. GST
+        server_total = max(
+            0,
+            int(payload.subtotal_inr)
+            - int(payload.discount_inr or 0)
+            + int(payload.shipping_inr)
+            + int(order.gst_total_inr or 0),
+        )
+        order.total_inr = server_total
     await db.orders.insert_one(order.model_dump())
+    # Fire "order placed" email (fire-and-forget)
+    try:
+        asyncio.create_task(send_order_email(order.model_dump(), "placed"))
+    except Exception as _e:
+        logging.warning(f"Order-placed email queue failed: {_e}")
     return {
         "order": order.model_dump(),
         "razorpay_key_id": RZP_KEY if payload.payment_method == "razorpay" else None,
@@ -1132,12 +1322,22 @@ async def admin_list_orders(admin=Depends(get_current_admin)):
 
 @api_router.patch("/admin/orders/{order_number}")
 async def admin_update_order(order_number: str, payload: OrderStatusUpdate, admin=Depends(get_current_admin)):
+    prev = await db.orders.find_one({"order_number": order_number}, {"_id": 0})
+    if not prev:
+        raise HTTPException(status_code=404, detail="Not found")
     update = {"status": payload.status}
     if payload.status == "delivered":
         update["delivered_at"] = now_iso()
-    res = await db.orders.update_one({"order_number": order_number}, {"$set": update})
-    if res.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Not found")
+    await db.orders.update_one({"order_number": order_number}, {"$set": update})
+    # Fire transactional emails on status transitions
+    new = {**prev, **update}
+    try:
+        if payload.status == "shipped" and prev.get("status") != "shipped":
+            asyncio.create_task(send_order_email(new, "dispatched"))
+        elif payload.status == "cancelled" and prev.get("status") != "cancelled":
+            asyncio.create_task(send_order_email(new, "cancelled"))
+    except Exception as _e:
+        logging.warning(f"Order status email failed: {_e}")
     return {"ok": True}
 
 
@@ -2669,6 +2869,189 @@ async def admin_change_password(payload: PasswordChange, admin=Depends(get_curre
     pw_hash = bcrypt.hashpw(payload.new_password.encode(), bcrypt.gensalt()).decode()
     await db.admins.update_one({"email": admin["email"]}, {"$set": {"password_hash": pw_hash, "password_changed_at": now_iso()}})
     return {"ok": True}
+
+
+# ==== Phase A (Jul 2025) · Cloudinary + Admin Google Login + Whitelist + Notify ====
+
+@api_router.get("/cloudinary/signature")
+async def cloudinary_signature(
+    folder: str = "artyfex",
+    resource_type: str = "image",
+    admin=Depends(get_current_admin),
+):
+    """Generate signed upload params for direct browser-to-Cloudinary upload."""
+    if not CLOUDINARY_CLOUD_NAME or not CLOUDINARY_API_KEY or not CLOUDINARY_API_SECRET:
+        raise HTTPException(status_code=500, detail="Cloudinary not configured")
+    if resource_type not in ("image", "video"):
+        raise HTTPException(status_code=400, detail="resource_type must be image or video")
+    # Whitelist folder prefixes to prevent free-form upload paths.
+    if not folder.startswith("artyfex"):
+        raise HTTPException(status_code=400, detail="Invalid folder path")
+    ts = int(time.time())
+    params_to_sign = {"timestamp": ts, "folder": folder}
+    signature = cloudinary.utils.api_sign_request(params_to_sign, CLOUDINARY_API_SECRET)
+    return {
+        "signature": signature,
+        "timestamp": ts,
+        "cloud_name": CLOUDINARY_CLOUD_NAME,
+        "api_key": CLOUDINARY_API_KEY,
+        "folder": folder,
+        "resource_type": resource_type,
+    }
+
+
+# --- Admin whitelist (Google login access) ---
+class AdminWhitelistIn(BaseModel):
+    email: EmailStr
+    note: Optional[str] = None
+
+
+async def _get_admin_whitelist() -> set[str]:
+    docs = await db.admin_whitelist.find({}, {"_id": 0}).to_list(500)
+    emails = {(d.get("email") or "").lower().strip() for d in docs}
+    emails.update(e.lower() for e in DEFAULT_ADMIN_WHITELIST)
+    # Existing seeded admin (email/password owner) is always allowed.
+    if ADMIN_EMAIL:
+        emails.add(ADMIN_EMAIL.lower())
+    return {e for e in emails if e}
+
+
+@api_router.get("/admin/whitelist")
+async def admin_list_whitelist(admin=Depends(get_current_admin)):
+    docs = await db.admin_whitelist.find({}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    # Also surface the built-in defaults so admins see the full picture
+    default_entries = [
+        {"id": f"default-{e}", "email": e, "note": "Built-in owner", "created_at": None, "readonly": True}
+        for e in sorted(DEFAULT_ADMIN_WHITELIST)
+        if not any((d.get("email") or "").lower() == e for d in docs)
+    ]
+    return default_entries + docs
+
+
+@api_router.post("/admin/whitelist")
+async def admin_add_whitelist(payload: AdminWhitelistIn, admin=Depends(require_permission("manage_employees"))):
+    email = payload.email.lower().strip()
+    if await db.admin_whitelist.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="Email already whitelisted")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "email": email,
+        "note": payload.note or "",
+        "created_at": now_iso(),
+        "added_by": admin.get("email"),
+        "readonly": False,
+    }
+    await db.admin_whitelist.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.delete("/admin/whitelist/{wl_id}")
+async def admin_delete_whitelist(wl_id: str, admin=Depends(require_permission("manage_employees"))):
+    if wl_id.startswith("default-"):
+        raise HTTPException(status_code=400, detail="Built-in owner emails cannot be removed")
+    res = await db.admin_whitelist.delete_one({"id": wl_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"deleted": True}
+
+
+# --- Admin Google Login (bridges Emergent session_id → admin JWT if whitelisted) ---
+class AdminGoogleSessionIn(BaseModel):
+    session_id: str
+
+
+@api_router.post("/admin/auth/google")
+async def admin_google_login(payload: AdminGoogleSessionIn):
+    if not payload.session_id or not payload.session_id.strip():
+        raise HTTPException(status_code=400, detail="session_id is required")
+    # Fetch profile from Emergent auth
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as cx:
+            r = await cx.get(
+                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+                headers={"X-Session-ID": payload.session_id.strip()},
+            )
+    except Exception as _e:
+        raise HTTPException(status_code=502, detail="Auth provider unreachable")
+    if r.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid Google session")
+    data = r.json() or {}
+    email = (data.get("email") or "").lower().strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Google account has no email")
+    allowed = await _get_admin_whitelist()
+    if email not in allowed:
+        raise HTTPException(status_code=403, detail="This Google account is not authorized for admin access")
+    # Load or create an admin doc for this email (as owner if built-in default, else employee)
+    admin_doc = await db.admins.find_one({"email": email})
+    is_default_owner = email in {e.lower() for e in DEFAULT_ADMIN_WHITELIST} or email == ADMIN_EMAIL.lower()
+    if not admin_doc:
+        admin_doc = {
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "display_name": data.get("name") or email.split("@")[0],
+            "auth_provider": "google",
+            "password_hash": bcrypt.hashpw(str(uuid.uuid4()).encode(), bcrypt.gensalt()).decode(),
+            "role": "owner" if is_default_owner else "employee",
+            "permissions": list(ALL_PERMISSIONS) if is_default_owner else ["view_analytics"],
+            "created_at": now_iso(),
+        }
+        await db.admins.insert_one(admin_doc)
+    else:
+        # Ensure owner status for built-in emails
+        if is_default_owner and admin_doc.get("role") != "owner":
+            await db.admins.update_one({"email": email}, {"$set": {"role": "owner", "permissions": list(ALL_PERMISSIONS)}})
+            admin_doc = await db.admins.find_one({"email": email})
+    admin_doc.pop("_id", None)
+    admin_doc.pop("password_hash", None)
+    token = create_token(email, role="admin")
+    return {"token": token, "admin": admin_doc}
+
+
+# --- Admin custom email notify (per-order + broadcast) ---
+class OrderNotifyIn(BaseModel):
+    subject: str
+    body_html: str
+
+
+@api_router.post("/admin/orders/{order_number}/notify")
+async def admin_notify_order(order_number: str, payload: OrderNotifyIn, admin=Depends(require_permission("manage_orders"))):
+    order = await db.orders.find_one({"order_number": order_number}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if not payload.subject.strip() or not payload.body_html.strip():
+        raise HTTPException(status_code=400, detail="Subject and body are required")
+    asyncio.create_task(send_order_email(order, "custom", custom_subject=payload.subject.strip(), custom_body_html=payload.body_html))
+    return {"queued": True}
+
+
+class BroadcastIn(BaseModel):
+    subject: str
+    body_html: str
+    audience: str = "all_customers"  # future: filters
+
+
+@api_router.post("/admin/broadcast")
+async def admin_broadcast(payload: BroadcastIn, admin=Depends(require_permission("manage_customers"))):
+    if not payload.subject.strip() or not payload.body_html.strip():
+        raise HTTPException(status_code=400, detail="Subject and body are required")
+    users = await db.users.find({"email": {"$exists": True}}, {"_id": 0, "email": 1, "name": 1}).to_list(5000)
+    seen: set = set()
+    queued = 0
+    for u in users:
+        em = (u.get("email") or "").lower().strip()
+        if not em or em in seen:
+            continue
+        seen.add(em)
+        fake_order = {
+            "order_number": "",
+            "customer": {"name": u.get("name") or em.split("@")[0], "email": em},
+            "items": [],
+        }
+        asyncio.create_task(send_order_email(fake_order, "custom", custom_subject=payload.subject.strip(), custom_body_html=payload.body_html))
+        queued += 1
+    return {"queued": queued}
 
 
 app.include_router(api_router)
