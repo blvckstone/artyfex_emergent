@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timedelta
 
 # Configuration
-BASE_URL = "https://artyfex-preview.preview.emergentagent.com/api"
+BASE_URL = "https://artyfex-phase-a.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@artyfex.in"
 ADMIN_PASSWORD = "ArtyFex@2026"
 
