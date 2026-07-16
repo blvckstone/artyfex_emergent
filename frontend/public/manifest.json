@@ -1,0 +1,18 @@
+{
+  "short_name": "ArtyFex",
+  "name": "ArtyFex — Luxury Handmade Mirrors, Modern Art & Bespoke Furniture",
+  "description": "A Mumbai atelier of 100% handmade luxury resin mirrors, modern art and bespoke furniture. One-of-one pieces for collectors & designers.",
+  "icons": [
+    { "src": "/brand/favicon.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "/brand/apple-touch-icon.png", "type": "image/png", "sizes": "512x512", "purpose": "any maskable" }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#050505",
+  "background_color": "#050505",
+  "lang": "en-IN",
+  "categories": ["shopping", "lifestyle", "design"],
+  "prefer_related_applications": false
+}

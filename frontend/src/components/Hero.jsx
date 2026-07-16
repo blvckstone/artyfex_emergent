@@ -1,5 +1,5 @@
 import React from "react";
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { ArrowDownRight, Sparkles } from "lucide-react";
 import { IDS } from "@/constants/testIds";
 
@@ -30,6 +30,11 @@ export const Hero = ({ content }) => {
   const accent = c.accent_color || "#D4AF37";
   const textColor = c.text_color || "#f5efdf";
   const stats = (c.stats && c.stats.length ? c.stats : DEFAULT_STATS).slice(0, 3);
+  const { scrollY } = useScroll();
+  const bgY = useTransform(scrollY, [0, 800], [0, 180]);
+  const mirrorY = useTransform(scrollY, [0, 800], [0, -80]);
+  const bgScale = useTransform(scrollY, [0, 800], [1.05, 1.15]);
+  const copyY = useTransform(scrollY, [0, 800], [0, -40]);
 
   return (
     <section
@@ -37,17 +42,17 @@ export const Hero = ({ content }) => {
       data-testid={IDS.hero.section}
       className="relative min-h-[100svh] w-full overflow-hidden bg-ink-950"
     >
-      {/* Background image */}
-      <div className="absolute inset-0">
+      {/* Background image (parallax) */}
+      <motion.div className="absolute inset-0" style={{ y: bgY, scale: bgScale }}>
         <img src={bg} alt="" className="w-full h-full object-cover opacity-40" />
         <div className="absolute inset-0 bg-gradient-to-b from-ink-950/70 via-ink-950/50 to-ink-950" />
         <div className="absolute inset-0 grain" />
-      </div>
+      </motion.div>
 
       <div className="relative max-w-[1440px] mx-auto px-6 md:px-12 lg:px-16 pt-40 md:pt-44 pb-24">
         <div className="grid lg:grid-cols-12 gap-10 lg:gap-16 items-center">
           {/* Copy */}
-          <div className="lg:col-span-7 relative z-10">
+          <motion.div className="lg:col-span-7 relative z-10 min-w-0" style={{ y: copyY }}>
             <motion.div
               variants={fade}
               initial="hidden"
@@ -67,7 +72,7 @@ export const Hero = ({ content }) => {
               animate="show"
               custom={1}
               data-testid={IDS.hero.title}
-              className="font-serif text-[12vw] sm:text-[9vw] md:text-7xl lg:text-8xl xl:text-[6.5rem] 2xl:text-[7.5rem] leading-[0.92] tracking-tight text-balance"
+              className="font-serif text-[11vw] sm:text-[8vw] md:text-6xl lg:text-7xl xl:text-[5.5rem] 2xl:text-[6.5rem] leading-[0.94] tracking-tight text-balance break-words"
               style={{ color: textColor }}
             >
               {c.headline_line_1 || "A mirror,"}{" "}
@@ -131,10 +136,10 @@ export const Hero = ({ content }) => {
                 </div>
               ))}
             </motion.div>
-          </div>
+          </motion.div>
 
           {/* Mirror image */}
-          <div className="lg:col-span-5 relative">
+          <motion.div className="lg:col-span-5 relative" style={{ y: mirrorY }}>
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 40 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -153,7 +158,7 @@ export const Hero = ({ content }) => {
                 </div>
               )}
             </motion.div>
-          </div>
+          </motion.div>
         </div>
       </div>
 

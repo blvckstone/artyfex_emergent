@@ -2502,6 +2502,69 @@ frontend:
           Hero heading was `md:text-8xl lg:text-[7.5rem]` which caused text to run past the visible area at 1280px and clip the mirror image column. Reduced ramp to `md:text-7xl lg:text-8xl xl:text-[6.5rem] 2xl:text-[7.5rem]`.
           Verified at 1280 (fits 2-col grid), 1920 (still cinematic). Mobile unchanged.
 
+
+  - task: "Phase B1 · Homepage redesign — CategoryMosaic + FeaturedCarousel + WhyArtyFex + Hero parallax"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/CategoryMosaic.jsx, frontend/src/components/FeaturedCarousel.jsx, frontend/src/components/WhyArtyFex.jsx, frontend/src/components/Hero.jsx, frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Homepage completely re-composed with 3 new sections + Hero parallax while keeping the luxury dark/gold theme.
+          - CategoryMosaic: bento-grid 5 curated categories (Mirrors big-tile, Wall Art wide, Sculpture / Lighting / Custom squares). Hover: ring-gold glow, arrow chip fills gold, image scales. Links to /shop?category=<slug>.
+          - FeaturedCarousel: horizontal snap-scroll with hidden scrollbar (.no-scrollbar), prev/next arrows disable at edges, 4-5 products across breakpoints. "Last one" badge for stock ≤ 1.
+          - WhyArtyFex: 4-column strip of animated in-view counters (rAF eased) — 120+ hrs, 1/1, 24 mo warranty, 500+ delivered — with gold ring icon chips and blur-gold ambient backdrops.
+          - Hero: scroll-linked parallax (bg y+scale, mirror y-translate, copy y-translate) using useScroll + useTransform. Heading font-size ramp reduced (`md:6xl lg:7xl xl:5.5rem 2xl:6.5rem`) + break-words for zero clipping at 1280 px.
+          Home order: Hero → CategoryMosaic → ProductShowcase → FeaturedCarousel → Craftsmanship → Collection → WhyArtyFex → SaleBanner → Reviews → B2B → Footer.
+
+  - task: "Phase B3 · Native-app mobile feel — MobileTabBar + sticky product CTA + PWA manifest + install prompt"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/MobileTabBar.jsx, frontend/src/components/PWAInstallPrompt.jsx, frontend/src/pages/ProductPage.jsx, frontend/public/manifest.json, frontend/public/index.html, frontend/src/index.css"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Website now feels like a premium mobile app on <lg screens without any actual native code.
+          - MobileTabBar: fixed bottom nav (Home / Shop / Cart / Saved / Account) with gold active state, cart+wishlist badges, safe-area-inset-bottom padding. Auto-hides on /admin. 56 px tall.
+          - ProductPage: sticky mobile bottom bar with size + price + Add-to-Cart CTA (transitions to "Added"). Positioned 64 px from bottom so it stacks above MobileTabBar without overlap.
+          - PWA: manifest.json (icons, theme_color, standalone display), <link rel="manifest">, Apple/mobile meta tags in index.html.
+          - PWAInstallPrompt: captures `beforeinstallprompt`, luxury card above tab bar with Install / Not now. LocalStorage dismiss so we never nag twice.
+          - CSS: `overscroll-behavior-y: contain`, `touch-action: manipulation`, `.no-scrollbar`, `.line-clamp-2` utilities.
+
+  - task: "Phase B4 · SEO deeper polish — FAQPage schema + keywords meta"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js, frontend/public/index.html"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Home JSON-LD @graph extended with `FAQPage` (4 Q&A targeting luxury/mirror/modern/bespoke India-focused keywords, LLM-crawler friendly). index.html now has meta keywords targeting: luxury mirrors, handmade mirrors, modern art, resin mirror, statement mirror, mumbai atelier, bespoke furniture, luxury home decor, one of one, modern interior, ArtyFex.
+
+  - task: "Phase B2 · Desktop overflow sweep (Hero final)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/Hero.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Hero heading downsized further: `md:text-6xl lg:text-7xl xl:text-[5.5rem] 2xl:text-[6.5rem]` (was 7xl/8xl/6.5rem) with `break-words` + `min-w-0` on the copy column so no clip at 1280 px. Verified `document.scrollWidth ≤ clientWidth` at 1280 px (no horizontal scroll).
+
 metadata:
   version: "3.0"
   test_sequence: 11
@@ -2513,6 +2576,41 @@ agent_communication:
       Phase B partial shipment (B5 + B4 + B2 done; B1 + B3 pending). Also closed the last Phase A gap (order line-item snapshot).
       All changes are backward-compatible and safe to push to prod. Frontend hot-reload verified via screenshots.
       Backend needs test coverage on the new CMS endpoints (public + admin CRUD + reorder + seed) and the new SEO endpoints.
+  - agent: "main"
+    message: |
+      ✅ PHASE B COMPLETION (Jul 16 2026) — B1 + B2 + B3 + B4 remaining work done.
+      
+      1) B1 · Art-Centric Homepage Redesign (SHIPPED):
+         - NEW: `CategoryMosaic` (Bento-grid, 5 curated luxury categories with hover ring-gold, arrow reveal, hover scale, dark gradient overlay).
+         - NEW: `FeaturedCarousel` (auto-hidden scrollbar horizontal-snap carousel, prev/next chevrons enable/disable at edges, snaps 4-5 products depending on breakpoint).
+         - NEW: `WhyArtyFex` (4 animated in-view counters — 120+ hrs, 1/1, 24 mo, 500+ delivered — with gold icon chips, gold blur backdrops, fade + slide-up on scroll).
+         - Hero: added scroll-linked parallax (bg y+scale, mirror y-translate, copy y-translate) via `useScroll` + `useTransform` — luxury depth without jank.
+         - Increased on-page product visibility: `FeaturedCarousel` (all products) + existing `Collection` grid.
+         - Home order: Hero → CategoryMosaic → ProductShowcase → FeaturedCarousel → Craftsmanship → Collection → WhyArtyFex → SaleBanner → Reviews → B2B → Footer.
+      
+      2) B2 · Desktop overflow sweep (SHIPPED):
+         - Hero heading downsized further: `md:text-6xl lg:text-7xl xl:text-[5.5rem] 2xl:text-[6.5rem]` (was 7xl/8xl/6.5rem) with `break-words` + `min-w-0` on the copy column so no clip at 1280 px.
+         - Verified `document.scrollWidth ≤ clientWidth` at 1280 px (no horizontal scroll).
+      
+      3) B3 · Native Android/mobile app feel (SHIPPED):
+         - NEW: `MobileTabBar` — always-visible fixed bottom nav on <lg (Home, Shop, Cart, Saved, Account) with active-tab gold state, safe-area-inset padding for iOS notch, badges for cart count + wishlist count. Auto-hides on /admin.
+         - NEW: sticky mobile Add-to-Cart bar on product page (sits directly above the tab bar, shows size + price + Add-to-Cart CTA). Toggles to "Added" state.
+         - PWA manifest.json shipped with icons, theme_color=#050505, display=standalone. index.html now links manifest + Apple/mobile meta tags.
+         - NEW: `PWAInstallPrompt` — captures `beforeinstallprompt`, shows luxury install card above the tab bar. LocalStorage dismiss key so we never nag twice.
+         - CSS: `overscroll-behavior-y: contain`, `touch-action: manipulation`, `.no-scrollbar` utility for hidden-scrollbar carousels, `.line-clamp-2`.
+         - Product gallery already supports touch swipe (existing).
+      
+      4) B4 · SEO deeper polish (SHIPPED):
+         - Home JSON-LD @graph extended with `FAQPage` (4 Q&A targeting luxury/mirror/modern/bespoke keywords — India-focused, LLM-crawler friendly).
+         - index.html now has `<meta name="keywords">` with primary target keywords (luxury mirrors, handmade mirrors, modern art, resin mirror, statement mirror, mumbai atelier, bespoke furniture, luxury home decor, one of one, modern interior, ArtyFex).
+         - Apple/mobile meta tags added for PWA discoverability.
+         - All existing SEO (Organization/WebSite/Store/BreadcrumbList/CollectionPage/Product w/ shipping-returns) untouched.
+      
+      No backend changes required. All changes hot-reloaded; no lint errors on new components. Screenshots verified:
+      - Desktop 1440/1280 → Hero no overflow, CategoryMosaic bento renders, FeaturedCarousel with 4 products + arrows, WhyArtyFex counter chips animate.
+      - Mobile 390×844 → Bottom tab bar visible (56 px, safe-area padded), sticky Add-to-Cart bar sits above it (65 px, gap 8 px), product page fully usable.
+      
+      Frontend testing NOT invoked (user said "use less credit as possible"). All UI verified via screenshots + JS DOM assertions.
   - agent: "testing"
     message: |
       ✅ PHASE B5 BACKEND TESTING COMPLETE - ALL TESTS PASSED (20/20)

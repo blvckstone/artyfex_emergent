@@ -15,6 +15,11 @@ import SessionTracker from "@/components/SessionTracker";
 import ProductShowcase from "@/components/ProductShowcase";
 import Craftsmanship from "@/components/Craftsmanship";
 import Collection from "@/components/Collection";
+import CategoryMosaic from "@/components/CategoryMosaic";
+import WhyArtyFex from "@/components/WhyArtyFex";
+import FeaturedCarousel from "@/components/FeaturedCarousel";
+import MobileTabBar from "@/components/MobileTabBar";
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import Reviews from "@/components/Reviews";
 import B2B from "@/components/B2B";
 import Footer from "@/components/Footer";
@@ -125,15 +130,44 @@ function Home() {
                 { "@type": "Offer", "itemOffered": { "@type": "Product", "name": "Bespoke Modern Furniture" } },
               ],
             },
+            {
+              "@type": "FAQPage",
+              "@id": "https://www.artyfex.in/#faq",
+              "mainEntity": [
+                {
+                  "@type": "Question",
+                  "name": "What makes ArtyFex luxury mirrors different?",
+                  "acceptedAnswer": { "@type": "Answer", "text": "Every ArtyFex mirror is 100% handmade in our Mumbai atelier over 120+ artisan hours using anti-yellowing resin, real crushed crystal and a hand-brushed golden aluminium border. Each mirror is a one-of-one signed piece — no two are alike." }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Do you ship luxury mirrors across India?",
+                  "acceptedAnswer": { "@type": "Answer", "text": "Yes — we offer insured white-glove delivery pan-India. Orders above ₹25,000 ship complimentary. All orders are tracked in real time from your account." }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Can I commission a bespoke modern art piece?",
+                  "acceptedAnswer": { "@type": "Answer", "text": "Absolutely. We accept bespoke commissions for mirrors, wall art, sculpture, lighting and furniture. Contact us via WhatsApp or the Trade / B2B page for a private consultation." }
+                },
+                {
+                  "@type": "Question",
+                  "name": "Are ArtyFex resin mirrors safe for humid Indian climates?",
+                  "acceptedAnswer": { "@type": "Answer", "text": "Yes. We use a proprietary anti-yellowing epoxy formulation designed for tropical humidity. Every piece is backed by a 24-month signature warranty." }
+                }
+              ]
+            }
           ],
         }}
       />
       <Navbar announcement={homepage?.announcement} />
       <main>
         <Hero content={homepage?.hero} />
+        <CategoryMosaic categories={homepage?.categories} />
         <ProductShowcase product={hero} />
+        <FeaturedCarousel products={products} />
         <Craftsmanship content={homepage?.craft} />
         <Collection products={products} content={homepage?.collection_section} />
+        <WhyArtyFex />
         <SaleBanner content={homepage?.sale_banner} />
         <Reviews reviews={reviews} content={homepage?.reviews_section} />
         <B2B />
@@ -167,6 +201,8 @@ function StoreShell() {
       <CheckoutDialog open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
       <AuthDialog />
       <ReviewPromptModal />
+      <MobileTabBar />
+      <PWAInstallPrompt />
     </div>
   );
 }

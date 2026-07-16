@@ -461,6 +461,25 @@ export default function ProductPage() {
           </div>
         </div>
       </div>
+      {/* Sticky mobile Add-to-Cart bar (native app feel) */}
+      <div
+        data-testid="product-sticky-cta"
+        className="lg:hidden fixed left-0 right-0 z-40 bg-ink-950/95 backdrop-blur border-t border-white/10 px-4 py-3 flex items-center gap-3"
+        style={{ bottom: "64px", paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+      >
+        <div className="flex flex-col min-w-0">
+          <span className="text-[10px] uppercase tracking-luxury text-gold-soft">{effectiveSize}</span>
+          <span className="font-serif text-lg text-cream leading-none">{formatINR(effectivePrice)}</span>
+        </div>
+        <button
+          data-testid="product-sticky-add"
+          onClick={handleAdd}
+          disabled={outOfStock}
+          className="ml-auto flex-1 max-w-[220px] inline-flex items-center justify-center gap-2 bg-gold text-ink-950 px-5 py-3 text-xs uppercase tracking-luxury hover:bg-cream transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {added ? (<><Check className="w-4 h-4" /> Added</>) : (<><ShoppingBag className="w-4 h-4" /> {outOfStock ? "Sold out" : "Add to Cart"}</>)}
+        </button>
+      </div>
       <Footer />
     </div>
   );

@@ -128,3 +128,24 @@ select:-webkit-autofill {
 ::-webkit-scrollbar-track { background: #050505; }
 ::-webkit-scrollbar-thumb { background: #242424; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #d4af37; }
+
+
+/* Hide scrollbars for horizontal scrollers (featured carousel) */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Native app feel — smooth momentum scroll on iOS mobile */
+html, body { -webkit-tap-highlight-color: transparent; }
+@media (max-width: 1023px) {
+  body { overscroll-behavior-y: contain; }
+  /* larger tap targets on mobile for luxury-app feel */
+  a, button { touch-action: manipulation; }
+}
+
+/* line-clamp for product cards */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
