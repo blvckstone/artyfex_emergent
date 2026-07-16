@@ -1570,24 +1570,43 @@ function OrderRow({ o, onStatus, onTracking, onNotify }) {
       {expanded && (
         <div className="mt-4 border-t border-white/5 pt-4 grid gap-4 md:grid-cols-[2fr_1fr]" data-testid={`admin-order-details-${o.order_number}`}>
           <div>
-            <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-2">Line items</div>
+            <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-2">Line items · {(o.items || []).length}</div>
             <div className="space-y-2">
-              {(o.items || []).map((it, idx) => (
-                <div key={idx} className="flex items-center gap-3 bg-ink-950/60 border border-white/5 px-3 py-2 text-xs">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-cream truncate">{it.name || it.product_name || `Item ${idx + 1}`}</div>
-                    <div className="text-cream/40 text-[10px]">
-                      {(it.variant_label || it.variant_key) && (<>Variant · <span className="text-cream/60">{it.variant_label || it.variant_key}</span> · </>)}
-                      {it.size && (<>Size · <span className="text-cream/60">{it.size}</span> · </>)}
-                      Qty · <span className="text-cream/60">{it.quantity}</span>
+              {(o.items || []).map((it, idx) => {
+                const lineTotal = it.line_total_inr ?? ((it.price_inr || 0) * (it.quantity || 1));
+                return (
+                  <div key={idx} className="flex items-start gap-3 bg-ink-950/60 border border-white/5 p-2 text-xs">
+                    {it.product_image ? (
+                      // eslint-disable-next-line
+                      <img src={it.product_image} alt="" className="w-14 h-14 object-cover border border-white/10 shrink-0" />
+                    ) : (
+                      <div className="w-14 h-14 border border-white/10 bg-ink-950 flex items-center justify-center text-cream/30 text-[9px] shrink-0">no img</div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-cream truncate">{it.product_name || it.name || `Item ${idx + 1}`}</div>
+                      <div className="text-cream/50 text-[10px] mt-0.5 flex flex-wrap gap-x-2">
+                        {(it.variant_label || it.variant_key) && (
+                          <span className="inline-flex items-center gap-1">
+                            {it.variant_hex && <span className="w-2.5 h-2.5 border border-white/20 inline-block" style={{ backgroundColor: it.variant_hex }} />}
+                            Variant: <span className="text-cream/70">{it.variant_label || it.variant_key}</span>
+                          </span>
+                        )}
+                        {it.size && <span>Size: <span className="text-cream/70">{it.size}</span></span>}
+                        <span>Qty: <span className="text-cream/70">{it.quantity}</span></span>
+                      </div>
+                      <div className="text-cream/40 text-[10px] mt-0.5 flex flex-wrap gap-x-2">
+                        {it.product_category && <span>Category: <span className="text-cream/60">{it.product_category}</span></span>}
+                        {it.product_sku && <span>SKU: <span className="font-mono text-cream/60">{it.product_sku}</span></span>}
+                        {it.product_hsn_code && <span>HSN: <span className="font-mono text-cream/60">{it.product_hsn_code}</span></span>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-cream/70 font-mono">₹{(it.price_inr || 0).toLocaleString("en-IN")}</div>
+                      <div className="text-cream/40 text-[10px]">× {it.quantity} = <span className="text-cream/70">₹{lineTotal.toLocaleString("en-IN")}</span></div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-cream/70 font-mono">₹{(it.price_inr || 0).toLocaleString("en-IN")}</div>
-                    <div className="text-cream/40 text-[10px]">× {it.quantity} = ₹{((it.price_inr || 0) * (it.quantity || 1)).toLocaleString("en-IN")}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
           <div className="text-xs">

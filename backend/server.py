@@ -346,7 +346,22 @@ class OrderCustomer(BaseModel):
     country: Optional[str] = "India"
 
 class OrderItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     product_id: str; variant_key: str; quantity: int = 1
+    # ---- Snapshot fields (populated server-side on order create; backward-compat optional) ----
+    product_name: Optional[str] = None
+    product_slug: Optional[str] = None
+    product_image: Optional[str] = None
+    product_category: Optional[str] = None
+    product_hsn_code: Optional[str] = None
+    product_sku: Optional[str] = None
+    variant_label: Optional[str] = None
+    variant_hex: Optional[str] = None
+    variant_image: Optional[str] = None
+    size: Optional[str] = None
+    price_inr: Optional[int] = None
+    mrp_inr: Optional[int] = None
+    line_total_inr: Optional[int] = None
 
 class OrderIn(BaseModel):
     customer: OrderCustomer; items: List[OrderItem]
@@ -1089,6 +1104,44 @@ async def create_order(payload: OrderIn):
     order = Order(**payload.model_dump())
     if payload.coupon_code:
         order.coupon_code = payload.coupon_code.upper().strip()
+
+    # --- Phase A (Jul 2025 · pending fix): snapshot product + variant details into each order item ---
+    # Ensures the Admin Orders detail view (and customer receipt) shows the exact product bought
+    # even if the product is later renamed, re-priced, or removed.
+    snapshotted_items = []
+    for it in order.items:
+        prod = await db.products.find_one({"id": it.product_id}, {"_id": 0})
+        variant = None
+        if prod:
+            for v in (prod.get("variants") or []):
+                if v.get("key") == it.variant_key:
+                    variant = v
+                    break
+        # Prefer variant-level overrides, else fall back to product-level
+        v_price = (variant or {}).get("price_inr")
+        v_mrp = (variant or {}).get("mrp_inr")
+        v_image = (variant or {}).get("image") or None
+        v_label = (variant or {}).get("label") or None
+        v_hex = (variant or {}).get("hex") or None
+        v_size = (variant or {}).get("size") or (prod or {}).get("size")
+        price_inr = int(v_price if v_price is not None else (prod or {}).get("price_inr") or 0)
+        mrp_inr = int(v_mrp if v_mrp is not None else (prod or {}).get("mrp_inr") or 0)
+        it.product_name = (prod or {}).get("name")
+        it.product_slug = (prod or {}).get("slug")
+        it.product_image = v_image or (prod or {}).get("hero_image")
+        it.product_category = (prod or {}).get("category")
+        it.product_hsn_code = (prod or {}).get("hsn_code")
+        it.product_sku = (prod or {}).get("sku")
+        it.variant_label = v_label
+        it.variant_hex = v_hex
+        it.variant_image = v_image
+        it.size = v_size
+        it.price_inr = price_inr
+        it.mrp_inr = mrp_inr
+        it.line_total_inr = price_inr * int(it.quantity or 1)
+        snapshotted_items.append(it)
+    order.items = snapshotted_items
+
     # --- Phase A (Jul 2025): compute GST authoritatively (server is source of truth) ---
     # Treatment = EXCLUSIVE — GST is added on top of the shown price (standard e-commerce behaviour).
     try:
@@ -1251,7 +1304,8 @@ async def get_order(order_number: str):
     doc = await db.orders.find_one({"order_number": order_number}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Order not found")
-    return doc
+    enriched = await _enrich_order_items([doc])
+    return enriched[0]
 
 
 @api_router.post("/b2b/leads", response_model=B2BLead)
@@ -1315,9 +1369,61 @@ async def delete_product(product_id: str, admin=Depends(get_current_admin)):
     return {"deleted": True}
 
 
+async def _enrich_order_items(orders: list) -> list:
+    """Backfill snapshot fields onto legacy order items so admin/customer views always show
+    a name + image + variant even for orders created before the snapshot logic existed.
+    Purely read-only enrichment — does NOT mutate the DB.
+    """
+    # Collect unique product_ids to load once
+    ids = set()
+    for o in orders:
+        for it in (o.get("items") or []):
+            if not it.get("product_name") and it.get("product_id"):
+                ids.add(it["product_id"])
+    if not ids:
+        return orders
+    prods = {p["id"]: p for p in await db.products.find({"id": {"$in": list(ids)}}, {"_id": 0}).to_list(1000)}
+    for o in orders:
+        for it in (o.get("items") or []):
+            if it.get("product_name"):
+                continue
+            prod = prods.get(it.get("product_id"))
+            if not prod:
+                continue
+            variant = None
+            for v in (prod.get("variants") or []):
+                if v.get("key") == it.get("variant_key"):
+                    variant = v
+                    break
+            v_price = (variant or {}).get("price_inr")
+            v_mrp = (variant or {}).get("mrp_inr")
+            v_image = (variant or {}).get("image") or None
+            v_label = (variant or {}).get("label") or None
+            v_hex = (variant or {}).get("hex") or None
+            v_size = (variant or {}).get("size") or prod.get("size")
+            price_inr = int(v_price if v_price is not None else prod.get("price_inr") or 0)
+            mrp_inr = int(v_mrp if v_mrp is not None else prod.get("mrp_inr") or 0)
+            qty = int(it.get("quantity") or 1)
+            it["product_name"] = prod.get("name")
+            it["product_slug"] = prod.get("slug")
+            it["product_image"] = v_image or prod.get("hero_image")
+            it["product_category"] = prod.get("category")
+            it["product_hsn_code"] = prod.get("hsn_code")
+            it["product_sku"] = prod.get("sku")
+            it["variant_label"] = v_label
+            it["variant_hex"] = v_hex
+            it["variant_image"] = v_image
+            it["size"] = v_size
+            it["price_inr"] = price_inr
+            it["mrp_inr"] = mrp_inr
+            it["line_total_inr"] = price_inr * qty
+    return orders
+
+
 @api_router.get("/admin/orders", response_model=List[Order])
 async def admin_list_orders(admin=Depends(get_current_admin)):
-    return await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    orders = await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    return await _enrich_order_items(orders)
 
 
 @api_router.patch("/admin/orders/{order_number}")
@@ -1859,7 +1965,8 @@ async def my_review_prompts(user=Depends(get_current_user)):
 
 @api_router.get("/me/orders", response_model=List[Order])
 async def my_orders(user=Depends(get_current_user)):
-    return await db.orders.find({"customer.email": user["email"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    orders = await db.orders.find({"customer.email": user["email"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return await _enrich_order_items(orders)
 
 
 @api_router.post("/products/{slug}/reviews", response_model=Review)
