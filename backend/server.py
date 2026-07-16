@@ -18,6 +18,7 @@ import bcrypt
 import jwt as pyjwt
 import razorpay
 import asyncio
+import re
 import httpx
 import resend
 import time
@@ -3208,8 +3209,6 @@ async def admin_broadcast(payload: BroadcastIn, admin=Depends(require_permission
     return {"queued": queued}
 
 
-app.include_router(api_router)
-
 app.add_middleware(
     CORSMiddleware, allow_credentials=True,
     allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
@@ -3217,6 +3216,339 @@ app.add_middleware(
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+
+# =============================================================================
+# ---------- PHASE B5: DYNAMIC-PAGE CMS + LEGAL COMPLIANCE ----------
+# =============================================================================
+# Admin-editable pages (Privacy, Terms, Shipping, Returns, About… anything).
+# Each page is a list of "blocks" so a non-technical admin can drop in headings,
+# paragraphs and Cloudinary-hosted images without writing HTML.
+#
+# Public endpoints:
+#   GET /api/pages              → published pages, minimal fields (for header/footer)
+#   GET /api/pages/{slug}       → single published page (full body)
+# Admin endpoints (permission: manage_homepage):
+#   GET /api/admin/pages, POST, GET/PATCH/DELETE /admin/pages/{id}
+#   POST /api/admin/pages/reorder {ids:[...]}
+
+class PageBlock(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    # type: heading | paragraph | image | cta | divider | quote | list
+    type: str
+    # Free-form fields — different block types use different subsets.
+    text: Optional[str] = None      # heading, paragraph, cta label, quote, list item joiner
+    html: Optional[str] = None      # rich paragraph (safe HTML)
+    level: Optional[int] = 2        # heading level 1-4
+    url: Optional[str] = None       # image src, cta href
+    alt: Optional[str] = None       # image alt text
+    caption: Optional[str] = None   # image caption
+    items: Optional[List[str]] = None  # bullet-list items
+    align: Optional[str] = None     # left | center | right
+
+
+class PageIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    slug: str
+    title: str
+    meta_title: Optional[str] = None
+    meta_description: Optional[str] = None
+    blocks: List[PageBlock] = Field(default_factory=list)
+    published: bool = True
+    show_in_header: bool = False
+    show_in_footer: bool = True
+    header_order: int = 100
+
+
+class Page(PageIn):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
+
+
+DEFAULT_PAGES = [
+    {
+        "slug": "privacy-policy",
+        "title": "Privacy Policy",
+        "meta_title": "Privacy Policy · ArtyFex",
+        "meta_description": "How ArtyFex collects, uses and protects your personal data. GDPR-aligned. PCI-DSS compliant checkout via Razorpay.",
+        "show_in_header": False,
+        "show_in_footer": True,
+        "header_order": 10,
+        "blocks": [
+            {"type": "paragraph", "html": "<em>Last updated: July 2025.</em> ArtyFex Atelier (\"ArtyFex\", \"we\", \"our\") respects your privacy. This policy explains what we collect, why, and your rights."},
+            {"type": "heading", "level": 2, "text": "1. Data we collect"},
+            {"type": "paragraph", "html": "When you register or place an order we collect your name, email, phone, shipping address, and (via Razorpay) payment metadata. We never store your full card or UPI details on our servers."},
+            {"type": "heading", "level": 2, "text": "2. How we use it"},
+            {"type": "list", "items": [
+                "To fulfil your order — payment, packaging, shipping, and post-delivery support.",
+                "To personalise your account (wishlist, saved addresses, order history).",
+                "To send transactional emails (Order Placed / Dispatched / Delivered) via Resend.",
+                "For internal analytics (aggregated, anonymised — no advertising cookies).",
+            ]},
+            {"type": "heading", "level": 2, "text": "3. Cookies"},
+            {"type": "paragraph", "html": "We use minimal, first-party cookies to keep you logged in and remember your cart. No third-party advertising trackers are used."},
+            {"type": "heading", "level": 2, "text": "4. Data sharing"},
+            {"type": "paragraph", "html": "We share order details only with our payment processor (Razorpay), shipping carrier, and email provider (Resend) — all bound by their own privacy commitments. We never sell your data."},
+            {"type": "heading", "level": 2, "text": "5. Your rights"},
+            {"type": "paragraph", "html": "You may request access, correction, or deletion of your data at any time by emailing <a class=\"text-gold underline\" href=\"mailto:privacy@artyfex.in\">privacy@artyfex.in</a>. We respond within 7 working days."},
+            {"type": "heading", "level": 2, "text": "6. Contact"},
+            {"type": "paragraph", "html": "For any privacy question: <a class=\"text-gold underline\" href=\"mailto:privacy@artyfex.in\">privacy@artyfex.in</a>. Postal: ArtyFex Atelier, Mumbai, Maharashtra, India."},
+        ],
+    },
+    {
+        "slug": "terms-and-conditions",
+        "title": "Terms & Conditions",
+        "meta_title": "Terms & Conditions · ArtyFex",
+        "meta_description": "The rules that govern your use of ArtyFex.in and the pieces we sell. Please read before placing an order.",
+        "show_in_header": False,
+        "show_in_footer": True,
+        "header_order": 20,
+        "blocks": [
+            {"type": "paragraph", "html": "<em>Last updated: July 2025.</em> By accessing artyfex.in or placing an order, you agree to these Terms."},
+            {"type": "heading", "level": 2, "text": "1. Bespoke, made-to-order nature"},
+            {"type": "paragraph", "html": "Every ArtyFex mirror is poured by hand. Because each piece is one-of-a-kind, minor variations in colour depth, crystal placement and grain are part of the craft — never a defect."},
+            {"type": "heading", "level": 2, "text": "2. Pricing & GST"},
+            {"type": "paragraph", "html": "All prices are in Indian Rupees (₹) and exclusive of GST. GST (as per current HSN classification) is added at checkout and shown on your final invoice."},
+            {"type": "heading", "level": 2, "text": "3. Payment"},
+            {"type": "paragraph", "html": "We accept UPI, Cards, Netbanking and Wallets through Razorpay (PCI-DSS compliant). Cash-on-Delivery is available in select pincodes."},
+            {"type": "heading", "level": 2, "text": "4. Cancellations"},
+            {"type": "paragraph", "html": "Orders may be cancelled free of charge within 12 hours of placement. Once production has started, cancellations attract a 20% studio-time fee. Cancelled orders are refunded to the original payment method within 7 working days."},
+            {"type": "heading", "level": 2, "text": "5. Governing law"},
+            {"type": "paragraph", "html": "These terms are governed by the laws of India. Disputes fall under the exclusive jurisdiction of the courts of Mumbai, Maharashtra."},
+        ],
+    },
+    {
+        "slug": "shipping-policy",
+        "title": "Shipping Policy",
+        "meta_title": "Shipping & Delivery · ArtyFex",
+        "meta_description": "White-glove insured delivery across India. Lead times, carriers, and free-shipping thresholds explained.",
+        "show_in_header": False,
+        "show_in_footer": True,
+        "header_order": 30,
+        "blocks": [
+            {"type": "paragraph", "html": "Every ArtyFex mirror is shipped in custom-built triple-wall crating, fully insured, and (in most metros) hand-delivered by our white-glove partners."},
+            {"type": "heading", "level": 2, "text": "Lead time"},
+            {"type": "list", "items": [
+                "In-stock signature editions: dispatch within 3–5 working days.",
+                "Made-to-order & custom sizes: 4–6 weeks of studio time, then dispatch.",
+                "You'll receive live tracking as soon as the crate leaves our atelier.",
+            ]},
+            {"type": "heading", "level": 2, "text": "Where we ship"},
+            {"type": "paragraph", "html": "Across all Indian pincodes. International shipping is available on request — please <a class=\"text-gold underline\" href=\"/contact\">contact us</a> for a bespoke quote."},
+            {"type": "heading", "level": 2, "text": "Shipping charges"},
+            {"type": "paragraph", "html": "Live rates are calculated at checkout based on your pincode, weight and packaging dimensions. Orders above ₹25,000 ship free anywhere in India."},
+        ],
+    },
+    {
+        "slug": "refund-and-return-policy",
+        "title": "Refund & Return Policy",
+        "meta_title": "Refunds & Returns · ArtyFex",
+        "meta_description": "Our transparent 3-day return window for damage-in-transit, plus refund timelines and process.",
+        "show_in_header": False,
+        "show_in_footer": True,
+        "header_order": 40,
+        "blocks": [
+            {"type": "paragraph", "html": "Because each piece is hand-poured, returns are limited to <strong>damage in transit</strong> only. We do not accept change-of-mind returns."},
+            {"type": "heading", "level": 2, "text": "Return window"},
+            {"type": "paragraph", "html": "You have <strong>3 days from delivery</strong> to raise a damage claim. After 3 days the sale is considered final."},
+            {"type": "heading", "level": 2, "text": "How to claim"},
+            {"type": "list", "items": [
+                "Log in and open your Account → Returns tab.",
+                "Choose the affected order and describe the damage.",
+                "Attach clear photos showing the damage AND the original packaging.",
+                "Our team reviews within 24h and confirms next steps.",
+            ]},
+            {"type": "heading", "level": 2, "text": "Refunds"},
+            {"type": "paragraph", "html": "Once a return is approved and the piece is received back at the atelier, refunds are issued to the original payment method within 7 working days. For Razorpay payments, credit may take 3–5 additional business days to reflect on your statement."},
+        ],
+    },
+    {
+        "slug": "cookie-policy",
+        "title": "Cookie Policy",
+        "meta_title": "Cookie Policy · ArtyFex",
+        "meta_description": "The minimal cookies we use to keep you logged in, remember your cart, and understand aggregate site health.",
+        "show_in_header": False,
+        "show_in_footer": True,
+        "header_order": 50,
+        "blocks": [
+            {"type": "paragraph", "html": "We use only what's strictly necessary."},
+            {"type": "heading", "level": 2, "text": "What we set"},
+            {"type": "list", "items": [
+                "Session cookie (keeps you logged in — expires when you log out).",
+                "Cart cookie (remembers your bag between visits).",
+                "Anonymous session-id (local storage, live-analytics only — never sold or shared).",
+            ]},
+            {"type": "heading", "level": 2, "text": "What we DO NOT do"},
+            {"type": "list", "items": [
+                "No third-party advertising trackers.",
+                "No cross-site behavioural profiling.",
+                "No selling of usage data to data brokers.",
+            ]},
+            {"type": "paragraph", "html": "Cookies can be cleared any time from your browser settings without affecting your account."},
+        ],
+    },
+]
+
+
+async def _seed_default_pages():
+    for pg in DEFAULT_PAGES:
+        exists = await db.pages.find_one({"slug": pg["slug"]}, {"_id": 0})
+        if exists:
+            continue
+        doc = Page(**pg).model_dump()
+        await db.pages.insert_one(doc)
+    # Unique index on slug
+    try:
+        await db.pages.create_index("slug", unique=True)
+    except Exception:
+        pass
+
+
+# ---------- PUBLIC PAGE ENDPOINTS ----------
+@api_router.get("/pages")
+async def public_list_pages():
+    """Published pages — lightweight listing for header/footer link rendering."""
+    docs = await db.pages.find(
+        {"published": True},
+        {"_id": 0, "slug": 1, "title": 1, "show_in_header": 1, "show_in_footer": 1, "header_order": 1, "meta_title": 1, "meta_description": 1},
+    ).sort("header_order", 1).to_list(200)
+    return docs
+
+
+@api_router.get("/pages/{slug}")
+async def public_get_page(slug: str):
+    doc = await db.pages.find_one({"slug": slug, "published": True}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return doc
+
+
+# ---------- ADMIN PAGE ENDPOINTS ----------
+@api_router.get("/admin/pages")
+async def admin_list_pages(admin=Depends(require_permission("manage_homepage"))):
+    return await db.pages.find({}, {"_id": 0}).sort("header_order", 1).to_list(500)
+
+
+@api_router.get("/admin/pages/{page_id}")
+async def admin_get_page(page_id: str, admin=Depends(require_permission("manage_homepage"))):
+    doc = await db.pages.find_one({"id": page_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return doc
+
+
+def _slugify(s: str) -> str:
+    s = (s or "").lower().strip()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    return s.strip("-") or "untitled"
+
+
+@api_router.post("/admin/pages", response_model=Page)
+async def admin_create_page(payload: PageIn, admin=Depends(require_permission("manage_homepage"))):
+    slug = _slugify(payload.slug or payload.title)
+    if await db.pages.find_one({"slug": slug}):
+        raise HTTPException(status_code=400, detail=f"A page with slug '{slug}' already exists.")
+    data = payload.model_dump()
+    data["slug"] = slug
+    page = Page(**data)
+    await db.pages.insert_one(page.model_dump())
+    return page
+
+
+@api_router.patch("/admin/pages/{page_id}", response_model=Page)
+async def admin_update_page(page_id: str, payload: PageIn, admin=Depends(require_permission("manage_homepage"))):
+    existing = await db.pages.find_one({"id": page_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Page not found")
+    slug = _slugify(payload.slug or payload.title)
+    if slug != existing.get("slug"):
+        if await db.pages.find_one({"slug": slug, "id": {"$ne": page_id}}):
+            raise HTTPException(status_code=400, detail=f"A page with slug '{slug}' already exists.")
+    data = payload.model_dump()
+    data["slug"] = slug
+    data["updated_at"] = now_iso()
+    await db.pages.update_one({"id": page_id}, {"$set": data})
+    merged = {**existing, **data}
+    return Page(**merged)
+
+
+@api_router.delete("/admin/pages/{page_id}")
+async def admin_delete_page(page_id: str, admin=Depends(require_permission("manage_homepage"))):
+    res = await db.pages.delete_one({"id": page_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return {"deleted": True}
+
+
+@api_router.post("/admin/pages/reorder")
+async def admin_reorder_pages(payload: dict, admin=Depends(require_permission("manage_homepage"))):
+    ids = payload.get("ids") or []
+    if not isinstance(ids, list):
+        raise HTTPException(status_code=400, detail="ids[] required")
+    for idx, pid in enumerate(ids):
+        await db.pages.update_one({"id": pid}, {"$set": {"header_order": idx * 10, "updated_at": now_iso()}})
+    return {"reordered": len(ids)}
+
+
+# =============================================================================
+# ---------- PHASE B4: SEO ENDPOINTS (sitemap.xml + robots.txt) ----------
+# =============================================================================
+# Build a valid, dynamic sitemap from products + pages + static routes.
+# Public URLs (no /api prefix here — served through the frontend proxy path).
+
+def _get_site_origin() -> str:
+    return (os.environ.get("SITE_URL") or "https://www.artyfex.in").rstrip("/")
+
+
+@api_router.get("/seo/sitemap.xml")
+async def seo_sitemap():
+    from fastapi.responses import Response
+    origin = _get_site_origin()
+    urls = []
+    now = now_iso().split("T")[0]
+    # Static
+    for path in ["/", "/shop", "/about", "/contact"]:
+        urls.append((path, now, "weekly", "0.9" if path == "/" else "0.7"))
+    # Products
+    for p in await db.products.find({}, {"_id": 0, "slug": 1, "updated_at": 1}).to_list(500):
+        slug = p.get("slug")
+        if not slug:
+            continue
+        lastmod = (p.get("updated_at") or now).split("T")[0]
+        urls.append((f"/product/{slug}", lastmod, "weekly", "0.8"))
+    # Dynamic CMS pages
+    for pg in await db.pages.find({"published": True}, {"_id": 0, "slug": 1, "updated_at": 1}).to_list(200):
+        lastmod = (pg.get("updated_at") or now).split("T")[0]
+        urls.append((f"/p/{pg['slug']}", lastmod, "monthly", "0.5"))
+    body = ['<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for path, lastmod, freq, prio in urls:
+        body.append(
+            f"  <url><loc>{origin}{path}</loc><lastmod>{lastmod}</lastmod>"
+            f"<changefreq>{freq}</changefreq><priority>{prio}</priority></url>"
+        )
+    body.append("</urlset>")
+    return Response(content="\n".join(body), media_type="application/xml")
+
+
+@api_router.get("/seo/robots.txt")
+async def seo_robots():
+    from fastapi.responses import PlainTextResponse
+    origin = _get_site_origin()
+    text = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /admin\n"
+        "Disallow: /account\n"
+        "Disallow: /api/\n\n"
+        f"Sitemap: {origin}/api/seo/sitemap.xml\n"
+    )
+    return PlainTextResponse(text)
+
+
+# Register ALL routes (including the CMS + SEO block above) on the app
+app.include_router(api_router)
 
 
 @app.on_event("startup")
@@ -3230,6 +3562,8 @@ async def on_startup():
     if not await db.site_settings.find_one({"key": "shipping"}):
         await save_site_setting("shipping", DEFAULT_SHIPPING)
         logging.info("Seeded default shipping settings")
+    # Phase B5 — seed default legal / policy pages if the collection is empty
+    await _seed_default_pages()
 
 
 @app.on_event("shutdown")

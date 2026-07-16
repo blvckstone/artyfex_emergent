@@ -67,7 +67,7 @@ export const Hero = ({ content }) => {
               animate="show"
               custom={1}
               data-testid={IDS.hero.title}
-              className="font-serif text-[13vw] sm:text-[10vw] md:text-8xl lg:text-[7.5rem] leading-[0.92] tracking-tight text-balance"
+              className="font-serif text-[12vw] sm:text-[9vw] md:text-7xl lg:text-8xl xl:text-[6.5rem] 2xl:text-[7.5rem] leading-[0.92] tracking-tight text-balance"
               style={{ color: textColor }}
             >
               {c.headline_line_1 || "A mirror,"}{" "}

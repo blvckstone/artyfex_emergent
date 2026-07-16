@@ -29,6 +29,7 @@ import AboutPage from "@/pages/AboutPage";
 import ContactPage from "@/pages/ContactPage";
 import ProductPage from "@/pages/ProductPage";
 import AuthCallback from "@/pages/AuthCallback";
+import DynamicPage from "@/pages/DynamicPage";
 import ReviewPromptBanner from "@/components/ReviewPromptBanner";
 import ReviewPromptModal from "@/components/ReviewPromptModal";
 import SEO from "@/components/SEO";
@@ -59,29 +60,71 @@ function Home() {
   return (
     <>
       <SEO
-        title="ArtyFex — Handmade Resin Art · Mirrors, Watches, Tables & Furniture | Mumbai"
-        description="ArtyFex is a Mumbai atelier of 100% handmade resin art — statement mirrors, watches, tables and bespoke furniture. One-of-one pieces for luxury interiors."
+        title="Luxury Handmade Resin Mirrors, Modern Art & Bespoke Furniture · ArtyFex Mumbai"
+        description="Shop luxury handmade mirrors, modern resin art, statement wall pieces and bespoke furniture. Every ArtyFex piece is hand-poured in Mumbai — one-of-a-kind, made-to-order, insured white-glove delivery across India."
         path="/"
         jsonLd={{
           "@context": "https://schema.org",
-          "@type": "Organization",
-          "name": "ArtyFex",
-          "url": "https://www.artyfex.in",
-          "logo": "https://www.artyfex.in/brand/logo.svg",
-          "description": "Mumbai atelier of 100% handmade resin art — mirrors, watches, tables and bespoke furniture.",
-          "founder": { "@type": "Person", "name": "Maloni Mahada" },
-          "address": {
-            "@type": "PostalAddress",
-            "streetAddress": "Malad West",
-            "addressLocality": "Mumbai",
-            "postalCode": "400095",
-            "addressRegion": "Maharashtra",
-            "addressCountry": "IN",
-          },
-          "sameAs": ["https://www.instagram.com/artyfex", "https://www.facebook.com/artyfex"],
-          "contactPoint": [
-            { "@type": "ContactPoint", "email": "artyfex@artyfex.in", "telephone": "+91-99701-07760", "contactType": "customer service", "areaServed": "IN" },
-            { "@type": "ContactPoint", "email": "artyfex.in@gmail.com", "contactType": "customer service", "areaServed": "IN" },
+          "@graph": [
+            {
+              "@type": "Organization",
+              "@id": "https://www.artyfex.in/#organization",
+              "name": "ArtyFex",
+              "alternateName": ["ArtyFex Atelier", "ArtyFex India"],
+              "url": "https://www.artyfex.in",
+              "logo": "https://www.artyfex.in/brand/logo.svg",
+              "description": "Luxury Mumbai atelier of 100% handmade resin & crystal mirrors, modern art and bespoke furniture. Made-to-order, insured delivery.",
+              "founder": { "@type": "Person", "name": "Maloni Mahada" },
+              "foundingDate": "2019",
+              "areaServed": { "@type": "Country", "name": "India" },
+              "address": {
+                "@type": "PostalAddress",
+                "streetAddress": "Malad West",
+                "addressLocality": "Mumbai",
+                "postalCode": "400095",
+                "addressRegion": "Maharashtra",
+                "addressCountry": "IN",
+              },
+              "sameAs": ["https://www.instagram.com/artyfex", "https://www.facebook.com/artyfex"],
+              "contactPoint": [
+                { "@type": "ContactPoint", "email": "artyfex@artyfex.in", "telephone": "+91-99701-07760", "contactType": "customer service", "areaServed": "IN", "availableLanguage": ["en", "hi"] },
+                { "@type": "ContactPoint", "email": "artyfex.in@gmail.com", "contactType": "customer service", "areaServed": "IN" },
+              ],
+            },
+            {
+              "@type": "WebSite",
+              "@id": "https://www.artyfex.in/#website",
+              "url": "https://www.artyfex.in",
+              "name": "ArtyFex",
+              "publisher": { "@id": "https://www.artyfex.in/#organization" },
+              "inLanguage": "en-IN",
+              "potentialAction": {
+                "@type": "SearchAction",
+                "target": "https://www.artyfex.in/shop?q={search_term_string}",
+                "query-input": "required name=search_term_string",
+              },
+            },
+            {
+              "@type": "Store",
+              "@id": "https://www.artyfex.in/#store",
+              "name": "ArtyFex Atelier",
+              "image": "https://www.artyfex.in/brand/og-cover.jpg",
+              "priceRange": "₹₹₹",
+              "url": "https://www.artyfex.in",
+              "telephone": "+91-99701-07760",
+              "address": {
+                "@type": "PostalAddress",
+                "streetAddress": "Malad West",
+                "addressLocality": "Mumbai",
+                "postalCode": "400095",
+                "addressRegion": "Maharashtra",
+                "addressCountry": "IN",
+              },
+              "makesOffer": [
+                { "@type": "Offer", "itemOffered": { "@type": "Product", "name": "Handmade Resin Mirrors" } },
+                { "@type": "Offer", "itemOffered": { "@type": "Product", "name": "Bespoke Modern Furniture" } },
+              ],
+            },
           ],
         }}
       />
@@ -117,6 +160,7 @@ function StoreShell() {
         <Route path="/policies/:slug" element={<LegalPage />} />
         <Route path="/terms" element={<LegalPage />} />
         <Route path="/privacy" element={<LegalPage />} />
+        <Route path="/p/:slug" element={<DynamicPage />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
       </Routes>
       <CartSheet onCheckout={openCheckout} />

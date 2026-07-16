@@ -2349,3 +2349,206 @@ frontend:
           - Customers (search + status filter, 10/page, per-row Block/Unblock + Delete buttons)
           Also fixed CloudinaryUpload single-image preview which was rendering full-width aspect-square and eating too much space in the product editor — now a compact 128×128 thumbnail.
           Verified visually with screenshots: all 5 tabs render filter bar + counts + pagination cleanly.
+
+# =============================================================================
+# PHASE B (Jul 2025) — Storefront Overhaul, CMS & Global SEO
+# =============================================================================
+
+backend:
+  - task: "Phase A closure · Order line-item snapshot (name/image/variant/category/HSN)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          OrderItem model extended with snapshot fields (product_name/slug/image/category/hsn_code/sku, variant_label/hex/image, size, price_inr, mrp_inr, line_total_inr).
+          POST /api/orders now populates the snapshot from the current product+variant at order time.
+          _enrich_order_items() enriches legacy orders on-the-fly for GET /admin/orders, /orders/{n} and /me/orders — no DB migration needed.
+          Admin OrderRow updated to display thumbnail + name + variant swatch + size + category + SKU + HSN + qty + unit price + line total.
+          Verified end-to-end via curl + screenshot (ARF-F8C2ACC8 renders full detail).
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (5/5 tests passed):
+          - GET /api/products → 4 products returned
+          - POST /api/orders with COD payment method → order created (ARF-DB636933)
+          - GET /api/admin/orders (admin auth) → 2 orders returned
+          - Order item snapshot fields (admin endpoint): All required fields present and non-null (product_name, product_image, product_category, product_sku, product_hsn_code, variant_label, size, price_inr, line_total_inr)
+          - line_total_inr calculation verified: 85998 = 42999 (price_inr) × 2 (quantity) ✓
+          - GET /api/orders/{order_number} (public endpoint): All snapshot fields present ✓
+          Order line-item snapshot working correctly on both admin and public endpoints.
+
+  - task: "Phase B5 · Dynamic-Page CMS backend (Page model + CRUD + reorder + seed 5 legal pages)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          New collection: db.pages (unique on slug).
+          Public: GET /api/pages (lightweight listing), GET /api/pages/{slug} (single).
+          Admin (manage_homepage): GET /admin/pages, POST, GET/PATCH/DELETE /admin/pages/{id}, POST /admin/pages/reorder {ids[]}.
+          PageBlock supports: heading | paragraph | image | list | cta | quote | divider.
+          Seeded 5 legally-compliant defaults on startup (privacy-policy, terms-and-conditions, shipping-policy, refund-and-return-policy, cookie-policy) with India-specific content.
+          Verified via curl (pages count = 5, /api/pages/privacy-policy returns full content).
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (13/13 tests passed):
+          PUBLIC ENDPOINTS:
+          - GET /api/pages (no auth) → 200, array with all 5 seeded defaults (privacy-policy, terms-and-conditions, shipping-policy, refund-and-return-policy, cookie-policy) ✓
+          - GET /api/pages/privacy-policy → 200 with title="Privacy Policy", meta_title present, blocks[] with 13 blocks ✓
+          - GET /api/pages/does-not-exist → 404 ✓
+          
+          ADMIN CRUD:
+          - GET /api/admin/pages (admin auth) → 200, array with 5 pages ✓
+          - POST /api/admin/pages with test-page → 200, page created with id ✓
+          - POST duplicate slug "test-page" → 400 (uniqueness enforced) ✓
+          - PATCH /api/admin/pages/{id} with show_in_header=true → 200, updated correctly ✓
+          - GET /api/pages → updated page visible with show_in_header=true ✓
+          - POST /api/admin/pages/reorder with all page IDs → 200, reordered 6 pages ✓
+          - GET /api/admin/pages → header_order values updated to sequence (0, 10, 20, 30, 40...) ✓
+          - DELETE /api/admin/pages/{id} → 200 ✓
+          - GET /api/admin/pages/{id} after delete → 404 ✓
+          
+          AUTH CHECK:
+          - GET /api/admin/pages without auth → 401 ✓
+          
+          All Dynamic-Page CMS endpoints working correctly with proper auth, validation, and CRUD operations.
+
+  - task: "Phase B4 · SEO — dynamic /api/seo/sitemap.xml + /api/seo/robots.txt"
+    implemented: true
+    working: true
+    file: "backend/server.py, frontend/public/sitemap.xml"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          Backend serves a live sitemap listing static routes + all products + all published CMS pages.
+          robots.txt disallows /admin, /account and /api/ while advertising the sitemap.
+          Static /public/sitemap.xml refreshed to include the new /p/ CMS routes (belt + suspenders).
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (2/2 tests passed):
+          - GET /api/seo/robots.txt → 200 with content-type=text/plain ✓
+            * Body contains "User-agent: *" ✓
+            * Body contains "Disallow: /admin" ✓
+            * Body contains "Sitemap:" ✓
+          - GET /api/seo/sitemap.xml → 200 with content-type=application/xml ✓
+            * Body starts with '<?xml' ✓
+            * Body contains <url> entries ✓
+            * Body contains product URLs (e.g., /product/obsidian-geode-2x3) ✓
+            * Body contains CMS page URLs (e.g., /p/privacy-policy) ✓
+          SEO endpoints working correctly with proper content-type and dynamic content generation.
+
+frontend:
+  - task: "Phase B5 · Admin Pages tab (block editor) + public /p/:slug renderer + dynamic header links"
+    implemented: true
+    working: true
+    file: "frontend/src/components/admin/PagesTab.jsx, frontend/src/pages/DynamicPage.jsx, frontend/src/components/Navbar.jsx, frontend/src/pages/AdminPage.jsx, frontend/src/App.js, frontend/src/pages/LegalPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          Admin Pages tab: list with publish/header/footer toggles + drag order (up/down), block-based editor (heading / paragraph / image via Cloudinary / list / cta / quote / divider), preview button, SEO title + description fields per page.
+          Public /p/:slug route renders published pages with correct <SEO/> meta + luxury theme.
+          Navbar fetches /api/pages on load and appends any page where show_in_header=true.
+          LegacyPage /policies/{slug} 301-redirects to /p/{new-slug} for privacy/terms/refund/shipping/cookie aliases — no broken bookmarks.
+          Screenshot-verified admin editor + public privacy-policy render.
+
+  - task: "Phase B4 · Enhanced JSON-LD (Organization + WebSite + Store + Product w/ shipping/returns + BreadcrumbList) & keyword-focused meta"
+    implemented: true
+    working: true
+    file: "frontend/src/App.js, frontend/src/pages/ProductPage.jsx, frontend/src/pages/ShopPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          Home <SEO/> now emits schema.org @graph with Organization (with alt names for AI engines), WebSite (with SearchAction sitelinks-searchbox), and Store (local business).
+          ShopPage adds BreadcrumbList + CollectionPage with keyword topical hints (luxury mirrors, modern art, handmade resin, bespoke furniture).
+          ProductPage adds MerchantReturnPolicy, OfferShippingDetails and BreadcrumbList — Google Shopping / Merchant Center ready.
+          Titles & descriptions rewritten to lead with "Luxury Handmade Mirrors · Modern Art · Bespoke Furniture · Mumbai".
+
+  - task: "Phase B2 · Desktop overflow — hero heading font-size scale-down for 1280–1536"
+    implemented: true
+    working: true
+    file: "frontend/src/components/Hero.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: |
+          Hero heading was `md:text-8xl lg:text-[7.5rem]` which caused text to run past the visible area at 1280px and clip the mirror image column. Reduced ramp to `md:text-7xl lg:text-8xl xl:text-[6.5rem] 2xl:text-[7.5rem]`.
+          Verified at 1280 (fits 2-col grid), 1920 (still cinematic). Mobile unchanged.
+
+metadata:
+  version: "3.0"
+  test_sequence: 11
+  run_ui: false
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Phase B partial shipment (B5 + B4 + B2 done; B1 + B3 pending). Also closed the last Phase A gap (order line-item snapshot).
+      All changes are backward-compatible and safe to push to prod. Frontend hot-reload verified via screenshots.
+      Backend needs test coverage on the new CMS endpoints (public + admin CRUD + reorder + seed) and the new SEO endpoints.
+  - agent: "testing"
+    message: |
+      ✅ PHASE B5 BACKEND TESTING COMPLETE - ALL TESTS PASSED (20/20)
+      
+      Comprehensive testing completed for Phase B5 backend features per review request specifications.
+      Test file: /app/backend_test_phase_b5.py
+      Results: /app/backend_test_phase_b5_results.json
+      
+      SECTION 1 - ORDER LINE-ITEM SNAPSHOT (Phase A closure) (5/5 passed):
+      ✅ GET /api/products → 4 products
+      ✅ POST /api/orders (COD) → order created (ARF-DB636933)
+      ✅ GET /api/admin/orders → snapshot fields verified
+      ✅ All required fields present: product_name, product_image, product_category, product_sku, product_hsn_code, variant_label, size, price_inr, line_total_inr
+      ✅ line_total_inr = price_inr × quantity (85998 = 42999 × 2)
+      ✅ GET /api/orders/{order_number} → snapshot fields present in public endpoint
+      
+      SECTION 2 - DYNAMIC-PAGE CMS (Phase B5) (13/13 passed):
+      ✅ GET /api/pages (public) → 5 seeded pages (privacy-policy, terms-and-conditions, shipping-policy, refund-and-return-policy, cookie-policy)
+      ✅ GET /api/pages/privacy-policy → title="Privacy Policy", meta_title present, 13 blocks
+      ✅ GET /api/pages/does-not-exist → 404
+      ✅ GET /api/admin/pages (admin auth) → 5 pages
+      ✅ POST /api/admin/pages → page created
+      ✅ POST duplicate slug → 400 (uniqueness enforced)
+      ✅ PATCH /api/admin/pages/{id} → updated with show_in_header=true
+      ✅ GET /api/pages → updated page visible
+      ✅ POST /api/admin/pages/reorder → 6 pages reordered
+      ✅ GET /api/admin/pages → header_order sequence (0, 10, 20, 30, 40...)
+      ✅ DELETE /api/admin/pages/{id} → deleted
+      ✅ GET /api/admin/pages/{id} after delete → 404
+      ✅ GET /api/admin/pages (no auth) → 401
+      
+      SECTION 3 - SEO ENDPOINTS (Phase B4) (2/2 passed):
+      ✅ GET /api/seo/robots.txt → text/plain, contains "User-agent: *", "Disallow: /admin", "Sitemap:"
+      ✅ GET /api/seo/sitemap.xml → application/xml, starts with '<?xml', contains product URLs and CMS page URLs
+      
+      CONCLUSION:
+      All Phase B5 backend features working correctly. No issues found.
+      Ready for main agent to summarize and finish.
+

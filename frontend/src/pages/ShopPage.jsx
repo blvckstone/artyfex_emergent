@@ -165,15 +165,28 @@ export default function ShopPage() {
   return (
     <div className="min-h-screen bg-ink-950 text-cream">
       <SEO
-        title="Shop Handmade Resin & Crystal Mirrors | ArtyFex"
-        description={'Browse the ArtyFex atelier — signature 2×3 ft geode statement mirrors, 24" round mirrors and companion pieces. 100% handmade in Mumbai. Insured white-glove delivery.'}
+        title="Luxury Handmade Mirrors & Modern Wall Art · Shop the ArtyFex Atelier | Mumbai"
+        description={'Shop luxury handmade resin & crystal mirrors, modern statement wall art and bespoke furniture — hand-poured in Mumbai. One-of-a-kind pieces with insured white-glove delivery across India.'}
         path="/shop"
         jsonLd={{
           "@context": "https://schema.org",
-          "@type": "CollectionPage",
-          "name": "ArtyFex Collection",
-          "url": "https://www.artyfex.in/shop",
-          "description": "Every handmade resin and crystal mirror we pour.",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              "name": "ArtyFex Collection — Luxury Handmade Mirrors",
+              "url": "https://www.artyfex.in/shop",
+              "description": "Every handmade resin & crystal luxury mirror and modern wall-art piece from the ArtyFex atelier, Mumbai.",
+              "isPartOf": { "@id": "https://www.artyfex.in/#website" },
+              "about": ["luxury mirrors", "modern art", "handmade resin", "bespoke furniture"],
+            },
+            {
+              "@type": "BreadcrumbList",
+              "itemListElement": [
+                { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.artyfex.in" },
+                { "@type": "ListItem", "position": 2, "name": "Shop", "item": "https://www.artyfex.in/shop" },
+              ],
+            },
+          ],
         }}
       />
       <Navbar />

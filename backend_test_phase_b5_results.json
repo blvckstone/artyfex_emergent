@@ -1,0 +1,107 @@
+{
+  "total": 20,
+  "passed": 20,
+  "failed": 0,
+  "tests": [
+    {
+      "name": "GET /api/products",
+      "passed": true,
+      "details": "Found 4 products"
+    },
+    {
+      "name": "POST /api/orders (COD)",
+      "passed": true,
+      "details": "Order created: ARF-DB636933"
+    },
+    {
+      "name": "GET /api/admin/orders",
+      "passed": true,
+      "details": "Found 2 orders"
+    },
+    {
+      "name": "Order item snapshot fields (admin)",
+      "passed": true,
+      "details": "Snapshot fields present. line_total_inr=85998 = price_inr(42999) * quantity(2)"
+    },
+    {
+      "name": "Order item snapshot fields (public)",
+      "passed": true,
+      "details": "All snapshot fields present in public endpoint"
+    },
+    {
+      "name": "GET /api/pages (public)",
+      "passed": true,
+      "details": "Found 5 pages. Slugs: ['privacy-policy', 'terms-and-conditions', 'shipping-policy', 'refund-and-return-policy', 'cookie-policy']"
+    },
+    {
+      "name": "GET /api/pages/privacy-policy",
+      "passed": true,
+      "details": "title=Privacy Policy, meta_title present=True, blocks count=13"
+    },
+    {
+      "name": "GET /api/pages/does-not-exist \u2192 404",
+      "passed": true,
+      "details": "Status: 404"
+    },
+    {
+      "name": "GET /api/admin/pages",
+      "passed": true,
+      "details": "Found 5 pages"
+    },
+    {
+      "name": "POST /api/admin/pages (create)",
+      "passed": true,
+      "details": "Created page with id: dc0d168e-3a46-41e6-b919-c26f61455166"
+    },
+    {
+      "name": "POST /api/admin/pages (duplicate slug) \u2192 400",
+      "passed": true,
+      "details": "Status: 400"
+    },
+    {
+      "name": "PATCH /api/admin/pages/{id}",
+      "passed": true,
+      "details": "show_in_header=True"
+    },
+    {
+      "name": "GET /api/pages (updated page visible)",
+      "passed": true,
+      "details": "show_in_header=True"
+    },
+    {
+      "name": "POST /api/admin/pages/reorder",
+      "passed": true,
+      "details": "Reordered 6 pages"
+    },
+    {
+      "name": "GET /api/admin/pages (header_order updated)",
+      "passed": true,
+      "details": "header_orders: [0, 10, 20, 30, 40]..."
+    },
+    {
+      "name": "DELETE /api/admin/pages/{id}",
+      "passed": true,
+      "details": "Status: 200"
+    },
+    {
+      "name": "GET /api/admin/pages/{id} after delete \u2192 404",
+      "passed": true,
+      "details": "Status: 404"
+    },
+    {
+      "name": "GET /api/admin/pages (no auth) \u2192 401",
+      "passed": true,
+      "details": "Status: 401"
+    },
+    {
+      "name": "GET /api/seo/robots.txt",
+      "passed": true,
+      "details": "content-type=text/plain; charset=utf-8, has User-agent=True, has Disallow admin=True, has Sitemap=True"
+    },
+    {
+      "name": "GET /api/seo/sitemap.xml",
+      "passed": true,
+      "details": "content-type=application/xml, starts with <?xml=True, has <url>=True, has product=True, has CMS page=True"
+    }
+  ]
+}

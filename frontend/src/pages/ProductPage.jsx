@@ -161,29 +161,64 @@ export default function ProductPage() {
   return (
     <div className="min-h-screen bg-ink-950 text-cream" data-testid="product-page">
       <SEO
-        title={`${product.name} — ${effectiveSize} | ArtyFex`}
-        description={`${product.tagline} ${product.description}`.slice(0, 175)}
+        title={`${product.name} — Luxury Handmade Resin Mirror | ArtyFex Mumbai`}
+        description={`${product.tagline || ''} ${product.description || ''}`.slice(0, 175).trim() || `${product.name} · handmade luxury mirror by ArtyFex, Mumbai. ${effectiveSize}. Insured white-glove delivery.`}
         path={`/product/${product.slug}`}
         image={product.hero_image}
         type="product"
         jsonLd={{
           "@context": "https://schema.org",
-          "@type": "Product",
-          "name": product.name,
-          "description": product.description,
-          "image": [product.hero_image, ...(product.gallery || [])].filter(Boolean),
-          "sku": product.slug,
-          "brand": { "@type": "Brand", "name": "ArtyFex" },
-          "offers": {
-            "@type": "Offer",
-            "url": `https://www.artyfex.in/product/${product.slug}`,
-            "priceCurrency": "INR",
-            "price": effectivePrice,
-            "availability": outOfStock
-              ? "https://schema.org/OutOfStock"
-              : "https://schema.org/InStock",
-            "itemCondition": "https://schema.org/NewCondition",
-          },
+          "@graph": [
+            {
+              "@type": "Product",
+              "@id": `https://www.artyfex.in/product/${product.slug}#product`,
+              "name": product.name,
+              "description": product.description,
+              "image": [product.hero_image, ...(product.gallery || [])].filter(Boolean),
+              "sku": product.sku || product.slug,
+              "gtin": product.sku || undefined,
+              "category": product.category || "Mirrors",
+              "brand": { "@type": "Brand", "name": "ArtyFex" },
+              "manufacturer": { "@type": "Organization", "name": "ArtyFex Atelier, Mumbai" },
+              "offers": {
+                "@type": "Offer",
+                "url": `https://www.artyfex.in/product/${product.slug}`,
+                "priceCurrency": "INR",
+                "price": effectivePrice,
+                "availability": outOfStock
+                  ? "https://schema.org/OutOfStock"
+                  : "https://schema.org/InStock",
+                "itemCondition": "https://schema.org/NewCondition",
+                "seller": { "@type": "Organization", "name": "ArtyFex" },
+                "hasMerchantReturnPolicy": {
+                  "@type": "MerchantReturnPolicy",
+                  "applicableCountry": "IN",
+                  "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
+                  "merchantReturnDays": 3,
+                  "returnMethod": "https://schema.org/ReturnByMail",
+                  "returnFees": "https://schema.org/FreeReturn",
+                },
+                "shippingDetails": {
+                  "@type": "OfferShippingDetails",
+                  "shippingRate": { "@type": "MonetaryAmount", "value": 0, "currency": "INR" },
+                  "shippingDestination": { "@type": "DefinedRegion", "addressCountry": "IN" },
+                  "deliveryTime": {
+                    "@type": "ShippingDeliveryTime",
+                    "handlingTime": { "@type": "QuantitativeValue", "minValue": 2, "maxValue": 5, "unitCode": "DAY" },
+                    "transitTime":  { "@type": "QuantitativeValue", "minValue": 2, "maxValue": 7, "unitCode": "DAY" },
+                  },
+                },
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              "itemListElement": [
+                { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.artyfex.in" },
+                { "@type": "ListItem", "position": 2, "name": "Shop", "item": "https://www.artyfex.in/shop" },
+                { "@type": "ListItem", "position": 3, "name": product.name, "item": `https://www.artyfex.in/product/${product.slug}` },
+              ],
+            },
+          ],
         }}
       />
       <Navbar />

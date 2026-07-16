@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast, Toaster } from "sonner";
-import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2, Settings as SettingsIcon, Truck, Palette, ShieldCheck, Percent } from "lucide-react";
+import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2, Settings as SettingsIcon, Truck, Palette, ShieldCheck, Percent, FileText } from "lucide-react";
 import HomepageEditor from "@/components/admin/HomepageEditor";
 import ShippingEditor from "@/components/admin/ShippingEditor";
 import AnalyticsDashboard from "@/components/admin/AnalyticsDashboard";
@@ -13,6 +13,7 @@ import WhitelistCard from "@/components/admin/WhitelistCard";
 import BroadcastCard from "@/components/admin/BroadcastCard";
 import OrderNotifyDialog from "@/components/admin/OrderNotifyDialog";
 import CloudinaryUpload from "@/components/admin/CloudinaryUpload";
+import PagesTab from "@/components/admin/PagesTab";
 
 const TOKEN_KEY = "artyfex_admin_token";
 
@@ -194,6 +195,7 @@ export default function AdminPage() {
     const allowed = [
       ["dashboard", "view_analytics", false],
       ["homepage", "manage_homepage", false],
+      ["pages", "manage_homepage", false],
       ["products", "manage_products", false],
       ["orders", "manage_orders", false],
       ["shipping", "manage_shipping", false],
@@ -319,6 +321,7 @@ export default function AdminPage() {
   const allTabs = [
     { key: "dashboard", label: "Dashboard", icon: LayoutGrid, perm: "view_analytics" },
     { key: "homepage", label: "Homepage", icon: Palette, perm: "manage_homepage" },
+    { key: "pages", label: "Pages / Legal", icon: FileText, perm: "manage_homepage" },
     { key: "products", label: "Products", icon: Package, perm: "manage_products" },
     { key: "orders", label: "Orders", icon: ShoppingBag, perm: "manage_orders" },
     { key: "shipping", label: "Shipping", icon: Truck, perm: "manage_shipping" },
@@ -627,6 +630,10 @@ export default function AdminPage() {
 
         {tab === "homepage" && (
           <HomepageEditor authed={authed} />
+        )}
+
+        {tab === "pages" && (
+          <PagesTab authed={authed} />
         )}
 
         {tab === "shipping" && (

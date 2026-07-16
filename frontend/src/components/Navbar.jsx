@@ -8,6 +8,7 @@ import { IDS } from "@/constants/testIds";
 import BrandLogo from "@/components/BrandLogo";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import { fetchHomepage } from "@/lib/homepage";
+import { api } from "@/lib/api";
 
 const links = [
   { id: IDS.nav.collection, label: "Shop", href: "/shop", route: true },
@@ -37,6 +38,22 @@ export const Navbar = ({ announcement: announcementProp }) => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [announcement, setAnnouncement] = useState(announcementProp || null);
+  const [cmsHeaderLinks, setCmsHeaderLinks] = useState([]);
+
+  // Fetch admin-managed dynamic header links (Phase B5 CMS)
+  useEffect(() => {
+    let cancelled = false;
+    api.get("/pages")
+      .then(({ data }) => {
+        if (cancelled) return;
+        const filtered = (data || [])
+          .filter((p) => p.show_in_header)
+          .sort((a, b) => (a.header_order || 0) - (b.header_order || 0));
+        setCmsHeaderLinks(filtered);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // If parent didn't provide, fetch homepage announcement once so the bar
   // appears on every page consistently.
@@ -121,6 +138,14 @@ export const Navbar = ({ announcement: announcementProp }) => {
               </a>
             ),
           )}
+          {cmsHeaderLinks.map((p) => (
+            <Link
+              key={p.slug}
+              to={`/p/${p.slug}`}
+              data-testid={`nav-cms-${p.slug}`}
+              className="text-xs uppercase tracking-luxury text-cream/70 hover:text-gold transition-colors duration-300"
+            >{p.title}</Link>
+          ))}
         </nav>
 
         <div className="flex items-center gap-3">
@@ -196,6 +221,15 @@ export const Navbar = ({ announcement: announcementProp }) => {
                   </a>
                 ),
               )}
+              {cmsHeaderLinks.map((p) => (
+                <Link
+                  key={p.slug}
+                  to={`/p/${p.slug}`}
+                  onClick={() => setMobileOpen(false)}
+                  data-testid={`nav-cms-mobile-${p.slug}`}
+                  className="text-sm uppercase tracking-luxury text-cream/80 hover:text-gold"
+                >{p.title}</Link>
+              ))}
               <button
                 data-testid="nav-account-mobile"
                 onClick={() => { setMobileOpen(false); user ? nav("/account") : openAuth("login"); }}

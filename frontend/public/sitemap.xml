@@ -21,22 +21,27 @@
     <changefreq>monthly</changefreq>
   </url>
   <url>
-    <loc>https://www.artyfex.in/policies/privacy</loc>
+    <loc>https://www.artyfex.in/p/privacy-policy</loc>
     <priority>0.4</priority>
     <changefreq>yearly</changefreq>
   </url>
   <url>
-    <loc>https://www.artyfex.in/policies/terms</loc>
+    <loc>https://www.artyfex.in/p/terms-and-conditions</loc>
     <priority>0.4</priority>
     <changefreq>yearly</changefreq>
   </url>
   <url>
-    <loc>https://www.artyfex.in/policies/refund</loc>
+    <loc>https://www.artyfex.in/p/refund-and-return-policy</loc>
     <priority>0.4</priority>
     <changefreq>yearly</changefreq>
   </url>
   <url>
-    <loc>https://www.artyfex.in/policies/shipping</loc>
+    <loc>https://www.artyfex.in/p/shipping-policy</loc>
+    <priority>0.4</priority>
+    <changefreq>yearly</changefreq>
+  </url>
+  <url>
+    <loc>https://www.artyfex.in/p/cookie-policy</loc>
     <priority>0.4</priority>
     <changefreq>yearly</changefreq>
   </url>

@@ -1,5 +1,5 @@
 import React from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useParams, useLocation, Navigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SEO from "@/components/SEO";
@@ -71,12 +71,29 @@ const CONTENT = {
   },
 };
 
+// Map legacy short-link slugs → new CMS slugs (Phase B5).
+// Any /policies/:slug that matches one of these keys is 301-redirected to /p/<new-slug>,
+// so the admin CMS is the single source of truth for legal content.
+const CMS_SLUG_ALIASES = {
+  privacy: "privacy-policy",
+  terms: "terms-and-conditions",
+  refund: "refund-and-return-policy",
+  shipping: "shipping-policy",
+  cookie: "cookie-policy",
+  cookies: "cookie-policy",
+};
+
 export default function LegalPage() {
   const { slug: routeSlug } = useParams();
   const { pathname } = useLocation();
   // Support short-link routes /terms and /privacy in addition to /policies/:slug
   const inferredSlug = pathname === "/terms" ? "terms" : pathname === "/privacy" ? "privacy" : routeSlug;
   const slug = inferredSlug || "privacy";
+  const aliased = CMS_SLUG_ALIASES[slug];
+  if (aliased) {
+    // Send the browser to the CMS-backed dynamic page so the admin can edit it
+    return <Navigate to={`/p/${aliased}`} replace />;
+  }
   const doc = CONTENT[slug] || CONTENT.privacy;
   const seo = SEO_META[slug] || SEO_META.privacy;
   return (
