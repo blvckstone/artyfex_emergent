@@ -10,7 +10,7 @@ from pymongo import MongoClient
 from dotenv import load_dotenv
 
 load_dotenv('/app/backend/.env')
-BASE_URL = os.environ['REACT_APP_BACKEND_URL'].rstrip('/') if os.environ.get('REACT_APP_BACKEND_URL') else 'https://artyfex-phase-a.preview.emergentagent.com'
+BASE_URL = os.environ['REACT_APP_BACKEND_URL'].rstrip('/') if os.environ.get('REACT_APP_BACKEND_URL') else 'https://admin-dashboard-v2-65.preview.emergentagent.com'
 # Prefer frontend env for the public URL
 fe_env = Path('/app/frontend/.env').read_text()
 for line in fe_env.splitlines():

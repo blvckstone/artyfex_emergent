@@ -646,7 +646,7 @@ backend:
           - virusisstandhere@gmail.com (readonly=true)
           
           Test 3.2 - POST /api/admin/whitelist with testadd@example.com → 200 OK
-          - Entry created with id=b8718b24-16cd-4da1-a277-2b9c77415e1e
+          - Entry created with id=admin-dashboard-v2-65
           - readonly=false (custom entry)
           
           Test 3.3 - GET /api/admin/whitelist → testadd@example.com present in list ✓
@@ -2306,3 +2306,46 @@ agent_communication:
       All 7 Phase A UI fixes are working correctly in production. No critical issues found.
       All implementations match the review request specifications exactly.
       Ready for main agent to summarize and finish.
+
+
+backend:
+  - task: "Phase A Jul 2025 · Admin management endpoints (block/delete customer, delete failed payment)"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Added:
+          - DELETE /api/admin/failed-payments/{id} (any admin)
+          - POST /api/admin/failed-payments/bulk-delete (any admin)
+          - PATCH /api/admin/users/{email} (manage_customers) accepts {blocked?, note?}
+          - DELETE /api/admin/users/{email} (manage_customers) — deletes user + wishlist + admin messages, keeps orders
+          - user_login now returns 403 for blocked accounts
+          - /admin/users list now returns `blocked` flag; limit raised to 5000 (500 was too small at scale)
+          Verified 401/404 paths via curl.
+
+frontend:
+  - task: "Phase A Jul 2025 · Admin scale UX — pagination + filtering across Products / Orders / Reviews / Failed Payments / Customers"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/AdminPage.jsx, frontend/src/components/admin/CloudinaryUpload.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Added shared `Pager` component (Prev · [1] [2] … · Next). Client-side filtering + pagination applied to:
+          - Products (search by name/tagline/SKU/HSN/tags, filter by category & stock status, 12/page)
+          - Orders (search by order#/name/email/phone/product/coupon, filter by status, 10/page)
+          - Reviews (search by title/author/location/body, filter by rating & featured, 10/page, delete confirms)
+          - Failed Payments (search across all fields, 10/page, per-row Delete button)
+          - Customers (search + status filter, 10/page, per-row Block/Unblock + Delete buttons)
+          Also fixed CloudinaryUpload single-image preview which was rendering full-width aspect-square and eating too much space in the product editor — now a compact 128×128 thumbnail.
+          Verified visually with screenshots: all 5 tabs render filter bar + counts + pagination cleanly.

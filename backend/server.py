@@ -1493,6 +1493,8 @@ async def user_login(payload: UserLogin):
     user = await db.users.find_one({"email": payload.email})
     if not user or not bcrypt.checkpw(payload.password.encode(), user["password_hash"].encode()):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if user.get("blocked"):
+        raise HTTPException(status_code=403, detail="This account has been blocked. Please contact ArtyFex support.")
     return {"token": create_token(payload.email, role="user"),
             "user": {"name": user["name"], "email": user["email"], "phone": user.get("phone", "")}}
 
@@ -1964,7 +1966,7 @@ async def admin_list_users(q: Optional[str] = None, admin=Depends(get_current_ad
     query = {}
     if q:
         query = {"$or": [{"email": {"$regex": q, "$options": "i"}}, {"name": {"$regex": q, "$options": "i"}}, {"phone": {"$regex": q, "$options": "i"}}]}
-    users = await db.users.find(query, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(500)
+    users = await db.users.find(query, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(5000)
     # Enrich with order aggregates
     for u in users:
         orders = await db.orders.find({"customer.email": u["email"], "status": {"$nin": ["pending_payment", "cancelled", "payment_failed"]}}, {"_id": 0, "total_inr": 1, "created_at": 1}).to_list(500)
@@ -1972,6 +1974,7 @@ async def admin_list_users(q: Optional[str] = None, admin=Depends(get_current_ad
         u["total_spent_inr"] = sum(o.get("total_inr", 0) for o in orders)
         u["last_order_at"] = max((o["created_at"] for o in orders), default=None)
         u["messages_count"] = await db.admin_messages.count_documents({"user_email": u["email"]})
+        u["blocked"] = bool(u.get("blocked", False))
     return users
 
 
@@ -2076,7 +2079,51 @@ async def admin_delete_coupon(coupon_id: str, admin=Depends(get_current_admin)):
 # ---------- ADMIN: FAILED PAYMENTS ----------
 @api_router.get("/admin/failed-payments", response_model=List[FailedPayment])
 async def admin_list_failed_payments(admin=Depends(get_current_admin)):
-    return await db.failed_payments.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return await db.failed_payments.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+
+
+@api_router.delete("/admin/failed-payments/{fp_id}")
+async def admin_delete_failed_payment(fp_id: str, admin=Depends(get_current_admin)):
+    res = await db.failed_payments.delete_one({"id": fp_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Failed payment not found")
+    return {"deleted": True}
+
+
+@api_router.post("/admin/failed-payments/bulk-delete")
+async def admin_bulk_delete_failed_payments(payload: dict, admin=Depends(get_current_admin)):
+    ids = payload.get("ids") or []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=400, detail="ids[] required")
+    res = await db.failed_payments.delete_many({"id": {"$in": ids}})
+    return {"deleted": res.deleted_count}
+
+
+# ---------- ADMIN: CUSTOMER BLOCK / DELETE ----------
+@api_router.patch("/admin/users/{email}")
+async def admin_update_user(email: str, payload: dict, admin=Depends(require_permission("manage_customers"))):
+    updates = {}
+    if "blocked" in payload:
+        updates["blocked"] = bool(payload.get("blocked"))
+    if "note" in payload:
+        updates["admin_note"] = (payload.get("note") or "").strip() or None
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    res = await db.users.update_one({"email": email}, {"$set": updates})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"updated": True, **updates}
+
+
+@api_router.delete("/admin/users/{email}")
+async def admin_delete_user(email: str, admin=Depends(require_permission("manage_customers"))):
+    res = await db.users.delete_one({"email": email})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Best-effort cleanup of related non-order data (keep orders for records)
+    await db.admin_messages.delete_many({"user_email": email})
+    await db.wishlist.delete_many({"user_email": email})
+    return {"deleted": True}
 
 
 # =============================================================================

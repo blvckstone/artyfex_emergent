@@ -132,9 +132,12 @@ export default function CloudinaryUpload({
       </div>
 
       {urls.length > 0 && (
-        <div className={`grid ${multiple ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-6" : "grid-cols-1"} gap-2`}>
+        <div className={multiple ? "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2" : "flex flex-wrap gap-2"}>
           {urls.map((u, i) => (
-            <div key={`${u}-${i}`} className="group relative aspect-square bg-ink-950 border border-white/10 overflow-hidden">
+            <div
+              key={`${u}-${i}`}
+              className={`group relative bg-ink-950 border border-white/10 overflow-hidden ${multiple ? "aspect-square" : "w-32 h-32"}`}
+            >
               {/* eslint-disable-next-line */}
               <img src={u} alt="" className="w-full h-full object-cover" />
               <button

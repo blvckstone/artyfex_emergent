@@ -148,6 +148,32 @@ export default function AdminPage() {
   const [categories, setCategories] = useState([]); // Phase A — product categories for editor dropdown
   const [notifyOrder, setNotifyOrder] = useState(null); // order object for custom email dialog
 
+  // ---- Pagination + filter state (added Jul 2025 for 1000+ scale) ----
+  const [prodQuery, setProdQuery] = useState("");
+  const [prodCategory, setProdCategory] = useState("");
+  const [prodStockFilter, setProdStockFilter] = useState(""); // "" | "low" | "out"
+  const [prodPage, setProdPage] = useState(1);
+  const PROD_PAGE_SIZE = 12;
+
+  const [orderQuery, setOrderQuery] = useState("");
+  const [orderStatus, setOrderStatus] = useState("");
+  const [orderPage, setOrderPage] = useState(1);
+  const ORDER_PAGE_SIZE = 10;
+
+  const [reviewQuery, setReviewQuery] = useState("");
+  const [reviewRating, setReviewRating] = useState("");
+  const [reviewFeatured, setReviewFeatured] = useState("");
+  const [reviewPage, setReviewPage] = useState(1);
+  const REVIEW_PAGE_SIZE = 10;
+
+  const [failedQuery, setFailedQuery] = useState("");
+  const [failedPage, setFailedPage] = useState(1);
+  const FAILED_PAGE_SIZE = 10;
+
+  const [userStatusFilter, setUserStatusFilter] = useState(""); // "" | "blocked" | "active"
+  const [userPage, setUserPage] = useState(1);
+  const USER_PAGE_SIZE = 10;
+
   const authed = useAuthedApi(token);
 
   // Fetch current admin identity + permissions
@@ -378,15 +404,7 @@ export default function AdminPage() {
     reload();
   };
 
-  const filteredUsers = users.filter((u) => {
-    if (!userSearch.trim()) return true;
-    const q = userSearch.toLowerCase();
-    return (
-      u.email?.toLowerCase().includes(q) ||
-      u.name?.toLowerCase().includes(q) ||
-      (u.phone || "").toLowerCase().includes(q)
-    );
-  });
+  const filteredUsers = users; // legacy — real filtering happens inline in the Customers tab
 
   const updateReturnStatus = async (id, patch) => {
     try {
@@ -427,42 +445,117 @@ export default function AdminPage() {
 
         {tab === "products" && (
           <>
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
               <h1 className="font-serif text-4xl">Products</h1>
               <button data-testid="admin-add-product" onClick={()=>setEditing({...empty})} className="inline-flex items-center gap-2 bg-gold text-ink-950 px-4 py-2.5 text-xs uppercase tracking-luxury"><Plus className="w-3.5 h-3.5" />New</button>
             </div>
-            <div className="grid gap-3">
-              {products.map((p) => (
-                <div key={p.id} className="hairline p-4 flex items-center gap-4">
-                  <img src={p.hero_image} alt="" className="w-16 h-20 object-cover border border-white/10" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-serif text-lg truncate">{p.name}</div>
-                    <div className="text-xs text-cream/50">{p.size} · Stock {p.stock}</div>
-                  </div>
-                  <div className="text-cream">{formatINR(p.price_inr)}</div>
-                  <button onClick={()=>{
-                    const hasVar = !(p.variants?.length === 1 && (p.variants[0].key === "default" || p.variants[0].label === "Default"));
-                    setEditing({
-                      ...p,
-                      materials: p.materials.join("\n"),
-                      gallery: p.gallery.join("\n"),
-                      variants: Array.isArray(p.variants) ? p.variants : [],
-                      has_variations: hasVar,
-                      // Phase A — convert list/nullable fields to editor-friendly strings
-                      category: p.category || "",
-                      hsn_code: p.hsn_code || "",
-                      sku: p.sku || "",
-                      weight_grams: p.weight_grams ?? "",
-                      length_cm: p.length_cm ?? "",
-                      width_cm: p.width_cm ?? "",
-                      height_cm: p.height_cm ?? "",
-                      tags: Array.isArray(p.tags) ? p.tags.join(", ") : (p.tags || ""),
-                    });
-                  }} className="text-xs text-gold hover:text-cream border border-gold/30 px-3 py-1.5">Edit</button>
-                  <button onClick={()=>deleteProduct(p.id)} className="text-red-400 hover:text-red-300 p-2"><Trash2 className="w-4 h-4" /></button>
-                </div>
-              ))}
+            {/* Filter bar */}
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-cream/40" />
+                <input
+                  data-testid="admin-products-search"
+                  value={prodQuery}
+                  onChange={(e)=>{setProdQuery(e.target.value); setProdPage(1);}}
+                  placeholder="Search by name, tagline, SKU or HSN…"
+                  className="pl-9 pr-3 py-2.5 bg-ink-950 border border-white/15 focus:border-gold text-sm text-cream w-full outline-none"
+                />
+              </div>
+              <select
+                data-testid="admin-products-category"
+                value={prodCategory}
+                onChange={(e)=>{setProdCategory(e.target.value); setProdPage(1);}}
+                className="bg-ink-950 border border-white/15 text-cream text-xs uppercase tracking-luxury px-3 py-2.5"
+              >
+                <option value="">All categories</option>
+                {categories.map((c)=>(<option key={c.slug} value={c.slug}>{c.name}</option>))}
+              </select>
+              <select
+                data-testid="admin-products-stock"
+                value={prodStockFilter}
+                onChange={(e)=>{setProdStockFilter(e.target.value); setProdPage(1);}}
+                className="bg-ink-950 border border-white/15 text-cream text-xs uppercase tracking-luxury px-3 py-2.5"
+              >
+                <option value="">Any stock</option>
+                <option value="low">Low stock (≤ 3)</option>
+                <option value="out">Out of stock</option>
+                <option value="ok">In stock (&gt; 3)</option>
+              </select>
+              {(prodQuery || prodCategory || prodStockFilter) && (
+                <button
+                  onClick={()=>{setProdQuery(""); setProdCategory(""); setProdStockFilter(""); setProdPage(1);}}
+                  className="text-[10px] uppercase tracking-luxury text-cream/60 hover:text-gold border border-white/10 px-3 py-2"
+                >Clear</button>
+              )}
             </div>
+            {(() => {
+              const q = prodQuery.trim().toLowerCase();
+              const filtered = products.filter((p) => {
+                if (q) {
+                  const hay = [p.name, p.tagline, p.sku, p.hsn_code, (p.tags || []).join(" ")].join(" ").toLowerCase();
+                  if (!hay.includes(q)) return false;
+                }
+                if (prodCategory && p.category !== prodCategory) return false;
+                const stock = Number(p.stock || 0);
+                if (prodStockFilter === "low" && !(stock > 0 && stock <= 3)) return false;
+                if (prodStockFilter === "out" && stock !== 0) return false;
+                if (prodStockFilter === "ok" && stock <= 3) return false;
+                return true;
+              });
+              const pages = Math.max(1, Math.ceil(filtered.length / PROD_PAGE_SIZE));
+              const page = Math.min(prodPage, pages);
+              const slice = filtered.slice((page - 1) * PROD_PAGE_SIZE, page * PROD_PAGE_SIZE);
+              return (
+                <>
+                  <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-3">
+                    Showing {slice.length} of {filtered.length} · {products.length} total
+                  </div>
+                  <div className="grid gap-3">
+                    {slice.length === 0 && (
+                      <div className="text-cream/40 text-sm italic py-6">No products match your filters.</div>
+                    )}
+                    {slice.map((p) => (
+                      <div key={p.id} className="hairline p-4 flex items-center gap-4 flex-wrap">
+                        <img src={p.hero_image} alt="" className="w-16 h-20 object-cover border border-white/10" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-serif text-lg truncate">{p.name}</div>
+                          <div className="text-xs text-cream/50 flex flex-wrap gap-x-2">
+                            <span>{p.size}</span>
+                            <span className={Number(p.stock)===0 ? "text-red-400" : Number(p.stock)<=3 ? "text-yellow-400" : ""}>Stock {p.stock}</span>
+                            {p.category && <span className="text-cream/40">· {p.category}</span>}
+                            {p.hsn_code && <span className="text-cream/40 font-mono">· HSN {p.hsn_code}</span>}
+                            {p.sku && <span className="text-cream/40 font-mono">· {p.sku}</span>}
+                          </div>
+                        </div>
+                        <div className="text-cream">{formatINR(p.price_inr)}</div>
+                        <button onClick={()=>{
+                          const hasVar = !(p.variants?.length === 1 && (p.variants[0].key === "default" || p.variants[0].label === "Default"));
+                          setEditing({
+                            ...p,
+                            materials: p.materials.join("\n"),
+                            gallery: p.gallery.join("\n"),
+                            variants: Array.isArray(p.variants) ? p.variants : [],
+                            has_variations: hasVar,
+                            category: p.category || "",
+                            hsn_code: p.hsn_code || "",
+                            sku: p.sku || "",
+                            weight_grams: p.weight_grams ?? "",
+                            length_cm: p.length_cm ?? "",
+                            width_cm: p.width_cm ?? "",
+                            height_cm: p.height_cm ?? "",
+                            tags: Array.isArray(p.tags) ? p.tags.join(", ") : (p.tags || ""),
+                          });
+                        }} className="text-xs text-gold hover:text-cream border border-gold/30 px-3 py-1.5">Edit</button>
+                        <button onClick={()=>deleteProduct(p.id)} className="text-red-400 hover:text-red-300 p-2"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                  </div>
+                  {pages > 1 && (
+                    <Pager page={page} pages={pages} onChange={setProdPage} testid="admin-products-pager" />
+                  )}
+                </>
+              );
+            })()}
             {editing && <ProductEditor initial={editing} categories={categories} onCancel={()=>setEditing(null)} onSave={saveProduct} saving={saving} />}
           </>
         )}
@@ -470,12 +563,65 @@ export default function AdminPage() {
         {tab === "orders" && (
           <>
             <h1 className="font-serif text-4xl">Orders</h1>
-            <div className="mt-6 grid gap-3">
-              {orders.length === 0 && <div className="text-cream/40 text-sm">No orders yet.</div>}
-              {orders.map((o) => (
-                <OrderRow key={o.order_number} o={o} onStatus={updateOrderStatus} onTracking={updateOrderTracking} onNotify={setNotifyOrder} />
-              ))}
+            <div className="mt-4 mb-4 flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-cream/40" />
+                <input
+                  data-testid="admin-orders-search"
+                  value={orderQuery}
+                  onChange={(e)=>{setOrderQuery(e.target.value); setOrderPage(1);}}
+                  placeholder="Search by order #, name, email, phone or product…"
+                  className="pl-9 pr-3 py-2.5 bg-ink-950 border border-white/15 focus:border-gold text-sm text-cream w-full outline-none"
+                />
+              </div>
+              <select
+                data-testid="admin-orders-status"
+                value={orderStatus}
+                onChange={(e)=>{setOrderStatus(e.target.value); setOrderPage(1);}}
+                className="bg-ink-950 border border-white/15 text-cream text-xs uppercase tracking-luxury px-3 py-2.5"
+              >
+                <option value="">All statuses</option>
+                {["pending_payment", "confirmed", "packed", "shipped", "delivered", "cancelled", "payment_failed"].map((s)=>(
+                  <option key={s} value={s}>{s.replace(/_/g," ")}</option>
+                ))}
+              </select>
+              {(orderQuery || orderStatus) && (
+                <button
+                  onClick={()=>{setOrderQuery(""); setOrderStatus(""); setOrderPage(1);}}
+                  className="text-[10px] uppercase tracking-luxury text-cream/60 hover:text-gold border border-white/10 px-3 py-2"
+                >Clear</button>
+              )}
             </div>
+            {(() => {
+              const q = orderQuery.trim().toLowerCase();
+              const filtered = orders.filter((o) => {
+                if (orderStatus && o.status !== orderStatus) return false;
+                if (!q) return true;
+                const c = o.customer || {};
+                const items = (o.items || []).map((i)=>i.name || i.product_name || "").join(" ");
+                const hay = [o.order_number, c.name, c.email, c.phone, o.coupon_code, items].filter(Boolean).join(" ").toLowerCase();
+                return hay.includes(q);
+              });
+              const pages = Math.max(1, Math.ceil(filtered.length / ORDER_PAGE_SIZE));
+              const page = Math.min(orderPage, pages);
+              const slice = filtered.slice((page - 1) * ORDER_PAGE_SIZE, page * ORDER_PAGE_SIZE);
+              return (
+                <>
+                  <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-3">
+                    Showing {slice.length} of {filtered.length} · {orders.length} total
+                  </div>
+                  <div className="grid gap-3">
+                    {slice.length === 0 && <div className="text-cream/40 text-sm italic py-6">No orders match your filters.</div>}
+                    {slice.map((o) => (
+                      <OrderRow key={o.order_number} o={o} onStatus={updateOrderStatus} onTracking={updateOrderTracking} onNotify={setNotifyOrder} />
+                    ))}
+                  </div>
+                  {pages > 1 && (
+                    <Pager page={page} pages={pages} onChange={setOrderPage} testid="admin-orders-pager" />
+                  )}
+                </>
+              );
+            })()}
           </>
         )}
 
@@ -534,68 +680,145 @@ export default function AdminPage() {
             <div className="flex items-end justify-between flex-wrap gap-4 mt-8">
               <div>
                 <h1 className="font-serif text-4xl">Customers</h1>
-                <div className="mt-2 text-xs text-cream/40">{users.length} registered · click a row to view full history & send a personal message</div>
+                <div className="mt-2 text-xs text-cream/40">{users.length} registered · click a row to view full history &amp; send a personal message</div>
               </div>
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-cream/40" />
-                <input
-                  data-testid="admin-users-search"
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  placeholder="Search by name, email or phone…"
-                  className="pl-9 pr-3 py-2.5 bg-ink-950 border border-white/15 focus:border-gold text-sm text-cream w-80 max-w-full outline-none"
-                />
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-cream/40" />
+                  <input
+                    data-testid="admin-users-search"
+                    value={userSearch}
+                    onChange={(e) => { setUserSearch(e.target.value); setUserPage(1); }}
+                    placeholder="Search by name, email or phone…"
+                    className="pl-9 pr-3 py-2.5 bg-ink-950 border border-white/15 focus:border-gold text-sm text-cream w-80 max-w-full outline-none"
+                  />
+                </div>
+                <select
+                  data-testid="admin-users-status"
+                  value={userStatusFilter}
+                  onChange={(e)=>{setUserStatusFilter(e.target.value); setUserPage(1);}}
+                  className="bg-ink-950 border border-white/15 text-cream text-xs uppercase tracking-luxury px-3 py-2.5"
+                >
+                  <option value="">All customers</option>
+                  <option value="active">Active only</option>
+                  <option value="blocked">Blocked only</option>
+                </select>
               </div>
             </div>
-            <div className="mt-6 hairline overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-white/5 text-[10px] uppercase tracking-luxury text-cream/40">
-                    <th className="px-4 py-3 text-left font-normal">Customer</th>
-                    <th className="px-4 py-3 text-left font-normal">Contact</th>
-                    <th className="px-4 py-3 text-right font-normal">Orders</th>
-                    <th className="px-4 py-3 text-right font-normal">Lifetime spend</th>
-                    <th className="px-4 py-3 text-left font-normal">Last order</th>
-                    <th className="px-4 py-3 text-right font-normal">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-cream/40">No customers match your search.</td></tr>
+            {(() => {
+              const q = userSearch.trim().toLowerCase();
+              const filtered = users.filter((u) => {
+                if (userStatusFilter === "blocked" && !u.blocked) return false;
+                if (userStatusFilter === "active" && u.blocked) return false;
+                if (!q) return true;
+                return (
+                  u.email?.toLowerCase().includes(q) ||
+                  u.name?.toLowerCase().includes(q) ||
+                  (u.phone || "").toLowerCase().includes(q)
+                );
+              });
+              const pages = Math.max(1, Math.ceil(filtered.length / USER_PAGE_SIZE));
+              const page = Math.min(userPage, pages);
+              const slice = filtered.slice((page - 1) * USER_PAGE_SIZE, page * USER_PAGE_SIZE);
+              return (
+                <>
+                  <div className="text-[10px] uppercase tracking-luxury text-cream/40 mt-4 mb-2">
+                    Showing {slice.length} of {filtered.length} · {users.length} total
+                  </div>
+                  <div className="hairline overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-white/5 text-[10px] uppercase tracking-luxury text-cream/40">
+                          <th className="px-4 py-3 text-left font-normal">Customer</th>
+                          <th className="px-4 py-3 text-left font-normal">Contact</th>
+                          <th className="px-4 py-3 text-right font-normal">Orders</th>
+                          <th className="px-4 py-3 text-right font-normal">Lifetime spend</th>
+                          <th className="px-4 py-3 text-left font-normal">Last order</th>
+                          <th className="px-4 py-3 text-right font-normal">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {slice.length === 0 && (
+                          <tr><td colSpan={6} className="px-4 py-8 text-center text-cream/40">No customers match your search.</td></tr>
+                        )}
+                        {slice.map((u) => (
+                          <tr
+                            key={u.email}
+                            data-testid={`admin-user-row-${u.email}`}
+                            className={`border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors ${u.blocked ? "opacity-60" : ""}`}
+                            onClick={() => openUserDetail(u.email)}
+                          >
+                            <td className="px-4 py-4">
+                              <div className="font-serif text-cream flex items-center gap-2">
+                                {u.name}
+                                {u.blocked && (
+                                  <span className="text-[9px] uppercase tracking-luxury text-red-400 border border-red-400/40 px-1.5 py-0.5">Blocked</span>
+                                )}
+                              </div>
+                              <div className="text-[10px] uppercase tracking-luxury text-cream/40 mt-0.5">Since {new Date(u.created_at).toLocaleDateString()}</div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="text-cream/80 text-xs">{u.email}</div>
+                              <div className="text-cream/50 text-xs mt-0.5">{u.phone || "—"}</div>
+                            </td>
+                            <td className="px-4 py-4 text-right text-cream">{u.orders_count}</td>
+                            <td className="px-4 py-4 text-right text-gold font-serif">{formatINR(u.total_spent_inr)}</td>
+                            <td className="px-4 py-4 text-xs text-cream/60">{u.last_order_at ? new Date(u.last_order_at).toLocaleDateString() : "—"}</td>
+                            <td className="px-4 py-4 text-right">
+                              <div className="inline-flex items-center gap-1.5 flex-wrap justify-end">
+                                <button
+                                  data-testid={`admin-user-message-${u.email}`}
+                                  onClick={(e) => { e.stopPropagation(); openUserDetail(u.email); }}
+                                  className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-luxury text-gold hover:text-cream border border-gold/40 px-2 py-1"
+                                >
+                                  <MessageSquare className="w-3 h-3" /> View
+                                  {u.messages_count > 0 && <span className="ml-1 text-cream/50">({u.messages_count})</span>}
+                                </button>
+                                <button
+                                  data-testid={`admin-user-block-${u.email}`}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const nextBlocked = !u.blocked;
+                                    if (!window.confirm(nextBlocked ? `Block ${u.email}? They will not be able to log in.` : `Unblock ${u.email}?`)) return;
+                                    try {
+                                      await authed.patch(`/admin/users/${encodeURIComponent(u.email)}`, { blocked: nextBlocked });
+                                      toast.success(nextBlocked ? "Customer blocked" : "Customer unblocked");
+                                      reload();
+                                    } catch (err) {
+                                      toast.error(err?.response?.data?.detail || "Update failed");
+                                    }
+                                  }}
+                                  className={`text-[10px] uppercase tracking-luxury px-2 py-1 border ${u.blocked ? "border-emerald-400/40 text-emerald-400 hover:bg-emerald-400/10" : "border-yellow-400/40 text-yellow-400 hover:bg-yellow-400/10"}`}
+                                >{u.blocked ? "Unblock" : "Block"}</button>
+                                <button
+                                  data-testid={`admin-user-delete-${u.email}`}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (!window.confirm(`Delete customer ${u.email}? Orders will be preserved for records, but the account will be removed.`)) return;
+                                    try {
+                                      await authed.delete(`/admin/users/${encodeURIComponent(u.email)}`);
+                                      toast.success("Customer deleted");
+                                      reload();
+                                    } catch (err) {
+                                      toast.error(err?.response?.data?.detail || "Delete failed");
+                                    }
+                                  }}
+                                  className="text-red-400 hover:text-red-300 p-1.5 border border-red-400/30"
+                                  title="Delete customer"
+                                ><Trash2 className="w-3 h-3" /></button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {pages > 1 && (
+                    <Pager page={page} pages={pages} onChange={setUserPage} testid="admin-users-pager" />
                   )}
-                  {filteredUsers.map((u) => (
-                    <tr
-                      key={u.email}
-                      data-testid={`admin-user-row-${u.email}`}
-                      className="border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors"
-                      onClick={() => openUserDetail(u.email)}
-                    >
-                      <td className="px-4 py-4">
-                        <div className="font-serif text-cream">{u.name}</div>
-                        <div className="text-[10px] uppercase tracking-luxury text-cream/40 mt-0.5">Since {new Date(u.created_at).toLocaleDateString()}</div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="text-cream/80 text-xs">{u.email}</div>
-                        <div className="text-cream/50 text-xs mt-0.5">{u.phone || "—"}</div>
-                      </td>
-                      <td className="px-4 py-4 text-right text-cream">{u.orders_count}</td>
-                      <td className="px-4 py-4 text-right text-gold font-serif">{formatINR(u.total_spent_inr)}</td>
-                      <td className="px-4 py-4 text-xs text-cream/60">{u.last_order_at ? new Date(u.last_order_at).toLocaleDateString() : "—"}</td>
-                      <td className="px-4 py-4 text-right">
-                        <button
-                          data-testid={`admin-user-message-${u.email}`}
-                          onClick={(e) => { e.stopPropagation(); openUserDetail(u.email); }}
-                          className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-luxury text-gold hover:text-cream border border-gold/40 px-3 py-1.5"
-                        >
-                          <MessageSquare className="w-3 h-3" /> View · Message
-                          {u.messages_count > 0 && <span className="ml-1 text-cream/50">({u.messages_count})</span>}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                </>
+              );
+            })()}
             {userDetail && (
               <UserDetailDrawer detail={userDetail} onClose={() => setUserDetail(null)} onSendMessage={sendMessage} />
             )}
@@ -606,35 +829,100 @@ export default function AdminPage() {
           <>
             <h1 className="font-serif text-4xl">Reviews</h1>
             <p className="mt-2 text-sm text-cream/50">Toggle the ⭐ star to mark a review as <em>featured</em>. Featured reviews are shown on the homepage.</p>
-            <div className="mt-6 grid gap-3">
-              {reviews.map((r) => (
-                <div key={r.id} className={`hairline p-4 flex gap-4 ${r.featured ? "border-gold/40" : ""}`} data-testid={`admin-review-row-${r.id}`}>
-                  {r.image && <img src={r.image} alt="" className="w-16 h-16 object-cover" />}
-                  <div className="flex-1 min-w-0">
-                    <div className="font-serif text-lg">{r.title} <span className="text-gold text-sm">· {r.rating}★</span> {r.featured && <span className="text-[10px] uppercase tracking-luxury text-gold ml-2">Featured</span>}</div>
-                    <div className="text-xs text-cream/50">{r.author} · {r.location}</div>
-                    <div className="text-sm text-cream/70 mt-2 line-clamp-2">{r.body}</div>
-                  </div>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await authed.patch(`/admin/reviews/${r.id}`, { featured: !r.featured });
-                        toast.success(!r.featured ? "Marked as featured" : "Removed from featured");
-                        reload();
-                      } catch (err) {
-                        toast.error("Update failed");
-                      }
-                    }}
-                    className={`p-2 border transition-colors ${r.featured ? "border-gold text-gold hover:bg-gold/10" : "border-white/20 text-cream/40 hover:border-gold hover:text-gold"}`}
-                    title={r.featured ? "Unfeature" : "Feature on homepage"}
-                    data-testid={`admin-review-feature-toggle-${r.id}`}
-                  >
-                    <Star className={`w-4 h-4 ${r.featured ? "fill-current" : ""}`} />
-                  </button>
-                  <button onClick={async()=>{await authed.delete(`/admin/reviews/${r.id}`); toast.success("Deleted"); reload();}} className="text-red-400 p-2"><Trash2 className="w-4 h-4" /></button>
-                </div>
-              ))}
+            <div className="mt-4 mb-4 flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-cream/40" />
+                <input
+                  data-testid="admin-reviews-search"
+                  value={reviewQuery}
+                  onChange={(e)=>{setReviewQuery(e.target.value); setReviewPage(1);}}
+                  placeholder="Search by title, author, location or body…"
+                  className="pl-9 pr-3 py-2.5 bg-ink-950 border border-white/15 focus:border-gold text-sm text-cream w-full outline-none"
+                />
+              </div>
+              <select
+                data-testid="admin-reviews-rating"
+                value={reviewRating}
+                onChange={(e)=>{setReviewRating(e.target.value); setReviewPage(1);}}
+                className="bg-ink-950 border border-white/15 text-cream text-xs uppercase tracking-luxury px-3 py-2.5"
+              >
+                <option value="">Any rating</option>
+                {[5,4,3,2,1].map((n)=>(<option key={n} value={n}>{n} stars</option>))}
+              </select>
+              <select
+                data-testid="admin-reviews-featured"
+                value={reviewFeatured}
+                onChange={(e)=>{setReviewFeatured(e.target.value); setReviewPage(1);}}
+                className="bg-ink-950 border border-white/15 text-cream text-xs uppercase tracking-luxury px-3 py-2.5"
+              >
+                <option value="">All</option>
+                <option value="yes">Featured only</option>
+                <option value="no">Not featured</option>
+              </select>
+              {(reviewQuery || reviewRating || reviewFeatured) && (
+                <button
+                  onClick={()=>{setReviewQuery(""); setReviewRating(""); setReviewFeatured(""); setReviewPage(1);}}
+                  className="text-[10px] uppercase tracking-luxury text-cream/60 hover:text-gold border border-white/10 px-3 py-2"
+                >Clear</button>
+              )}
             </div>
+            {(() => {
+              const q = reviewQuery.trim().toLowerCase();
+              const filtered = reviews.filter((r) => {
+                if (reviewRating && Number(r.rating) !== Number(reviewRating)) return false;
+                if (reviewFeatured === "yes" && !r.featured) return false;
+                if (reviewFeatured === "no" && r.featured) return false;
+                if (!q) return true;
+                const hay = [r.title, r.author, r.location, r.body].filter(Boolean).join(" ").toLowerCase();
+                return hay.includes(q);
+              });
+              const pages = Math.max(1, Math.ceil(filtered.length / REVIEW_PAGE_SIZE));
+              const page = Math.min(reviewPage, pages);
+              const slice = filtered.slice((page - 1) * REVIEW_PAGE_SIZE, page * REVIEW_PAGE_SIZE);
+              return (
+                <>
+                  <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-3">
+                    Showing {slice.length} of {filtered.length} · {reviews.length} total
+                  </div>
+                  <div className="grid gap-3">
+                    {slice.length === 0 && <div className="text-cream/40 text-sm italic py-6">No reviews match your filters.</div>}
+                    {slice.map((r) => (
+                      <div key={r.id} className={`hairline p-4 flex gap-4 ${r.featured ? "border-gold/40" : ""}`} data-testid={`admin-review-row-${r.id}`}>
+                        {r.image && <img src={r.image} alt="" className="w-16 h-16 object-cover" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-serif text-lg">{r.title} <span className="text-gold text-sm">· {r.rating}★</span> {r.featured && <span className="text-[10px] uppercase tracking-luxury text-gold ml-2">Featured</span>}</div>
+                          <div className="text-xs text-cream/50">{r.author} · {r.location}</div>
+                          <div className="text-sm text-cream/70 mt-2 line-clamp-2">{r.body}</div>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await authed.patch(`/admin/reviews/${r.id}`, { featured: !r.featured });
+                              toast.success(!r.featured ? "Marked as featured" : "Removed from featured");
+                              reload();
+                            } catch (err) {
+                              toast.error("Update failed");
+                            }
+                          }}
+                          className={`p-2 border transition-colors ${r.featured ? "border-gold text-gold hover:bg-gold/10" : "border-white/20 text-cream/40 hover:border-gold hover:text-gold"}`}
+                          title={r.featured ? "Unfeature" : "Feature on homepage"}
+                          data-testid={`admin-review-feature-toggle-${r.id}`}
+                        >
+                          <Star className={`w-4 h-4 ${r.featured ? "fill-current" : ""}`} />
+                        </button>
+                        <button onClick={async()=>{
+                          if (!window.confirm("Delete this review?")) return;
+                          await authed.delete(`/admin/reviews/${r.id}`); toast.success("Deleted"); reload();
+                        }} className="text-red-400 p-2"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                  </div>
+                  {pages > 1 && (
+                    <Pager page={page} pages={pages} onChange={setReviewPage} testid="admin-reviews-pager" />
+                  )}
+                </>
+              );
+            })()}
           </>
         )}
 
@@ -689,48 +977,101 @@ export default function AdminPage() {
           <>
             <h1 className="font-serif text-4xl">Failed Payments</h1>
             <p className="mt-2 text-sm text-cream/50">Every failed Razorpay attempt is logged here so you can proactively reach out to customers who abandoned checkout.</p>
+            <div className="mt-4 mb-4 flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-cream/40" />
+                <input
+                  data-testid="admin-failed-search"
+                  value={failedQuery}
+                  onChange={(e)=>{setFailedQuery(e.target.value); setFailedPage(1);}}
+                  placeholder="Search by email, phone, name, order # or error code…"
+                  className="pl-9 pr-3 py-2.5 bg-ink-950 border border-white/15 focus:border-gold text-sm text-cream w-full outline-none"
+                />
+              </div>
+              {failedQuery && (
+                <button
+                  onClick={()=>{setFailedQuery(""); setFailedPage(1);}}
+                  className="text-[10px] uppercase tracking-luxury text-cream/60 hover:text-gold border border-white/10 px-3 py-2"
+                >Clear</button>
+              )}
+            </div>
             {failedPayments.length === 0 ? (
               <div className="mt-8 hairline p-8 text-center text-cream/50">No failed payments logged. ✨</div>
-            ) : (
-              <div className="mt-6 grid gap-3">
-                {failedPayments.map((f) => (
-                  <div key={f.id} data-testid={`admin-failed-${f.id}`} className="hairline p-4">
-                    <div className="flex flex-wrap items-center gap-4">
-                      <div className="min-w-[180px]">
-                        <div className="text-red-400 text-xs uppercase tracking-luxury flex items-center gap-1.5">
-                          <AlertTriangle className="w-3 h-3" /> {f.error_code || "PAYMENT_FAILED"}
-                        </div>
-                        <div className="text-[11px] text-cream/40 mt-1">
-                          {new Date(f.created_at).toLocaleString()}
-                          {f.attempt > 1 ? ` · attempt ${f.attempt}` : ""}
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-[240px]">
-                        <div className="text-sm text-cream/80">{f.error_description || "No description"}</div>
-                        <div className="text-xs text-cream/50 mt-1">
-                          {f.customer_name || "Unknown"}
-                          {f.customer_email ? ` · ${f.customer_email}` : ""}
-                          {f.customer_phone ? ` · ${f.customer_phone}` : ""}
-                        </div>
-                        {f.order_number && (
-                          <div className="text-[10px] uppercase tracking-luxury text-cream/40 mt-1">
-                            Order · <span className="font-mono normal-case tracking-normal text-cream/60">{f.order_number}</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-cream font-serif text-lg">{formatINR(f.amount_inr)}</div>
-                      {f.customer_email && (
-                        <a
-                          data-testid={`admin-failed-contact-${f.id}`}
-                          href={`mailto:${f.customer_email}?subject=${encodeURIComponent("Your ArtyFex order")}&body=${encodeURIComponent("Hi " + (f.customer_name || "") + ",\nWe noticed your payment did not go through. Would you like our help completing it?")}`}
-                          className="text-xs text-gold hover:text-cream border border-gold/30 px-3 py-1.5"
-                        >Contact</a>
-                      )}
-                    </div>
+            ) : (() => {
+              const q = failedQuery.trim().toLowerCase();
+              const filtered = failedPayments.filter((f) => {
+                if (!q) return true;
+                const hay = [f.customer_name, f.customer_email, f.customer_phone, f.order_number, f.error_code, f.error_description].filter(Boolean).join(" ").toLowerCase();
+                return hay.includes(q);
+              });
+              const pages = Math.max(1, Math.ceil(filtered.length / FAILED_PAGE_SIZE));
+              const page = Math.min(failedPage, pages);
+              const slice = filtered.slice((page - 1) * FAILED_PAGE_SIZE, page * FAILED_PAGE_SIZE);
+              return (
+                <>
+                  <div className="text-[10px] uppercase tracking-luxury text-cream/40 mb-3">
+                    Showing {slice.length} of {filtered.length} · {failedPayments.length} total
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="grid gap-3">
+                    {slice.length === 0 && <div className="text-cream/40 text-sm italic py-6">No failed payments match your search.</div>}
+                    {slice.map((f) => (
+                      <div key={f.id} data-testid={`admin-failed-${f.id}`} className="hairline p-4">
+                        <div className="flex flex-wrap items-center gap-4">
+                          <div className="min-w-[180px]">
+                            <div className="text-red-400 text-xs uppercase tracking-luxury flex items-center gap-1.5">
+                              <AlertTriangle className="w-3 h-3" /> {f.error_code || "PAYMENT_FAILED"}
+                            </div>
+                            <div className="text-[11px] text-cream/40 mt-1">
+                              {new Date(f.created_at).toLocaleString()}
+                              {f.attempt > 1 ? ` · attempt ${f.attempt}` : ""}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-[240px]">
+                            <div className="text-sm text-cream/80">{f.error_description || "No description"}</div>
+                            <div className="text-xs text-cream/50 mt-1">
+                              {f.customer_name || "Unknown"}
+                              {f.customer_email ? ` · ${f.customer_email}` : ""}
+                              {f.customer_phone ? ` · ${f.customer_phone}` : ""}
+                            </div>
+                            {f.order_number && (
+                              <div className="text-[10px] uppercase tracking-luxury text-cream/40 mt-1">
+                                Order · <span className="font-mono normal-case tracking-normal text-cream/60">{f.order_number}</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-cream font-serif text-lg">{formatINR(f.amount_inr)}</div>
+                          {f.customer_email && (
+                            <a
+                              data-testid={`admin-failed-contact-${f.id}`}
+                              href={`mailto:${f.customer_email}?subject=${encodeURIComponent("Your ArtyFex order")}&body=${encodeURIComponent("Hi " + (f.customer_name || "") + ",\nWe noticed your payment did not go through. Would you like our help completing it?")}`}
+                              className="text-xs text-gold hover:text-cream border border-gold/30 px-3 py-1.5"
+                            >Contact</a>
+                          )}
+                          <button
+                            data-testid={`admin-failed-delete-${f.id}`}
+                            onClick={async () => {
+                              if (!window.confirm("Delete this failed payment log? This can't be undone.")) return;
+                              try {
+                                await authed.delete(`/admin/failed-payments/${f.id}`);
+                                toast.success("Deleted");
+                                reload();
+                              } catch (err) {
+                                toast.error(err?.response?.data?.detail || "Delete failed");
+                              }
+                            }}
+                            className="text-red-400 hover:text-red-300 p-2"
+                            title="Delete log"
+                          ><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {pages > 1 && (
+                    <Pager page={page} pages={pages} onChange={setFailedPage} testid="admin-failed-pager" />
+                  )}
+                </>
+              );
+            })()}
           </>
         )}
         {tab === "settings" && (
@@ -1561,6 +1902,53 @@ function SmallStat({ label, value, accent }) {
     <div className="hairline p-4 bg-ink-950/40">
       <div className="text-[10px] uppercase tracking-luxury text-cream/40">{label}</div>
       <div className={`mt-1 font-serif text-2xl ${accent ? "text-gold" : "text-cream"}`}>{value}</div>
+    </div>
+  );
+}
+
+/**
+ * Pager — reusable pagination footer.
+ * Shows Prev · [1] [2] … · Next
+ * Keeps things compact when there are many pages.
+ */
+function Pager({ page, pages, onChange, testid = "pager" }) {
+  if (!pages || pages <= 1) return null;
+  const nums = [];
+  const push = (n) => { if (n >= 1 && n <= pages && !nums.includes(n)) nums.push(n); };
+  push(1); push(pages);
+  for (let d = -2; d <= 2; d++) push(page + d);
+  nums.sort((a, b) => a - b);
+  const withGaps = [];
+  nums.forEach((n, i) => {
+    if (i > 0 && n - nums[i - 1] > 1) withGaps.push("…");
+    withGaps.push(n);
+  });
+  return (
+    <div className="mt-6 flex items-center justify-center gap-1 flex-wrap" data-testid={testid}>
+      <button
+        onClick={() => onChange(Math.max(1, page - 1))}
+        disabled={page <= 1}
+        data-testid={`${testid}-prev`}
+        className="px-3 py-1.5 text-[10px] uppercase tracking-luxury border border-white/10 text-cream/70 hover:text-gold disabled:opacity-30"
+      >Prev</button>
+      {withGaps.map((n, i) => (
+        n === "…" ? (
+          <span key={`gap-${i}`} className="px-2 text-cream/40 text-xs">…</span>
+        ) : (
+          <button
+            key={n}
+            onClick={() => onChange(n)}
+            data-testid={`${testid}-page-${n}`}
+            className={`px-3 py-1.5 text-[10px] uppercase tracking-luxury border ${n === page ? "border-gold text-gold" : "border-white/10 text-cream/70 hover:text-gold"}`}
+          >{n}</button>
+        )
+      ))}
+      <button
+        onClick={() => onChange(Math.min(pages, page + 1))}
+        disabled={page >= pages}
+        data-testid={`${testid}-next`}
+        className="px-3 py-1.5 text-[10px] uppercase tracking-luxury border border-white/10 text-cream/70 hover:text-gold disabled:opacity-30"
+      >Next</button>
     </div>
   );
 }

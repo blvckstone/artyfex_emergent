@@ -51,12 +51,12 @@
     {
       "test": "Whitelist - Add New",
       "passed": true,
-      "details": "Added testadd@example.com with id=b8718b24-16cd-4da1-a277-2b9c77415e1e"
+      "details": "Added testadd@example.com with id=admin-dashboard-v2-65"
     },
     {
       "test": "Whitelist - Get Contains New",
       "passed": true,
-      "details": "Found testadd@example.com with readonly=false, id=b8718b24-16cd-4da1-a277-2b9c77415e1e"
+      "details": "Found testadd@example.com with readonly=false, id=admin-dashboard-v2-65"
     },
     {
       "test": "Whitelist - Add Duplicate",
