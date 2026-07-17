@@ -314,7 +314,14 @@ async def send_order_email(order: dict, kind: str, custom_subject: Optional[str]
         await send_email(to_email, subject, html)
     except Exception as _e:
         logging.error(f"Order email render/send failed ({kind}): {_e}")
-app = FastAPI(title="ArtyFex API")
+app = FastAPI(
+    title="ArtyFex API",
+    # In production we hide /docs, /redoc and /openapi.json to reduce recon
+    # surface. Preview / dev still gets them.
+    docs_url=None if _is_prod else "/docs",
+    redoc_url=None if _is_prod else "/redoc",
+    openapi_url=None if _is_prod else "/openapi.json",
+)
 api_router = APIRouter(prefix="/api")
 
 # Wire slowapi into the app so decorators like @limiter.limit("5/minute") work.
