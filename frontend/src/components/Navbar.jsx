@@ -10,11 +10,11 @@ import AnnouncementBar from "@/components/AnnouncementBar";
 import { fetchHomepage } from "@/lib/homepage";
 import { api } from "@/lib/api";
 
-const links = [
-  { id: IDS.nav.collection, label: "Shop", href: "/shop", route: true },
-  { id: IDS.nav.craft, label: "The Craft", hash: "craft" },
-  { id: IDS.nav.reviews, label: "Reviews", hash: "reviews" },
-  { id: IDS.nav.b2b, label: "Trade / B2B", hash: "b2b" },
+const DEFAULT_LINKS = [
+  { id: IDS.nav.collection, label: "Shop", href: "/shop", route: true, toggleKey: "show_shop" },
+  { id: IDS.nav.craft, label: "The Craft", hash: "craft", toggleKey: "show_craft" },
+  { id: IDS.nav.reviews, label: "Reviews", hash: "reviews", toggleKey: "show_reviews" },
+  { id: IDS.nav.b2b, label: "Trade / B2B", hash: "b2b", toggleKey: "show_b2b" },
 ];
 
 /**
@@ -39,6 +39,8 @@ export const Navbar = ({ announcement: announcementProp }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [announcement, setAnnouncement] = useState(announcementProp || null);
   const [cmsHeaderLinks, setCmsHeaderLinks] = useState([]);
+  const [navDefaults, setNavDefaults] = useState({ show_shop: true, show_craft: true, show_reviews: true, show_b2b: true });
+  const links = DEFAULT_LINKS.filter((l) => navDefaults[l.toggleKey] !== false);
 
   // Fetch admin-managed dynamic header links (Phase B5 CMS)
   useEffect(() => {
@@ -58,10 +60,15 @@ export const Navbar = ({ announcement: announcementProp }) => {
   // If parent didn't provide, fetch homepage announcement once so the bar
   // appears on every page consistently.
   useEffect(() => {
-    if (announcementProp) { setAnnouncement(announcementProp); return; }
+    if (announcementProp) { setAnnouncement(announcementProp); }
+    // Always fetch homepage to sync nav_default_links (parent only passes announcement)
     let cancelled = false;
     fetchHomepage()
-      .then((hp) => { if (!cancelled) setAnnouncement(hp?.announcement || null); })
+      .then((hp) => {
+        if (cancelled) return;
+        if (!announcementProp) setAnnouncement(hp?.announcement || null);
+        if (hp?.nav_default_links) setNavDefaults(hp.nav_default_links);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [announcementProp]);

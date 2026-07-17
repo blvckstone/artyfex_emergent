@@ -47,8 +47,8 @@ export default function MobileTabBar() {
           <TabItem testid="tab-home" label="Home" Icon={Home} activeState={active("/") && !loc.hash} to="/" />
           <TabItem testid="tab-shop" label="Shop" Icon={Store} activeState={active("/shop") || active("/product")} to="/shop" />
           <TabItem testid="tab-cart" label="Cart" Icon={ShoppingBag} activeState={false} badge={count} onClick={() => openCart(true)} />
-          <TabItem testid="tab-wishlist" label="Saved" Icon={Heart} activeState={active("/account") && loc.search.includes("wishlist")} badge={wishCount} onClick={() => (user ? nav("/account?tab=wishlist") : openAuth("login"))} />
-          <TabItem testid="tab-account" label="Account" Icon={User} activeState={active("/account")} onClick={() => (user ? nav("/account") : openAuth("login"))} />
+          <TabItem testid="tab-wishlist" label="Saved" Icon={Heart} activeState={active("/account") && (loc.search.includes("tab=wishlist"))} badge={wishCount} onClick={() => (user ? nav("/account?tab=wishlist") : openAuth("login"))} />
+          <TabItem testid="tab-account" label="Account" Icon={User} activeState={active("/account") && !loc.search.includes("tab=wishlist")} onClick={() => (user ? nav("/account") : openAuth("login"))} />
         </div>
       </nav>
     </>

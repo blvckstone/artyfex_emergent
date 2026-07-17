@@ -1,0 +1,72 @@
+{
+  "total": 13,
+  "passed": 13,
+  "failed": 0,
+  "results": [
+    {
+      "test": "1.1 GET /api/homepage (public)",
+      "passed": true,
+      "details": "All new Phase B keys present with correct defaults"
+    },
+    {
+      "test": "1.2 Admin login",
+      "passed": true,
+      "details": "Token received (length: 159)"
+    },
+    {
+      "test": "1.3 PATCH /api/admin/homepage (overrides)",
+      "passed": true,
+      "details": "All 4 overrides persisted correctly"
+    },
+    {
+      "test": "1.4 PATCH /api/admin/homepage (restore)",
+      "passed": true,
+      "details": "Restored to original defaults"
+    },
+    {
+      "test": "1.5 PATCH /api/admin/homepage (no auth)",
+      "passed": true,
+      "details": "Correctly returned 401"
+    },
+    {
+      "test": "2.1 GET /api/cloudinary/signature (no auth)",
+      "passed": true,
+      "details": "Correctly returned 401"
+    },
+    {
+      "test": "2.2 GET /api/cloudinary/signature (with auth)",
+      "passed": true,
+      "details": "All keys present, signature=c5179de944181e5e..."
+    },
+    {
+      "test": "2.3 GET /api/cloudinary/signature (wrong folder)",
+      "passed": true,
+      "details": "Correctly returned 400"
+    },
+    {
+      "test": "2.4 GET /api/cloudinary/signature (wrong resource_type)",
+      "passed": true,
+      "details": "Correctly returned 400"
+    },
+    {
+      "test": "2.5 GET /api/cloudinary/signature (custom folder)",
+      "passed": true,
+      "details": "Custom folder accepted"
+    },
+    {
+      "test": "3.1 GET /api/products (regression)",
+      "passed": true,
+      "details": "4 products returned"
+    },
+    {
+      "test": "3.2 GET /api/reviews (regression)",
+      "passed": true,
+      "details": "6 reviews returned"
+    },
+    {
+      "test": "3.3 GET /api/pages (regression)",
+      "passed": true,
+      "details": "5 pages returned"
+    }
+  ]
+}

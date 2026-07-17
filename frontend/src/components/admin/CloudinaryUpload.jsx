@@ -47,8 +47,12 @@ export default function CloudinaryUpload({
           toast.error(`${file.name} exceeds 10 MB`);
           continue;
         }
-        // 1) Get signature from our backend (admin auth required — axios instance already has token)
-        const { data: sig } = await api.get(`/cloudinary/signature`, { params: { folder, resource_type: "image" } });
+        // 1) Get signature from our backend (admin auth required — pull admin token from localStorage)
+        const adminToken = (typeof window !== "undefined") ? localStorage.getItem("artyfex_admin_token") : "";
+        const { data: sig } = await api.get(`/cloudinary/signature`, {
+          params: { folder, resource_type: "image" },
+          headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {},
+        });
         // 2) POST directly to Cloudinary
         const form = new FormData();
         form.append("file", file);

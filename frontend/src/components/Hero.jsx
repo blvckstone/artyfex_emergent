@@ -40,7 +40,7 @@ export const Hero = ({ content }) => {
     <section
       id="top"
       data-testid={IDS.hero.section}
-      className="relative min-h-[100svh] w-full overflow-hidden bg-ink-950"
+      className="relative min-h-[92svh] md:min-h-[100svh] w-full overflow-hidden bg-ink-950"
     >
       {/* Background image (parallax) */}
       <motion.div className="absolute inset-0" style={{ y: bgY, scale: bgScale }}>
@@ -49,7 +49,7 @@ export const Hero = ({ content }) => {
         <div className="absolute inset-0 grain" />
       </motion.div>
 
-      <div className="relative max-w-[1440px] mx-auto px-6 md:px-12 lg:px-16 pt-40 md:pt-44 pb-24">
+      <div className="relative max-w-[1440px] mx-auto px-4 md:px-12 lg:px-16 pt-24 md:pt-44 pb-12 md:pb-24">
         <div className="grid lg:grid-cols-12 gap-10 lg:gap-16 items-center">
           {/* Copy */}
           <motion.div className="lg:col-span-7 relative z-10 min-w-0" style={{ y: copyY }}>

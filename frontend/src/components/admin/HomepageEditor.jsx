@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Save, Image as ImageIcon, Megaphone, Sparkles, Star, Hammer, LayoutGrid, MessageSquareQuote, AlertTriangle } from "lucide-react";
+import { Loader2, Save, Image as ImageIcon, Megaphone, Sparkles, Star, Hammer, LayoutGrid, MessageSquareQuote, AlertTriangle, Grid3x3, Trophy, Menu, PlusCircle, Trash2 } from "lucide-react";
 import CloudinaryUpload from "@/components/admin/CloudinaryUpload";
 
 const inp = "w-full bg-ink-950 border border-white/15 focus:border-gold focus:outline-none px-3 py-2.5 text-sm text-cream outline-none";
@@ -277,6 +277,149 @@ export default function HomepageEditor({ authed }) {
             </div>
           )}
         </div>
+      </Section>
+
+      {/* Category Mosaic (Curated worlds) */}
+      <Section icon={Grid3x3} title="Category mosaic — 'Curated worlds'" subtitle="The bento-grid of category tiles on the homepage. Add/remove tiles, edit label + image (Cloudinary uploader). Toggle the whole section off if you don't need it.">
+        <label className="flex items-center gap-2 text-sm text-cream/70 mb-4">
+          <input type="checkbox" data-testid="cms-cat-enabled" checked={data.category_section?.enabled !== false} onChange={(e) => upd("category_section.enabled")(e.target.checked)} className="accent-gold" /> Show this section on homepage
+        </label>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Fld label="Eyebrow (small caps)"><input value={data.category_section?.eyebrow || ""} onChange={(e) => upd("category_section.eyebrow")(e.target.value)} className={inp} /></Fld>
+          <div />
+          <Fld label="Headline line 1"><input value={data.category_section?.headline_line_1 || ""} onChange={(e) => upd("category_section.headline_line_1")(e.target.value)} className={inp} placeholder="Curated" /></Fld>
+          <Fld label="Italic word / accent"><input value={data.category_section?.headline_italic || ""} onChange={(e) => upd("category_section.headline_italic")(e.target.value)} className={inp} placeholder="worlds" /></Fld>
+          <Fld label="Headline line 2 (after italic)"><input value={data.category_section?.headline_line_2 || ""} onChange={(e) => upd("category_section.headline_line_2")(e.target.value)} className={inp} placeholder=" of luxury." /></Fld>
+          <div className="sm:col-span-2"><Fld label="Subtitle"><textarea rows={2} value={data.category_section?.subtitle || ""} onChange={(e) => upd("category_section.subtitle")(e.target.value)} className={inp} /></Fld></div>
+        </div>
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[10px] uppercase tracking-luxury text-cream/50">Tiles ({(data.category_section?.tiles || []).length}) — leave empty to use luxury defaults</div>
+            <button
+              type="button"
+              data-testid="cms-cat-add"
+              onClick={() => {
+                setData((prev) => {
+                  const clone = JSON.parse(JSON.stringify(prev));
+                  if (!clone.category_section) clone.category_section = { tiles: [] };
+                  if (!Array.isArray(clone.category_section.tiles)) clone.category_section.tiles = [];
+                  clone.category_section.tiles.push({ slug: "", label: "New tile", keyword: "", image: "" });
+                  return clone;
+                });
+              }}
+              className="inline-flex items-center gap-2 text-[10px] uppercase tracking-luxury text-gold hover:text-cream"
+            ><PlusCircle className="w-3.5 h-3.5" /> Add tile</button>
+          </div>
+          <div className="grid gap-3">
+            {(data.category_section?.tiles || []).map((t, i) => (
+              <div key={i} className="grid sm:grid-cols-[80px_1fr_1fr_1fr_auto] gap-3 items-center border border-white/10 p-3">
+                <div className="w-[80px] h-[80px] bg-ink-950 border border-white/10 overflow-hidden">
+                  <CloudinaryUpload
+                    value={t.image}
+                    onChange={(url) => {
+                      setData((prev) => {
+                        const c = JSON.parse(JSON.stringify(prev));
+                        c.category_section.tiles[i].image = url;
+                        return c;
+                      });
+                    }}
+                    folder="artyfex/homepage"
+                    testid={`cms-cat-tile-${i}-img`}
+                    label=""
+                  />
+                </div>
+                <input placeholder="Slug (e.g. mirrors)" value={t.slug || ""} onChange={(e) => { setData((prev) => { const c = JSON.parse(JSON.stringify(prev)); c.category_section.tiles[i].slug = e.target.value; return c; }); }} className={inp} data-testid={`cms-cat-tile-${i}-slug`} />
+                <input placeholder="Label (e.g. Luxury Mirrors)" value={t.label || ""} onChange={(e) => { setData((prev) => { const c = JSON.parse(JSON.stringify(prev)); c.category_section.tiles[i].label = e.target.value; return c; }); }} className={inp} data-testid={`cms-cat-tile-${i}-label`} />
+                <input placeholder="Sub-keyword" value={t.keyword || ""} onChange={(e) => { setData((prev) => { const c = JSON.parse(JSON.stringify(prev)); c.category_section.tiles[i].keyword = e.target.value; return c; }); }} className={inp} />
+                <button
+                  type="button"
+                  onClick={() => { setData((prev) => { const c = JSON.parse(JSON.stringify(prev)); c.category_section.tiles.splice(i, 1); return c; }); }}
+                  data-testid={`cms-cat-tile-${i}-remove`}
+                  className="text-red-400 hover:text-red-300 p-2"
+                  title="Remove tile"
+                ><Trash2 className="w-4 h-4" /></button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      {/* Featured Carousel toggle */}
+      <Section icon={LayoutGrid} title="Featured carousel — 'Editor's pick'" subtitle="Horizontal auto-scroll product carousel. Uses your live products list. Toggle to hide on homepage.">
+        <label className="flex items-center gap-2 text-sm text-cream/70 mb-4">
+          <input type="checkbox" data-testid="cms-featured-enabled" checked={data.featured_section?.enabled !== false} onChange={(e) => upd("featured_section.enabled")(e.target.checked)} className="accent-gold" /> Show this section on homepage
+        </label>
+        <div className="grid sm:grid-cols-3 gap-4">
+          <Fld label="Eyebrow (small caps)"><input value={data.featured_section?.eyebrow || ""} onChange={(e) => upd("featured_section.eyebrow")(e.target.value)} className={inp} placeholder="Featured" /></Fld>
+          <Fld label="Headline line 1"><input value={data.featured_section?.headline_line_1 || ""} onChange={(e) => upd("featured_section.headline_line_1")(e.target.value)} className={inp} placeholder="Editor's" /></Fld>
+          <Fld label="Italic word / accent"><input value={data.featured_section?.headline_italic || ""} onChange={(e) => upd("featured_section.headline_italic")(e.target.value)} className={inp} placeholder="pick" /></Fld>
+        </div>
+      </Section>
+
+      {/* Why ArtyFex — animated stats */}
+      <Section icon={Trophy} title="'Why ArtyFex' — animated stat cards" subtitle="Row of animated counter cards. Edit each stat's icon, value, suffix, label and note. Toggle to hide.">
+        <label className="flex items-center gap-2 text-sm text-cream/70 mb-4">
+          <input type="checkbox" data-testid="cms-why-enabled" checked={data.why_section?.enabled !== false} onChange={(e) => upd("why_section.enabled")(e.target.checked)} className="accent-gold" /> Show this section on homepage
+        </label>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Fld label="Eyebrow (small caps)"><input value={data.why_section?.eyebrow || ""} onChange={(e) => upd("why_section.eyebrow")(e.target.value)} className={inp} /></Fld>
+          <div />
+          <Fld label="Headline line 1"><input value={data.why_section?.headline_line_1 || ""} onChange={(e) => upd("why_section.headline_line_1")(e.target.value)} className={inp} /></Fld>
+          <Fld label="Italic word / accent"><input value={data.why_section?.headline_italic || ""} onChange={(e) => upd("why_section.headline_italic")(e.target.value)} className={inp} /></Fld>
+          <Fld label="Headline line 2 (after italic)"><input value={data.why_section?.headline_line_2 || ""} onChange={(e) => upd("why_section.headline_line_2")(e.target.value)} className={inp} /></Fld>
+          <div />
+          <div className="sm:col-span-2"><Fld label="Subtitle"><textarea rows={2} value={data.why_section?.subtitle || ""} onChange={(e) => upd("why_section.subtitle")(e.target.value)} className={inp} /></Fld></div>
+        </div>
+        <div className="mt-6">
+          <div className="text-[10px] uppercase tracking-luxury text-cream/50 mb-2">4 stat cards</div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="border border-white/10 p-3 grid gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    className={inp}
+                    value={data.why_section?.stats?.[i]?.icon || "sparkles"}
+                    onChange={(e) => { setData((prev) => { const c = JSON.parse(JSON.stringify(prev)); if (!c.why_section.stats) c.why_section.stats = []; c.why_section.stats[i] = { ...(c.why_section.stats[i] || {}), icon: e.target.value }; return c; }); }}
+                    data-testid={`cms-why-stat-${i}-icon`}
+                  >
+                    <option value="sparkles">Sparkles</option>
+                    <option value="award">Award</option>
+                    <option value="shield">Shield</option>
+                    <option value="truck">Truck</option>
+                  </select>
+                  <input placeholder="Suffix (e.g. +, /1, mo)" value={data.why_section?.stats?.[i]?.suffix || ""} onChange={(e) => { setData((prev) => { const c = JSON.parse(JSON.stringify(prev)); c.why_section.stats[i] = { ...(c.why_section.stats[i] || {}), suffix: e.target.value }; return c; }); }} className={inp} />
+                </div>
+                <input type="number" placeholder="Value (integer)" value={data.why_section?.stats?.[i]?.value ?? ""} onChange={(e) => { setData((prev) => { const c = JSON.parse(JSON.stringify(prev)); c.why_section.stats[i] = { ...(c.why_section.stats[i] || {}), value: Number(e.target.value) || 0 }; return c; }); }} className={inp} data-testid={`cms-why-stat-${i}-value`} />
+                <input placeholder="Label (e.g. Artisan hours per piece)" value={data.why_section?.stats?.[i]?.label || ""} onChange={(e) => { setData((prev) => { const c = JSON.parse(JSON.stringify(prev)); c.why_section.stats[i] = { ...(c.why_section.stats[i] || {}), label: e.target.value }; return c; }); }} className={inp} />
+                <input placeholder="Sub-note (small text)" value={data.why_section?.stats?.[i]?.note || ""} onChange={(e) => { setData((prev) => { const c = JSON.parse(JSON.stringify(prev)); c.why_section.stats[i] = { ...(c.why_section.stats[i] || {}), note: e.target.value }; return c; }); }} className={inp} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      {/* Header nav toggles */}
+      <Section icon={Menu} title="Header navigation — show/hide default tabs" subtitle="Toggle which built-in tabs appear in the desktop + mobile header. (CMS pages have their own show-in-header toggle in the Pages tab.)">
+        <div className="grid sm:grid-cols-2 gap-3">
+          {[
+            { key: "show_shop", label: "Shop" },
+            { key: "show_craft", label: "The Craft" },
+            { key: "show_reviews", label: "Reviews" },
+            { key: "show_b2b", label: "Trade / B2B" },
+          ].map((l) => (
+            <label key={l.key} className="flex items-center gap-3 border border-white/10 p-3 text-sm text-cream/70">
+              <input
+                type="checkbox"
+                data-testid={`cms-nav-${l.key}`}
+                checked={data.nav_default_links?.[l.key] !== false}
+                onChange={(e) => upd(`nav_default_links.${l.key}`)(e.target.checked)}
+                className="accent-gold"
+              />
+              <span>{l.label}</span>
+            </label>
+          ))}
+        </div>
+        <p className="mt-4 text-xs text-cream/40">Tip: to add or reorder <em>custom</em> pages in the header, use the <strong>Pages</strong> tab.</p>
       </Section>
 
       {/* Important note */}

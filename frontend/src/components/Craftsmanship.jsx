@@ -23,8 +23,8 @@ export const Craftsmanship = ({ content }) => {
   const steps = (Array.isArray(c.steps) && c.steps.length ? c.steps : DEFAULT_STEPS).slice(0, 4);
 
   return (
-    <section id="craft" className="relative bg-ink-900 py-24 md:py-40 overflow-hidden" data-testid="section-craftsmanship">
-      <div className="max-w-[1440px] mx-auto px-6 md:px-12 lg:px-16 grid lg:grid-cols-12 gap-12 lg:gap-20">
+    <section id="craft" className="relative bg-ink-900 py-14 md:py-32 overflow-hidden" data-testid="section-craftsmanship">
+      <div className="max-w-[1440px] mx-auto px-4 md:px-12 lg:px-16 grid lg:grid-cols-12 gap-8 md:gap-12 lg:gap-20">
         <div className="lg:col-span-5">
           <motion.div
             initial={{ opacity: 0, x: -40 }}

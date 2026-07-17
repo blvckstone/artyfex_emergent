@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useCart } from "@/context/CartContext";
@@ -18,18 +18,31 @@ const statusColor = (s) => ({
   received: "text-blue-300", refunded: "text-gold",
 }[s] || "text-cream");
 
+const VALID_TABS = new Set(["orders", "messages", "wishlist", "profile", "returns"]);
+
 export default function AccountPage() {
   const { user, ready, logout, openAuth, authedApi, updateProfile } = useAuth();
   const { items: wishItems, toggle: toggleWish, refresh: refreshWish } = useWishlist();
   const { addItem } = useCart();
   const { prompts: reviewPrompts, setModalOpen: openReviewModal } = useReviewPrompts();
   const nav = useNavigate();
-  const [tab, setTab] = useState("orders");
+  const location = useLocation();
+  const initialTab = (() => {
+    const q = new URLSearchParams(location.search).get("tab");
+    return q && VALID_TABS.has(q) ? q : "orders";
+  })();
+  const [tab, setTab] = useState(initialTab);
   const [orders, setOrders] = useState([]);
   const [returns, setReturns] = useState([]);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [returnFor, setReturnFor] = useState(null);
+
+  // Sync tab if query param changes (e.g., user clicks Saved on tab-bar while on Account)
+  useEffect(() => {
+    const q = new URLSearchParams(location.search).get("tab");
+    if (q && VALID_TABS.has(q) && q !== tab) setTab(q);
+  }, [location.search, tab]);
 
   const unreadCount = useMemo(() => messages.filter((m) => !m.read).length, [messages]);
 

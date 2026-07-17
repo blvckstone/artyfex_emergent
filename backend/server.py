@@ -2358,6 +2358,66 @@ class ImportantNote(BaseModel):
     )
 
 
+class CategoryTile(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    slug: str = ""
+    label: str = ""
+    keyword: str = ""
+    image: str = ""
+
+
+class WhyStat(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    icon: str = "sparkles"  # sparkles | award | shield | truck
+    value: int = 0
+    suffix: str = ""
+    label: str = ""
+    note: str = ""
+
+
+class WhyArtyFexSection(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    enabled: bool = True
+    eyebrow: str = "Why ArtyFex"
+    headline_line_1: str = "The Mumbai atelier"
+    headline_italic: str = "obsessed"
+    headline_line_2: str = " with detail."
+    subtitle: str = "Modern art collectors, luxury interior designers and celebrities trust ArtyFex for one reason — each piece is a story of 120+ artisan hours, poured by hand, signed by the maker."
+    stats: List[WhyStat] = Field(default_factory=lambda: [
+        WhyStat(icon="sparkles", value=120, suffix="+", label="Artisan hours per piece", note="Every mirror, hand-poured"),
+        WhyStat(icon="award", value=1, suffix=" / 1", label="One-of-one editions", note="No two pieces alike"),
+        WhyStat(icon="shield", value=24, suffix=" mo", label="Signature warranty", note="Anti-yellowing epoxy"),
+        WhyStat(icon="truck", value=500, suffix="+", label="Delivered pan-India", note="Insured white-glove"),
+    ])
+
+
+class CategorySection(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    enabled: bool = True
+    eyebrow: str = "Explore the Atelier"
+    headline_line_1: str = "Curated"
+    headline_italic: str = "worlds"
+    headline_line_2: str = " of luxury."
+    subtitle: str = "From statement mirrors to bespoke furniture — every category, handpoured in Mumbai."
+    tiles: List[CategoryTile] = Field(default_factory=list)
+
+
+class FeaturedSection(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    enabled: bool = True
+    eyebrow: str = "Featured"
+    headline_line_1: str = "Editor's"
+    headline_italic: str = "pick"
+
+
+class NavDefaultLinks(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    show_shop: bool = True
+    show_craft: bool = True
+    show_reviews: bool = True
+    show_b2b: bool = True
+
+
 class HomepageContent(BaseModel):
     model_config = ConfigDict(extra="ignore")
     announcement: AnnouncementBar = Field(default_factory=AnnouncementBar)
@@ -2367,6 +2427,11 @@ class HomepageContent(BaseModel):
     collection_section: CollectionSection = Field(default_factory=CollectionSection)
     reviews_section: ReviewsSection = Field(default_factory=ReviewsSection)
     important_note: ImportantNote = Field(default_factory=ImportantNote)
+    # New Phase-B homepage sections + navigation controls
+    category_section: CategorySection = Field(default_factory=CategorySection)
+    why_section: WhyArtyFexSection = Field(default_factory=WhyArtyFexSection)
+    featured_section: FeaturedSection = Field(default_factory=FeaturedSection)
+    nav_default_links: NavDefaultLinks = Field(default_factory=NavDefaultLinks)
     custom_css: str = ""
 
 

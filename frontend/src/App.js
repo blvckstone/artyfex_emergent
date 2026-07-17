@@ -162,12 +162,21 @@ function Home() {
       <Navbar announcement={homepage?.announcement} />
       <main>
         <Hero content={homepage?.hero} />
-        <CategoryMosaic categories={homepage?.categories} />
+        {homepage?.category_section?.enabled !== false && (
+          <CategoryMosaic
+            categories={homepage?.category_section?.tiles}
+            content={homepage?.category_section}
+          />
+        )}
         <ProductShowcase product={hero} />
-        <FeaturedCarousel products={products} />
+        {homepage?.featured_section?.enabled !== false && (
+          <FeaturedCarousel products={products} content={homepage?.featured_section} />
+        )}
         <Craftsmanship content={homepage?.craft} />
         <Collection products={products} content={homepage?.collection_section} />
-        <WhyArtyFex />
+        {homepage?.why_section?.enabled !== false && (
+          <WhyArtyFex content={homepage?.why_section} />
+        )}
         <SaleBanner content={homepage?.sale_banner} />
         <Reviews reviews={reviews} content={homepage?.reviews_section} />
         <B2B />

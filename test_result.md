@@ -521,17 +521,18 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "2.3"
-  test_sequence: 10
+  version: "3.1"
+  test_sequence: 12
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Phase A Enterprise: GST switched to EXCLUSIVE + total includes GST"
-    - "Phase A Enterprise: Cloudinary signature endpoint (admin auth)"
-    - "Phase A Enterprise: Admin Google OAuth login with whitelist"
-    - "Phase A Enterprise: Admin whitelist CRUD"
-    - "Phase A Enterprise: Order emails (placed / dispatched / cancelled) + custom notify + broadcast"
+    - "Phase B fix: Cloudinary signed upload works after env keys added"
+    - "Phase B fix: MobileTabBar 'Saved' navigates to wishlist tab"
+    - "Phase B fix: Homepage sections (Categories/Featured/Why) toggleable + editable via HomepageEditor"
+    - "Phase B fix: Header default nav links toggle (show_shop / craft / reviews / b2b)"
+    - "Phase B fix: Product page reviews list (Amazon/Flipkart style)"
+    - "Phase B fix: Homepage mobile UX polish (reduced spacing, card corners, faster CategoryMosaic)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -2648,5 +2649,242 @@ agent_communication:
       
       CONCLUSION:
       All Phase B5 backend features working correctly. No issues found.
+      Ready for main agent to summarize and finish.
+
+
+# =============================================================================
+# PHASE B FIX PASS (Jul 17 2026) — bug reports from user
+# =============================================================================
+
+backend:
+  - task: "Phase B fix · HomepageContent model extended with category_section + why_section + featured_section + nav_default_links"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Added new nested models to HomepageContent so admins can visually edit the new Phase-B homepage sections (Category Mosaic + Why-ArtyFex counters + Featured carousel + Nav default-link toggles). Fields are backward-compatible via defaults.
+          Test targets:
+          - GET /api/homepage returns keys ['category_section','why_section','featured_section','nav_default_links'] (with sensible defaults).
+          - PATCH /api/admin/homepage with {"category_section":{"enabled":false,"tiles":[{"slug":"mirrors","label":"Test","image":"https://x/y.jpg"}]}} → 200; subsequent GET reflects change.
+          - PATCH /api/admin/homepage with {"nav_default_links":{"show_craft":false}} → 200; subsequent GET has show_craft:false.
+          - PATCH /api/admin/homepage with {"why_section":{"enabled":false,"stats":[{"icon":"award","value":50,"suffix":"+","label":"Awards","note":""}]}} → 200; subsequent GET reflects.
+          - PATCH without token → 401.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (5/5 tests passed):
+          Test 1.1 - GET /api/homepage (public, no auth):
+          - All 12 required keys present (announcement, hero, sale_banner, craft, collection_section, reviews_section, important_note, custom_css, category_section, why_section, featured_section, nav_default_links)
+          - category_section: enabled=true, eyebrow="Explore the Atelier", headline_line_1="Curated", headline_italic="worlds", headline_line_2=" of luxury.", subtitle non-empty, tiles=[]
+          - why_section: enabled=true, eyebrow="Why ArtyFex", stats array with 4 items (each with icon/value/suffix/label/note)
+          - featured_section: enabled=true, eyebrow="Featured", headline_line_1="Editor's", headline_italic="pick"
+          - nav_default_links: show_shop=true, show_craft=true, show_reviews=true, show_b2b=true
+          
+          Test 1.2 - Admin login: Token received (length: 159)
+          
+          Test 1.3 - PATCH /api/admin/homepage with overrides:
+          - Modified: category_section.enabled=false, category_section.tiles=[1 test tile], nav_default_links.show_craft=false, why_section.enabled=false, why_section.stats=[1 stat]
+          - PATCH returned 200
+          - GET /api/homepage confirmed all 4 overrides persisted correctly
+          
+          Test 1.4 - Restore to defaults: PATCH with original payload → 200
+          
+          Test 1.5 - PATCH without token → 401 (auth protection working)
+          
+          HomepageContent model extension working perfectly. All new Phase B keys present with correct defaults and PATCH round-trips work correctly.
+
+  - task: "Phase B fix · Cloudinary signature works with real API key/secret"
+    implemented: true
+    working: true
+    file: "backend/.env, backend/server.py (no code change)"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Root cause: /app/backend/.env had placeholder CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET. User supplied real credentials.
+          Test targets:
+          - GET /api/cloudinary/signature without token → 401.
+          - GET with admin token → 200 with keys {signature, timestamp, cloud_name, api_key, folder, resource_type}; signature is hex string; api_key === "667774888644289"; cloud_name === "wir5svfq".
+          - Wrong folder prefix → 400; resource_type=pdf → 400.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (5/5 tests passed):
+          Test 2.1 - GET /api/cloudinary/signature (no auth) → 401 Unauthorized ✓
+          
+          Test 2.2 - GET /api/cloudinary/signature (with admin token):
+          - 200 OK with all 6 required keys: signature, timestamp, cloud_name, api_key, folder, resource_type
+          - signature is valid hex string (c5179de944181e5e...)
+          - api_key="667774888644289" ✓
+          - cloud_name="wir5svfq" ✓
+          - folder="artyfex" (default) ✓
+          - resource_type="image" (default) ✓
+          
+          Test 2.3 - GET with folder="wrong-prefix" → 400 Bad Request ✓
+          
+          Test 2.4 - GET with resource_type="pdf" → 400 Bad Request ✓
+          
+          Test 2.5 - GET with folder="artyfex/homepage" → 200 OK, folder="artyfex/homepage" ✓
+          
+          Cloudinary signature endpoint working correctly with proper auth, validation, and real API credentials.
+
+  - task: "Phase B fix-pass · Regression tests (products, reviews, pages)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (3/3 regression tests passed):
+          Test 3.1 - GET /api/products → 200 with 4 products ✓
+          Test 3.2 - GET /api/reviews → 200 with 6 reviews ✓
+          Test 3.3 - GET /api/pages → 200 with 5 pages ✓
+          
+          All existing endpoints working correctly. No regressions detected.
+
+frontend:
+  - task: "Phase B fix · CloudinaryUpload sends admin Bearer token"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/admin/CloudinaryUpload.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Bug: CloudinaryUpload used base `api` axios instance without auth header → /cloudinary/signature returned 401. Fix: reads localStorage['artyfex_admin_token'] and passes Authorization header on the GET.
+
+  - task: "Phase B fix · MobileTabBar Saved -> wishlist tab wiring"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/MobileTabBar.jsx, frontend/src/pages/AccountPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          AccountPage was hard-coded tab='orders'. Now reads ?tab=xxx on mount + on location.search changes. MobileTabBar Saved -> /account?tab=wishlist. Valid tabs: orders/messages/wishlist/profile/returns.
+
+  - task: "Phase B fix · Mobile UX polish (density, rounded cards, faster CategoryMosaic)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/CategoryMosaic.jsx, WhyArtyFex.jsx, FeaturedCarousel.jsx, Hero.jsx, Collection.jsx, Craftsmanship.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          User feedback: "too much empty space on phone screen, homepage feels heavy/slow, should feel like a modern Android app". Applied:
+          - py-24 md:py-40 → py-12–14 md:py-24–32 across sections (mobile rhythm halved).
+          - px-6 → px-4 on mobile.
+          - CategoryMosaic: grid-cols-1 → grid-cols-2 (mirrors tile spans 2 cols). Images resized to w=900/700, q=60, loading=lazy, decoding=async. Hover-scale disabled below md.
+          - WhyArtyFex/Featured/Collection cards: rounded-xl mobile, tighter typography, gap-2.5 mobile.
+          - Hero: pt-40 → pt-24 mobile; pb-24 → pb-12 mobile; min-h 92svh on mobile.
+
+  - task: "Phase B fix · Product reviews section on ProductPage (Amazon/Flipkart-style)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/ProductPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Added <ProductReviewsSection>: avg-rating summary, 5-4-3-2-1 breakdown bars (click to filter), horizontal customer-photo strip, sort dropdown (recent/high/low), per-review card (author, verified badge, stars, location, date, title, body, up-to-6 photos), Load-more pagination. id="reviews", data-testid="product-reviews". Uses existing /api/reviews filtered per product.
+
+  - task: "Phase B fix · Admin HomepageEditor now edits new sections + nav toggles"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/admin/HomepageEditor.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Added 4 new Sections: Category mosaic (add/remove tiles + Cloudinary upload per row), Featured carousel (headline + toggle), Why ArtyFex (headline + 4 stat cards with icon/value/suffix/label/note), Header navigation (4 toggles: show_shop/craft/reviews/b2b).
+
+  - task: "Phase B fix · Navbar respects nav_default_links toggles"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/Navbar.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Navbar fetches /api/homepage on mount, reads hp.nav_default_links, filters DEFAULT_LINKS. Applied to desktop nav + mobile drop-down. Defaults to true when key missing.
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Phase B fix pass — user reported bugs. All fixes non-destructive and backward-compat.
+      Test priority:
+      1) Cloudinary signature endpoint (backend) — GET /api/cloudinary/signature with admin token returns 200 hex signature.
+      2) Homepage model extension (backend) — GET /api/homepage returns the 4 new keys; PATCH round-trips category_section.tiles / nav_default_links / why_section.stats.
+      3) MobileTabBar Saved → wishlist (frontend UX) — mobile /account?tab=wishlist opens the Wishlist tab.
+      4) Homepage mobile density (frontend visual) — screenshots at 390×844.
+      5) Admin HomepageEditor new sections (frontend UX) — Category tiles editor + Header nav toggles present and Save round-trips.
+      6) Product page reviews section (frontend UX) — id="reviews" renders with summary + breakdown + list OR "No reviews yet" state.
+      
+      Do NOT re-test unrelated Phase A / B5 features.
+
+  - agent: "testing"
+    message: |
+      ✅ PHASE B FIX-PASS BACKEND TESTING COMPLETE - ALL TESTS PASSED (13/13)
+      
+      Comprehensive testing completed for Phase B fix-pass backend changes per review request specifications (Jul 17 2026).
+      Test file: /app/backend_test_phase_b_fixpass.py
+      Results: /app/backend_test_phase_b_fixpass_results.json
+      
+      FOCUS 1 - HOMEPAGECONTENT MODEL EXTENSION (5/5 passed):
+      ✅ 1.1 GET /api/homepage (public, no auth) → All 12 keys present including 4 new Phase B keys
+      ✅ 1.2 POST /api/admin/login → Token received
+      ✅ 1.3 PATCH /api/admin/homepage with overrides → All 4 overrides persisted (category_section.enabled=false, tiles=[1], nav_default_links.show_craft=false, why_section.enabled=false, stats=[1])
+      ✅ 1.4 PATCH restore to defaults → Restored successfully
+      ✅ 1.5 PATCH without token → 401 (auth protection working)
+      
+      FOCUS 2 - CLOUDINARY SIGNATURE ENDPOINT (5/5 passed):
+      ✅ 2.1 GET /api/cloudinary/signature (no auth) → 401 Unauthorized
+      ✅ 2.2 GET with admin token → 200 with all 6 keys (signature hex, api_key=667774888644289, cloud_name=wir5svfq, folder=artyfex, resource_type=image)
+      ✅ 2.3 GET with folder="wrong-prefix" → 400 Bad Request
+      ✅ 2.4 GET with resource_type="pdf" → 400 Bad Request
+      ✅ 2.5 GET with folder="artyfex/homepage" → 200 OK with custom folder
+      
+      FOCUS 3 - REGRESSION TESTS (3/3 passed):
+      ✅ 3.1 GET /api/products → 200 with 4 products
+      ✅ 3.2 GET /api/reviews → 200 with 6 reviews
+      ✅ 3.3 GET /api/pages → 200 with 5 pages
+      
+      CONCLUSION:
+      All Phase B fix-pass backend features working correctly. No issues found.
+      - HomepageContent model extension: All new keys (category_section, why_section, featured_section, nav_default_links) present with correct defaults and PATCH round-trips work perfectly.
+      - Cloudinary signature endpoint: Auth, validation, and real API credentials all working correctly.
+      - Regression tests: All existing endpoints (products, reviews, pages) working correctly. No regressions detected.
+      
       Ready for main agent to summarize and finish.
 

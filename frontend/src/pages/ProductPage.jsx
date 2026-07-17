@@ -460,6 +460,9 @@ export default function ProductPage() {
             </div>
           </div>
         </div>
+
+        {/* CUSTOMER REVIEWS (Amazon/Flipkart-style) */}
+        <ProductReviewsSection reviews={reviews} avg={ratingStats.avg} count={ratingStats.count} />
       </div>
       {/* Sticky mobile Add-to-Cart bar (native app feel) */}
       <div
@@ -499,3 +502,180 @@ const XLogo = () => (
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
   </svg>
 );
+
+/* -------------------- Reviews list (Amazon/Flipkart-style) -------------------- */
+function StarRow({ rating, size = "sm" }) {
+  const cls = size === "lg" ? "w-4 h-4" : "w-3 h-3";
+  return (
+    <div className="inline-flex items-center gap-0.5" aria-label={`${rating} out of 5`}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star key={n} className={`${cls} ${rating >= n ? "fill-gold text-gold" : "text-cream/25"}`} />
+      ))}
+    </div>
+  );
+}
+
+function ProductReviewsSection({ reviews, avg, count }) {
+  const [sort, setSort] = useState("recent");
+  const [filterStar, setFilterStar] = useState(0);
+  const [limit, setLimit] = useState(6);
+
+  const buckets = useMemo(() => {
+    const b = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    reviews.forEach((r) => { const n = Math.round(Number(r.rating) || 0); if (b[n] != null) b[n] += 1; });
+    return b;
+  }, [reviews]);
+
+  const filtered = useMemo(() => {
+    let out = filterStar > 0 ? reviews.filter((r) => Math.round(Number(r.rating) || 0) === filterStar) : reviews.slice();
+    if (sort === "helpful") out.sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0));
+    else if (sort === "high") out.sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0));
+    else if (sort === "low") out.sort((a, b) => (Number(a.rating) || 0) - (Number(b.rating) || 0));
+    else out.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    return out;
+  }, [reviews, sort, filterStar]);
+
+  const photos = useMemo(() => reviews.flatMap((r) => (Array.isArray(r.photos) ? r.photos : []).map((u) => ({ url: u, review: r }))), [reviews]);
+
+  if (!count) {
+    return (
+      <section id="reviews" className="mt-16 md:mt-24 pt-10 md:pt-16 border-t border-white/5">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="gold-line w-8 md:w-10" />
+          <span className="text-[10px] uppercase tracking-luxury text-gold-soft">Customer Reviews</span>
+        </div>
+        <h2 className="font-serif text-2xl md:text-3xl text-cream">No reviews yet</h2>
+        <p className="mt-3 text-cream/50 text-sm md:text-base font-light">Be the first to share your experience with this piece.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section id="reviews" data-testid="product-reviews" className="mt-16 md:mt-24 pt-10 md:pt-16 border-t border-white/5">
+      <div className="flex items-center gap-3 mb-6 md:mb-8">
+        <span className="gold-line w-8 md:w-10" />
+        <span className="text-[10px] uppercase tracking-luxury text-gold-soft">Customer Reviews</span>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-6 md:gap-10 mb-8 md:mb-12">
+        {/* Summary card */}
+        <div className="bg-ink-900 border border-white/10 rounded-xl md:rounded-none p-5 md:p-6">
+          <div className="flex items-baseline gap-3">
+            <span className="font-serif text-4xl md:text-5xl text-cream leading-none">{avg.toFixed(1)}</span>
+            <span className="text-cream/50 text-sm">/ 5</span>
+          </div>
+          <StarRow rating={avg} size="lg" />
+          <div className="mt-2 text-xs text-cream/60">Based on {count} verified {count === 1 ? "review" : "reviews"}</div>
+        </div>
+        {/* Rating breakdown */}
+        <div className="md:col-span-2 bg-ink-900 border border-white/10 rounded-xl md:rounded-none p-5 md:p-6">
+          <div className="space-y-2">
+            {[5, 4, 3, 2, 1].map((n) => {
+              const c = buckets[n] || 0;
+              const pct = count ? (c / count) * 100 : 0;
+              return (
+                <button
+                  key={n}
+                  onClick={() => setFilterStar(filterStar === n ? 0 : n)}
+                  data-testid={`review-bucket-${n}`}
+                  className={`w-full flex items-center gap-3 text-xs text-cream/70 hover:text-gold transition-colors ${filterStar === n ? "text-gold" : ""}`}
+                >
+                  <span className="w-8 text-right">{n}★</span>
+                  <span className="flex-1 h-1.5 bg-white/5 rounded overflow-hidden">
+                    <span className="block h-full bg-gold" style={{ width: `${pct}%` }} />
+                  </span>
+                  <span className="w-8 text-left text-cream/50">{c}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Photo strip */}
+      {photos.length > 0 && (
+        <div className="mb-8 md:mb-12">
+          <div className="text-[10px] uppercase tracking-luxury text-gold-soft mb-3">Photos from customers · {photos.length}</div>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 md:-mx-0 md:px-0 pb-2" style={{ scrollbarWidth: "none" }}>
+            {photos.slice(0, 20).map((p, i) => (
+              <a key={i} href={p.url} target="_blank" rel="noreferrer" className="shrink-0 w-20 h-20 md:w-24 md:h-24 rounded-lg overflow-hidden border border-white/10 hover:border-gold/40 transition">
+                <img src={p.url} alt="Customer photo" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div className="text-sm text-cream/60">
+          {filtered.length} {filtered.length === 1 ? "review" : "reviews"}
+          {filterStar > 0 && (
+            <button onClick={() => setFilterStar(0)} className="ml-3 text-xs uppercase tracking-luxury text-red-400 hover:text-red-300">Clear filter</button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="rv-sort" className="text-[10px] uppercase tracking-luxury text-cream/50">Sort</label>
+          <select
+            id="rv-sort"
+            data-testid="review-sort"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            className="bg-ink-900 border border-white/10 text-xs text-cream/80 px-3 py-2 rounded"
+          >
+            <option value="recent">Most recent</option>
+            <option value="high">Highest rated</option>
+            <option value="low">Lowest rated</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Review list */}
+      <div className="grid gap-4 md:gap-5">
+        {filtered.slice(0, limit).map((r) => (
+          <div key={r.id || `${r.author_name}-${r.created_at}`} data-testid={`review-item-${r.id || ""}`} className="bg-ink-900 border border-white/10 rounded-xl md:rounded-none p-4 md:p-6">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="flex items-center gap-2 text-cream">
+                  <span className="font-serif text-base md:text-lg">{r.author_name || "Anonymous collector"}</span>
+                  {r.verified && (
+                    <span className="text-[9px] uppercase tracking-luxury text-emerald-400 border border-emerald-500/40 px-1.5 py-0.5 rounded">Verified purchase</span>
+                  )}
+                </div>
+                <div className="mt-1 flex items-center gap-2 text-xs text-cream/50">
+                  <StarRow rating={Number(r.rating) || 0} />
+                  {r.location && <span>· {r.location}</span>}
+                  {r.created_at && <span>· {new Date(r.created_at).toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" })}</span>}
+                </div>
+              </div>
+              {r.rating != null && (
+                <div className="text-xs text-cream/60 hidden sm:block">{Number(r.rating).toFixed(1)} / 5</div>
+              )}
+            </div>
+            {r.title && <h4 className="mt-3 font-serif text-cream text-lg leading-tight">{r.title}</h4>}
+            {r.body && <p className="mt-2 text-sm text-cream/70 leading-relaxed font-light whitespace-pre-line">{r.body}</p>}
+            {Array.isArray(r.photos) && r.photos.length > 0 && (
+              <div className="mt-3 flex gap-2 flex-wrap">
+                {r.photos.slice(0, 6).map((u, i) => (
+                  <a key={i} href={u} target="_blank" rel="noreferrer" className="w-16 h-16 md:w-20 md:h-20 overflow-hidden rounded-md border border-white/10 hover:border-gold/40 transition">
+                    <img src={u} alt="Customer" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {filtered.length > limit && (
+        <div className="mt-6 flex justify-center">
+          <button
+            data-testid="review-load-more"
+            onClick={() => setLimit((l) => l + 6)}
+            className="inline-flex items-center gap-2 px-5 py-3 border border-white/15 text-cream/80 text-xs uppercase tracking-luxury hover:border-gold/50 hover:text-gold"
+          >Load more reviews</button>
+        </div>
+      )}
+    </section>
+  );
+}
