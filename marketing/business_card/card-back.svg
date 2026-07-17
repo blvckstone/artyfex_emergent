@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Business Card BACK · 89mm x 54mm (with 3mm bleed) -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="95mm" height="60mm"
+     viewBox="0 0 950 600">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e6c98f"/>
+      <stop offset="50%" stop-color="#c9a15a"/>
+      <stop offset="100%" stop-color="#8c6a2f"/>
+    </linearGradient>
+    <radialGradient id="ink" cx="50%" cy="50%" r="75%">
+      <stop offset="0%" stop-color="#171717"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </radialGradient>
+  </defs>
+  <rect width="950" height="600" fill="url(#ink)"/>
+  <rect x="30" y="30" width="890" height="540" fill="none" stroke="url(#gold)" stroke-opacity="0.25" stroke-width="1"/>
+
+  <!-- Left panel: small monogram + brand line -->
+  <g transform="translate(120 300)">
+    <circle r="60" fill="none" stroke="url(#gold)" stroke-opacity="0.35" stroke-width="0.8"/>
+    <text y="20" text-anchor="middle"
+          font-family="'Cormorant', serif" font-style="italic" font-weight="500"
+          font-size="72" fill="url(#gold)">Art</text>
+    <line x1="-30" y1="35" x2="30" y2="35" stroke="url(#gold)" stroke-opacity="0.9" stroke-width="1" stroke-linecap="round"/>
+  </g>
+
+  <!-- Vertical divider -->
+  <line x1="240" y1="110" x2="240" y2="490" stroke="url(#gold)" stroke-opacity="0.30" stroke-width="0.6"/>
+
+  <!-- Right panel: contact block -->
+  <text x="290" y="120" font-family="'Cormorant', serif" font-weight="500" font-size="38" letter-spacing="2" fill="url(#gold)">Arty<tspan font-style="italic" font-weight="400">Fex</tspan></text>
+  <text x="290" y="145" font-family="'Outfit', sans-serif" font-weight="300" font-size="9" letter-spacing="6" fill="#c9a15a" fill-opacity="0.75">CLIENT  ·  TRADE  ·  BULK  ENQUIRIES</text>
+
+  <!-- Contact rows -->
+  <g font-family="'Outfit', 'Helvetica', sans-serif" font-weight="300" font-size="18" fill="#f5efe1">
+    <text x="290" y="200"><tspan font-family="'Outfit', sans-serif" font-weight="500" font-size="9" letter-spacing="4" fill="#c9a15a">WEBSITE</tspan>  <tspan dx="12">www.artyfex.in</tspan></text>
+    <text x="290" y="245"><tspan font-family="'Outfit', sans-serif" font-weight="500" font-size="9" letter-spacing="4" fill="#c9a15a">SUPPORT</tspan>  <tspan dx="12">artyfex@artyfex.in</tspan></text>
+    <text x="290" y="290"><tspan font-family="'Outfit', sans-serif" font-weight="500" font-size="9" letter-spacing="4" fill="#c9a15a">WHATSAPP</tspan>  <tspan dx="12">+91 98199 73850</tspan></text>
+    <text x="290" y="335"><tspan font-family="'Outfit', sans-serif" font-weight="500" font-size="9" letter-spacing="4" fill="#c9a15a">CALL</tspan>  <tspan dx="12">+91 90115 07760</tspan></text>
+    <text x="290" y="380"><tspan font-family="'Outfit', sans-serif" font-weight="500" font-size="9" letter-spacing="4" fill="#c9a15a">INSTAGRAM</tspan>  <tspan dx="12">@artyfex.in</tspan></text>
+    <text x="290" y="425"><tspan font-family="'Outfit', sans-serif" font-weight="500" font-size="9" letter-spacing="4" fill="#c9a15a">ATELIER</tspan>  <tspan dx="12">Malvani, Malad West, Mumbai 400095</tspan></text>
+  </g>
+
+  <line x1="290" y1="465" x2="860" y2="465" stroke="url(#gold)" stroke-opacity="0.30" stroke-width="0.5"/>
+  <text x="290" y="495" font-family="'Outfit', sans-serif" font-weight="300" font-size="10" letter-spacing="5" fill="#c9a15a" fill-opacity="0.75">100% HANDMADE  ·  ONE OF ONE  ·  INSURED WHITE-GLOVE DELIVERY</text>
+</svg>

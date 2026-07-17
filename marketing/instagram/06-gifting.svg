@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- INSTAGRAM POST 6 — Gifting card (1080x1080) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e6c98f"/>
+      <stop offset="100%" stop-color="#8c6a2f"/>
+    </linearGradient>
+    <radialGradient id="ink" cx="50%" cy="45%" r="75%">
+      <stop offset="0%" stop-color="#171717"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </radialGradient>
+  </defs>
+  <rect width="1080" height="1080" fill="url(#ink)"/>
+
+  <!-- Center monogram -->
+  <g transform="translate(540 400)">
+    <circle r="180" fill="none" stroke="url(#gold)" stroke-opacity="0.3" stroke-width="1"/>
+    <circle r="155" fill="none" stroke="url(#gold)" stroke-opacity="0.55" stroke-width="0.7"/>
+    <text y="52" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="220" fill="url(#gold)">Art</text>
+    <line x1="-90" y1="90" x2="90" y2="90" stroke="url(#gold)" stroke-opacity="0.9" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <text x="540" y="690" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="22" letter-spacing="14" fill="#c9a15a">THE  PERFECT  GIFT</text>
+  <line x1="380" y1="720" x2="700" y2="720" stroke="url(#gold)" stroke-opacity="0.5" stroke-width="0.7"/>
+
+  <text x="540" y="820" text-anchor="middle" font-family="'Cormorant', serif" font-weight="500" font-size="70" fill="url(#gold)">Wrapped in <tspan font-style="italic" font-weight="400" dx="6">craft.</tspan></text>
+
+  <text x="540" y="920" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="30" fill="#e5dfd0">Signed. Numbered. Delivered.</text>
+
+  <text x="540" y="1015" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="14" letter-spacing="7" fill="#c9a15a" fill-opacity="0.6">WWW.ARTYFEX.IN  ·  @ARTYFEX.IN</text>
+</svg>

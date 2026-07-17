@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Tri-fold brochure OUTER face (297mm x 210mm A4 landscape). 
+     Panel order (left → right when unfolded outer face):
+     [Back cover | Front cover flap | Front cover]
+     After Z-fold, viewer sees only the right-most panel = FRONT COVER. -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="297mm" height="210mm"
+     viewBox="0 0 2970 2100">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e6c98f"/>
+      <stop offset="50%" stop-color="#c9a15a"/>
+      <stop offset="100%" stop-color="#8c6a2f"/>
+    </linearGradient>
+    <radialGradient id="ink" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#171717"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </radialGradient>
+    <pattern id="grain" x="0" y="0" width="6" height="6" patternUnits="userSpaceOnUse">
+      <circle cx="3" cy="3" r="0.4" fill="#c9a15a" fill-opacity="0.04"/>
+    </pattern>
+  </defs>
+  <rect width="2970" height="2100" fill="url(#ink)"/>
+  <rect width="2970" height="2100" fill="url(#grain)"/>
+
+  <!-- Fold guides (dashed) — remove before printing if unwanted -->
+  <line x1="990" y1="0" x2="990" y2="2100" stroke="#c9a15a" stroke-opacity="0.10" stroke-dasharray="6 8"/>
+  <line x1="1980" y1="0" x2="1980" y2="2100" stroke="#c9a15a" stroke-opacity="0.10" stroke-dasharray="6 8"/>
+
+  <!-- ============================== PANEL 1 (Back Cover, leftmost) ============================== -->
+  <g>
+    <text x="495" y="260" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="22" letter-spacing="10" fill="#c9a15a">THE  ATELIER</text>
+    <line x1="395" y1="290" x2="595" y2="290" stroke="url(#gold)" stroke-opacity="0.5" stroke-width="0.7"/>
+    <text x="495" y="420" text-anchor="middle" font-family="'Cormorant', serif" font-weight="500" font-size="70" letter-spacing="2" fill="url(#gold)">A luxury poured</text>
+    <text x="495" y="500" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="70" letter-spacing="2" fill="url(#gold)">by hand.</text>
+
+    <g font-family="'Outfit', sans-serif" font-weight="300" font-size="20" fill="#e5dfd0">
+      <text x="140" y="700">ArtyFex is a Mumbai atelier crafting</text>
+      <text x="140" y="735">100% handmade resin art — mirrors,</text>
+      <text x="140" y="770">glass, watches, mobile cases, dining</text>
+      <text x="140" y="805">tables and bespoke furniture. Every</text>
+      <text x="140" y="840">piece is one of one, poured and</text>
+      <text x="140" y="875">finished by artisan hands — no two</text>
+      <text x="140" y="910">works are ever alike.</text>
+
+      <text x="140" y="1000">Since 2020, ArtyFex has been the</text>
+      <text x="140" y="1035">quiet answer for collectors, interior</text>
+      <text x="140" y="1070">designers and gifting occasions that</text>
+      <text x="140" y="1105">demand more than mass production.</text>
+    </g>
+
+    <!-- Small contact block -->
+    <line x1="140" y1="1260" x2="850" y2="1260" stroke="url(#gold)" stroke-opacity="0.3" stroke-width="0.6"/>
+    <text x="140" y="1310" font-family="'Outfit', sans-serif" font-weight="500" font-size="11" letter-spacing="5" fill="#c9a15a">TRADE  ·  BULK  ·  BESPOKE</text>
+    <g font-family="'Outfit', sans-serif" font-weight="300" font-size="20" fill="#e5dfd0">
+      <text x="140" y="1370">artyfex@artyfex.in</text>
+      <text x="140" y="1410">WhatsApp  +91 98199 73850</text>
+      <text x="140" y="1450">Instagram  @artyfex.in</text>
+      <text x="140" y="1490">www.artyfex.in</text>
+    </g>
+
+    <!-- Corner ornaments -->
+    <g stroke="url(#gold)" stroke-opacity="0.85" stroke-width="1.4" fill="none" stroke-linecap="round">
+      <path d="M 100 100 L 100 180 M 100 100 L 180 100"/>
+      <path d="M 890 1900 L 890 1820 M 890 1900 L 810 1900"/>
+    </g>
+  </g>
+
+  <!-- ============================== PANEL 2 (Front cover flap) ============================== -->
+  <g>
+    <text x="1485" y="260" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="22" letter-spacing="10" fill="#c9a15a">THE  CRAFT</text>
+    <line x1="1385" y1="290" x2="1585" y2="290" stroke="url(#gold)" stroke-opacity="0.5" stroke-width="0.7"/>
+
+    <text x="1485" y="420" text-anchor="middle" font-family="'Cormorant', serif" font-weight="500" font-size="64" letter-spacing="2" fill="url(#gold)">The 120-hour</text>
+    <text x="1485" y="495" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="64" fill="url(#gold)">ritual.</text>
+
+    <g font-family="'Outfit', sans-serif" font-weight="300" font-size="18" fill="#e5dfd0">
+      <text x="1130" y="680"><tspan font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="32" fill="url(#gold)">01 · Mood</tspan></text>
+      <text x="1130" y="720">A moodboard is composed with the</text>
+      <text x="1130" y="748">collector. Palette, dimensions and</text>
+      <text x="1130" y="776">crystal density are set.</text>
+
+      <text x="1130" y="890"><tspan font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="32" fill="url(#gold)">02 · Pour</tspan></text>
+      <text x="1130" y="930">Anti-yellowing epoxy is poured in</text>
+      <text x="1130" y="958">layered veins — every current directed</text>
+      <text x="1130" y="986">by hand, never by mould.</text>
+
+      <text x="1130" y="1100"><tspan font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="32" fill="url(#gold)">03 · Inlay</tspan></text>
+      <text x="1130" y="1140">Real crushed crystal (5–10mm) is</text>
+      <text x="1130" y="1168">placed grain by grain into the wet</text>
+      <text x="1130" y="1196">resin surface.</text>
+
+      <text x="1130" y="1310"><tspan font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="32" fill="url(#gold)">04 · Finish</tspan></text>
+      <text x="1130" y="1350">Hand sanded, polished and inspected</text>
+      <text x="1130" y="1378">for 72 hours before dispatch — signed</text>
+      <text x="1130" y="1406">and numbered by the atelier.</text>
+    </g>
+
+    <line x1="1130" y1="1600" x2="1840" y2="1600" stroke="url(#gold)" stroke-opacity="0.3" stroke-width="0.6"/>
+    <text x="1485" y="1660" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="12" letter-spacing="6" fill="#c9a15a" fill-opacity="0.85">72-HOUR CURE  ·  SIGNED  ·  NUMBERED  ·  ONE OF ONE</text>
+  </g>
+
+  <!-- ============================== PANEL 3 (FRONT COVER, rightmost) ============================== -->
+  <g>
+    <g stroke="url(#gold)" stroke-opacity="0.85" stroke-width="1.4" fill="none" stroke-linecap="round">
+      <path d="M 2110 100 L 2110 180 M 2110 100 L 2190 100"/>
+      <path d="M 2870 1900 L 2870 1820 M 2870 1900 L 2790 1900"/>
+    </g>
+
+    <!-- Big Monogram roundel -->
+    <g transform="translate(2475 780)">
+      <circle r="320" fill="none" stroke="url(#gold)" stroke-opacity="0.30" stroke-width="1.5"/>
+      <circle r="280" fill="none" stroke="url(#gold)" stroke-opacity="0.55" stroke-width="1"/>
+      <text y="90" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="420" letter-spacing="-6" fill="url(#gold)">Art</text>
+      <line x1="-160" y1="150" x2="160" y2="150" stroke="url(#gold)" stroke-opacity="0.95" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+
+    <line x1="2160" y1="1350" x2="2790" y2="1350" stroke="url(#gold)" stroke-opacity="0.35" stroke-width="0.7"/>
+
+    <text x="2475" y="1470" text-anchor="middle" font-family="'Cormorant', serif" font-weight="500" font-size="120" letter-spacing="6" fill="url(#gold)">Arty<tspan font-style="italic" font-weight="400">Fex</tspan></text>
+
+    <line x1="2160" y1="1520" x2="2790" y2="1520" stroke="url(#gold)" stroke-opacity="0.35" stroke-width="0.7"/>
+
+    <text x="2475" y="1580" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="20" letter-spacing="12" fill="#c9a15a" fill-opacity="0.9">DECORATIVE  LUXURY  BRAND</text>
+
+    <text x="2475" y="1780" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="44" fill="#f5efe1" fill-opacity="0.75">Handmade Resin Art</text>
+    <text x="2475" y="1830" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="16" letter-spacing="7" fill="#c9a15a" fill-opacity="0.7">MUMBAI  ·  SINCE  2020</text>
+
+    <text x="2475" y="1960" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="13" letter-spacing="6" fill="#c9a15a" fill-opacity="0.55">www.artyfex.in</text>
+  </g>
+</svg>

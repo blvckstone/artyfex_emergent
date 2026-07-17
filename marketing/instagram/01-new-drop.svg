@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- INSTAGRAM POST 1 — New Drop / Product Hero (1080x1080) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e6c98f"/>
+      <stop offset="50%" stop-color="#c9a15a"/>
+      <stop offset="100%" stop-color="#8c6a2f"/>
+    </linearGradient>
+    <radialGradient id="ink" cx="50%" cy="42%" r="72%">
+      <stop offset="0%" stop-color="#171717"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </radialGradient>
+  </defs>
+  <rect width="1080" height="1080" fill="url(#ink)"/>
+  <rect x="40" y="40" width="1000" height="1000" fill="none" stroke="url(#gold)" stroke-opacity="0.28" stroke-width="1"/>
+
+  <text x="540" y="180" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="22" letter-spacing="14" fill="#c9a15a">JUST  DROPPED</text>
+  <line x1="430" y1="210" x2="650" y2="210" stroke="url(#gold)" stroke-opacity="0.55" stroke-width="0.7"/>
+
+  <text x="540" y="440" text-anchor="middle" font-family="'Cormorant', serif" font-weight="500" font-size="110" letter-spacing="3" fill="url(#gold)">Moon</text>
+  <text x="540" y="560" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="110" letter-spacing="3" fill="url(#gold)">Crystal Mirror.</text>
+
+  <line x1="340" y1="640" x2="740" y2="640" stroke="url(#gold)" stroke-opacity="0.35" stroke-width="0.7"/>
+
+  <text x="540" y="720" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="24" letter-spacing="5" fill="#e5dfd0">Handpoured. Crystal-inlaid. One of one.</text>
+
+  <g transform="translate(540 850)">
+    <rect x="-170" y="-40" width="340" height="80" fill="none" stroke="url(#gold)" stroke-width="1.4"/>
+    <text y="12" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="500" font-size="18" letter-spacing="8" fill="url(#gold)">EXPLORE ON WWW.ARTYFEX.IN</text>
+  </g>
+
+  <text x="540" y="990" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="14" letter-spacing="7" fill="#c9a15a" fill-opacity="0.6">ARTYFEX  ·  MUMBAI  ATELIER  ·  SINCE  2020</text>
+</svg>

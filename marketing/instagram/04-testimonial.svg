@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- INSTAGRAM POST 4 — Testimonial style quote card (1080x1080) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e6c98f"/>
+      <stop offset="100%" stop-color="#8c6a2f"/>
+    </linearGradient>
+    <radialGradient id="ink" cx="50%" cy="42%" r="75%">
+      <stop offset="0%" stop-color="#171717"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </radialGradient>
+  </defs>
+  <rect width="1080" height="1080" fill="url(#ink)"/>
+
+  <!-- Big quote marks -->
+  <text x="180" y="340" font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="280" fill="url(#gold)" fill-opacity="0.65">“</text>
+
+  <g font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="48" fill="#f5efe1">
+    <text x="180" y="460">A statement piece that</text>
+    <text x="180" y="520">holds the room hostage</text>
+    <text x="180" y="580">the moment you walk in.</text>
+    <text x="180" y="640">Better than anything</text>
+    <text x="180" y="700">the boutiques had.</text>
+  </g>
+
+  <line x1="180" y1="780" x2="420" y2="780" stroke="url(#gold)" stroke-opacity="0.8" stroke-width="1"/>
+  <text x="180" y="830" font-family="'Outfit', sans-serif" font-weight="500" font-size="20" letter-spacing="6" fill="url(#gold)">A  MUMBAI  COLLECTOR</text>
+  <text x="180" y="862" font-family="'Outfit', sans-serif" font-weight="300" font-size="16" letter-spacing="4" fill="#c9a15a" fill-opacity="0.75">Verified purchase  ·  Bandra West</text>
+
+  <g transform="translate(880 940)">
+    <circle r="70" fill="none" stroke="url(#gold)" stroke-opacity="0.5" stroke-width="1"/>
+    <text y="22" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="78" fill="url(#gold)">Art</text>
+    <line x1="-35" y1="38" x2="35" y2="38" stroke="url(#gold)" stroke-opacity="0.85" stroke-width="1" stroke-linecap="round"/>
+  </g>
+</svg>

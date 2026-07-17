@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- INSTAGRAM POST 5 — B2B / bulk / trade CTA (1080x1080) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e6c98f"/>
+      <stop offset="100%" stop-color="#8c6a2f"/>
+    </linearGradient>
+    <radialGradient id="ink" cx="50%" cy="45%" r="75%">
+      <stop offset="0%" stop-color="#171717"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </radialGradient>
+  </defs>
+  <rect width="1080" height="1080" fill="url(#ink)"/>
+  <rect x="40" y="40" width="1000" height="1000" fill="none" stroke="url(#gold)" stroke-opacity="0.25" stroke-width="1"/>
+
+  <text x="540" y="160" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="22" letter-spacing="14" fill="#c9a15a">FOR  ARCHITECTS  &amp;  BOUTIQUES</text>
+  <line x1="320" y1="190" x2="760" y2="190" stroke="url(#gold)" stroke-opacity="0.5" stroke-width="0.7"/>
+
+  <text x="540" y="370" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="104" fill="url(#gold)">Trade &amp; Bulk.</text>
+
+  <g font-family="'Outfit', sans-serif" font-weight="300" font-size="24" fill="#e5dfd0" text-anchor="middle">
+    <text x="540" y="500">Corporate gifting, hospitality builds,</text>
+    <text x="540" y="535">boutique retail, luxury developments.</text>
+    <text x="540" y="620" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="32" fill="url(#gold)">MOQ 6 pieces · Lead time 3–5 weeks</text>
+  </g>
+
+  <g transform="translate(540 800)">
+    <rect x="-200" y="-50" width="400" height="100" fill="url(#gold)"/>
+    <text y="14" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="600" font-size="22" letter-spacing="8" fill="#0a0a0a">REQUEST  A  QUOTE</text>
+  </g>
+
+  <text x="540" y="930" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="22" fill="#e5dfd0">artyfex@artyfex.in   ·   WhatsApp +91 98199 73850</text>
+  <text x="540" y="1010" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="14" letter-spacing="8" fill="#c9a15a" fill-opacity="0.6">WWW.ARTYFEX.IN  ·  MUMBAI  ATELIER</text>
+</svg>

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Stacked lockup: monogram over wordmark. Use on posters, packaging, invoices. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 780">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0%" stop-color="#141414"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e6c98f"/>
+      <stop offset="50%" stop-color="#c9a15a"/>
+      <stop offset="100%" stop-color="#8c6a2f"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="780" fill="url(#bg)"/>
+  <!-- Monogram roundel -->
+  <circle cx="300" cy="260" r="140" fill="none" stroke="url(#gold)" stroke-opacity="0.35" stroke-width="1"/>
+  <circle cx="300" cy="260" r="120" fill="none" stroke="url(#gold)" stroke-opacity="0.6" stroke-width="0.7"/>
+  <text x="300" y="300"
+        text-anchor="middle"
+        font-family="'Cormorant', 'Times New Roman', serif"
+        font-style="italic"
+        font-weight="500"
+        font-size="160"
+        letter-spacing="-3"
+        fill="url(#gold)">Art</text>
+  <line x1="240" y1="330" x2="360" y2="330" stroke="url(#gold)" stroke-opacity="0.9" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Wordmark below -->
+  <line x1="140" y1="470" x2="460" y2="470" stroke="url(#gold)" stroke-opacity="0.35" stroke-width="0.6"/>
+  <text x="300" y="540"
+        text-anchor="middle"
+        font-family="'Cormorant', serif"
+        font-weight="500"
+        font-size="72"
+        letter-spacing="3"
+        fill="url(#gold)">Arty<tspan font-style="italic" font-weight="400">Fex</tspan></text>
+  <line x1="140" y1="560" x2="460" y2="560" stroke="url(#gold)" stroke-opacity="0.35" stroke-width="0.6"/>
+  <text x="300" y="600"
+        text-anchor="middle"
+        font-family="'Outfit', 'Helvetica', sans-serif"
+        font-weight="300"
+        font-size="14"
+        letter-spacing="10"
+        fill="#c9a15a" fill-opacity="0.85">DECORATIVE  LUXURY  BRAND</text>
+  <text x="300" y="645"
+        text-anchor="middle"
+        font-family="'Outfit', sans-serif"
+        font-weight="300"
+        font-size="12"
+        letter-spacing="8"
+        fill="#c9a15a" fill-opacity="0.55">HANDMADE  IN  MUMBAI  ·  SINCE  2020</text>
+  <text x="300" y="725"
+        text-anchor="middle"
+        font-family="'Outfit', sans-serif"
+        font-weight="300"
+        font-size="11"
+        letter-spacing="6"
+        fill="#c9a15a" fill-opacity="0.4">www.artyfex.in</text>
+</svg>

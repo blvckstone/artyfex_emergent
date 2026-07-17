@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Symbol only, solid gold — for embossing / foil stamping / packaging -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <circle cx="256" cy="256" r="200" fill="none" stroke="#c9a15a" stroke-width="3"/>
+  <circle cx="256" cy="256" r="175" fill="none" stroke="#c9a15a" stroke-width="1"/>
+  <text x="256" y="310"
+        text-anchor="middle"
+        font-family="'Cormorant', serif"
+        font-style="italic"
+        font-weight="500"
+        font-size="200"
+        fill="#c9a15a">Art</text>
+  <line x1="196" y1="350" x2="316" y2="350" stroke="#c9a15a" stroke-width="3" stroke-linecap="round"/>
+</svg>

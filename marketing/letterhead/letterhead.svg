@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Letterhead A4 portrait (210mm x 297mm) · use for invoices, quotes, formal replies. -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="210mm" height="297mm"
+     viewBox="0 0 2100 2970">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a37a2e"/>
+      <stop offset="100%" stop-color="#6f4f18"/>
+    </linearGradient>
+  </defs>
+  <rect width="2100" height="2970" fill="#faf6ec"/>
+
+  <!-- Top band -->
+  <rect x="0" y="0" width="2100" height="90" fill="#0a0a0a"/>
+  <line x1="0" y1="92" x2="2100" y2="92" stroke="url(#gold)" stroke-width="3"/>
+
+  <!-- Logo header -->
+  <g transform="translate(150 250)">
+    <text x="0" y="0" font-family="'Cormorant', serif" font-weight="500" font-size="78" letter-spacing="4" fill="#141414">Arty<tspan font-style="italic" font-weight="400" fill="url(#gold)">Fex</tspan></text>
+    <line x1="0" y1="30" x2="480" y2="30" stroke="url(#gold)" stroke-opacity="0.6" stroke-width="0.7"/>
+    <text x="0" y="75" font-family="'Outfit', sans-serif" font-weight="300" font-size="14" letter-spacing="9" fill="#6f4f18">DECORATIVE  LUXURY  BRAND</text>
+  </g>
+
+  <!-- Right block: monogram -->
+  <g transform="translate(1800 250)">
+    <circle r="70" fill="none" stroke="url(#gold)" stroke-opacity="0.55" stroke-width="1"/>
+    <text y="22" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="78" fill="url(#gold)">Art</text>
+    <line x1="-35" y1="38" x2="35" y2="38" stroke="url(#gold)" stroke-opacity="0.85" stroke-width="1" stroke-linecap="round"/>
+  </g>
+
+  <!-- Body area guide -->
+  <line x1="150" y1="440" x2="1950" y2="440" stroke="#c9a15a" stroke-opacity="0.35" stroke-width="0.6"/>
+
+  <!-- Placeholder for typewritten letter -->
+  <g font-family="'Outfit', sans-serif" font-weight="300" font-size="22" fill="#4a4a4a">
+    <text x="150" y="560">Date:  DD / MM / YYYY</text>
+    <text x="150" y="640">To,</text>
+    <text x="150" y="680">[ Recipient Name ]</text>
+    <text x="150" y="720">[ Address Line 1 ]</text>
+    <text x="150" y="760">[ Address Line 2 ]</text>
+    <text x="150" y="850">Dear [Name],</text>
+    <text x="150" y="920">— body copy —</text>
+    <text x="150" y="960">Please replace this block with your letter content when using</text>
+    <text x="150" y="1000">this letterhead in Word, Google Docs or PDF editor.</text>
+
+    <text x="150" y="1220">Warm regards,</text>
+    <text x="150" y="1300" font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="34" fill="#141414">ArtyFex Support</text>
+    <text x="150" y="1340">Client &amp; Trade Team</text>
+  </g>
+
+  <!-- Footer -->
+  <line x1="150" y1="2760" x2="1950" y2="2760" stroke="url(#gold)" stroke-opacity="0.5" stroke-width="0.7"/>
+  <g font-family="'Outfit', sans-serif" font-weight="300" font-size="18" fill="#4a4a4a" text-anchor="middle">
+    <text x="1050" y="2830">ArtyFex Atelier  ·  Malvani, Malad West, Mumbai 400095  ·  India</text>
+    <text x="1050" y="2870">artyfex@artyfex.in  ·  +91 98199 73850  ·  www.artyfex.in  ·  @artyfex.in</text>
+    <text x="1050" y="2915" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="20" fill="#6f4f18">100% Handmade  ·  One of One  ·  Insured White-Glove Delivery</text>
+  </g>
+</svg>

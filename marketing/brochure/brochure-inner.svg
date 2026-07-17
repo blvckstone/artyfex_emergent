@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Tri-fold brochure INNER spread (297mm x 210mm A4 landscape).
+     Reads left-to-right as ONE continuous spread when fully unfolded. -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="297mm" height="210mm"
+     viewBox="0 0 2970 2100">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e6c98f"/>
+      <stop offset="50%" stop-color="#c9a15a"/>
+      <stop offset="100%" stop-color="#8c6a2f"/>
+    </linearGradient>
+    <radialGradient id="ink" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#171717"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </radialGradient>
+    <pattern id="grain" x="0" y="0" width="6" height="6" patternUnits="userSpaceOnUse">
+      <circle cx="3" cy="3" r="0.4" fill="#c9a15a" fill-opacity="0.04"/>
+    </pattern>
+  </defs>
+  <rect width="2970" height="2100" fill="url(#ink)"/>
+  <rect width="2970" height="2100" fill="url(#grain)"/>
+  <line x1="990" y1="0" x2="990" y2="2100" stroke="#c9a15a" stroke-opacity="0.10" stroke-dasharray="6 8"/>
+  <line x1="1980" y1="0" x2="1980" y2="2100" stroke="#c9a15a" stroke-opacity="0.10" stroke-dasharray="6 8"/>
+
+  <!-- Common top header -->
+  <text x="1485" y="180" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="20" letter-spacing="12" fill="#c9a15a" fill-opacity="0.85">THE  COLLECTION  ·  A T  A  G L A N C E</text>
+  <line x1="1150" y1="210" x2="1820" y2="210" stroke="url(#gold)" stroke-opacity="0.35" stroke-width="0.6"/>
+
+  <!-- ============================== INNER PANEL 1 — Mirrors + Glass ============================== -->
+  <g>
+    <text x="495" y="370" text-anchor="middle" font-family="'Cormorant', serif" font-weight="500" font-size="56" fill="url(#gold)" xml:space="preserve">Mirrors &amp; <tspan dx="8" font-style="italic">Glass</tspan></text>
+
+    <g font-family="'Outfit', sans-serif" font-weight="300" font-size="19" fill="#e5dfd0">
+      <text x="140" y="520">Statement mirrors are the signature of</text>
+      <text x="140" y="550">the atelier — geode-inspired, moon-</text>
+      <text x="140" y="580">crystal, blush &amp; gold, obsidian black.</text>
+      <text x="140" y="610">Each begins as a moodboard and ends</text>
+      <text x="140" y="640">as a one-of-one heirloom.</text>
+    </g>
+
+    <text x="140" y="760" font-family="'Outfit', sans-serif" font-weight="500" font-size="11" letter-spacing="5" fill="#c9a15a">SIGNATURE  PIECES</text>
+    <g font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="26" fill="#f5efe1">
+      <text x="140" y="810">—  Moon Crystal Stone Mirror</text>
+      <text x="140" y="860">—  Obsidian Geode Mirror</text>
+      <text x="140" y="910">—  Blush &amp; Gold Round</text>
+      <text x="140" y="960">—  Emerald Lagoon</text>
+      <text x="140" y="1010">—  Handmade Wall Glass Panels</text>
+    </g>
+
+    <line x1="140" y1="1160" x2="850" y2="1160" stroke="url(#gold)" stroke-opacity="0.3" stroke-width="0.5"/>
+    <text x="495" y="1220" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="28" fill="url(#gold)">Sizes 18" — 60" · Custom on request</text>
+
+    <text x="495" y="1490" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="14" letter-spacing="7" fill="#c9a15a" fill-opacity="0.8">FROM  ₹11,900  ·  BESPOKE  ON  QUOTE</text>
+
+    <g stroke="url(#gold)" stroke-opacity="0.85" stroke-width="1.4" fill="none" stroke-linecap="round">
+      <path d="M 100 100 L 100 180 M 100 100 L 180 100"/>
+      <path d="M 890 1900 L 890 1820 M 890 1900 L 810 1900"/>
+    </g>
+  </g>
+
+  <!-- ============================== INNER PANEL 2 — Furniture + Bespoke ============================== -->
+  <g>
+    <text x="1485" y="370" text-anchor="middle" font-family="'Cormorant', serif" font-weight="500" font-size="56" fill="url(#gold)" xml:space="preserve">Furniture &amp; <tspan dx="8" font-style="italic">Bespoke</tspan></text>
+
+    <g font-family="'Outfit', sans-serif" font-weight="300" font-size="19" fill="#e5dfd0">
+      <text x="1130" y="520">Resin-inlaid dining tables, console</text>
+      <text x="1130" y="550">tops, wardrobes and cabinet panels —</text>
+      <text x="1130" y="580">designed to sit as sculpture first, and</text>
+      <text x="1130" y="610">furniture second. Bulk &amp; trade orders</text>
+      <text x="1130" y="640">welcomed for boutiques, salons and</text>
+      <text x="1130" y="670">luxury developments.</text>
+    </g>
+
+    <text x="1130" y="790" font-family="'Outfit', sans-serif" font-weight="500" font-size="11" letter-spacing="5" fill="#c9a15a">CATEGORIES</text>
+    <g font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="26" fill="#f5efe1">
+      <text x="1130" y="840">—  Dining Tables</text>
+      <text x="1130" y="890">—  Wardrobes &amp; Cabinets</text>
+      <text x="1130" y="940">—  Custom Watches</text>
+      <text x="1130" y="990">—  Mobile &amp; Tech Cases</text>
+      <text x="1130" y="1040">—  Corporate Gifting Suites</text>
+    </g>
+
+    <line x1="1130" y1="1190" x2="1840" y2="1190" stroke="url(#gold)" stroke-opacity="0.3" stroke-width="0.5"/>
+    <text x="1485" y="1250" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="28" fill="url(#gold)">MOQ 6 pieces · Lead time 3–5 weeks</text>
+
+    <text x="1485" y="1490" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="14" letter-spacing="7" fill="#c9a15a" fill-opacity="0.8">B2B  ·  TRADE  ·  BULK  ENQUIRIES  WELCOME</text>
+  </g>
+
+  <!-- ============================== INNER PANEL 3 — Order + Contact ============================== -->
+  <g>
+    <text x="2475" y="370" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="56" fill="url(#gold)">How to commission.</text>
+
+    <g font-family="'Cormorant', serif" font-style="italic" font-weight="500" font-size="36" fill="url(#gold)">
+      <text x="2110" y="550">01</text>
+      <text x="2110" y="780">02</text>
+      <text x="2110" y="1010">03</text>
+      <text x="2110" y="1240">04</text>
+    </g>
+    <g font-family="'Outfit', sans-serif" font-weight="300" font-size="19" fill="#e5dfd0">
+      <text x="2200" y="540">Reach out on WhatsApp, email or</text>
+      <text x="2200" y="568">Instagram DM with your inspiration.</text>
+
+      <text x="2200" y="770">A moodboard, quote and lead time</text>
+      <text x="2200" y="798">are shared within 24 hours.</text>
+
+      <text x="2200" y="1000">Confirm with 40% booking amount.</text>
+      <text x="2200" y="1028">Your piece enters the atelier queue.</text>
+
+      <text x="2200" y="1230">Signed, numbered, insured and</text>
+      <text x="2200" y="1258">delivered white-glove pan-India.</text>
+    </g>
+
+    <line x1="2110" y1="1420" x2="2830" y2="1420" stroke="url(#gold)" stroke-opacity="0.35" stroke-width="0.6"/>
+    <text x="2475" y="1490" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="500" font-size="11" letter-spacing="5" fill="#c9a15a">SPEAK  TO  ARTYFEX</text>
+    <g font-family="'Outfit', sans-serif" font-weight="300" font-size="20" fill="#f5efe1">
+      <text x="2475" y="1550" text-anchor="middle">artyfex@artyfex.in</text>
+      <text x="2475" y="1590" text-anchor="middle">WhatsApp  +91 98199 73850</text>
+      <text x="2475" y="1630" text-anchor="middle">@artyfex.in</text>
+      <text x="2475" y="1690" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="28" fill="url(#gold)">www.artyfex.in</text>
+    </g>
+
+    <g stroke="url(#gold)" stroke-opacity="0.85" stroke-width="1.4" fill="none" stroke-linecap="round">
+      <path d="M 2110 100 L 2110 180 M 2110 100 L 2190 100"/>
+      <path d="M 2870 1900 L 2870 1820 M 2870 1900 L 2790 1900"/>
+    </g>
+  </g>
+</svg>

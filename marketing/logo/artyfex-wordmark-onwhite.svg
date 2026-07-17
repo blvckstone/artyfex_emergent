@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ArtyFex wordmark · dark on cream · use on light backgrounds -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 240" role="img" aria-label="ArtyFex">
+  <defs>
+    <linearGradient id="goldSolid" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a37a2e"/>
+      <stop offset="100%" stop-color="#6f4f18"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="240" fill="#f5efe1"/>
+  <line x1="120" y1="90" x2="600" y2="90" stroke="url(#goldSolid)" stroke-opacity="0.55" stroke-width="0.6"/>
+  <text x="360" y="160"
+        text-anchor="middle"
+        font-family="'Cormorant', 'Times New Roman', serif"
+        font-weight="500"
+        font-size="104"
+        letter-spacing="4"
+        fill="#141414">Arty<tspan font-style="italic" font-weight="400" fill="url(#goldSolid)">Fex</tspan></text>
+  <line x1="120" y1="178" x2="600" y2="178" stroke="url(#goldSolid)" stroke-opacity="0.55" stroke-width="0.6"/>
+  <text x="360" y="205"
+        text-anchor="middle"
+        font-family="'Outfit', 'Helvetica', sans-serif"
+        font-weight="300"
+        font-size="14"
+        letter-spacing="9"
+        fill="#6f4f18">DECORATIVE  LUXURY  BRAND</text>
+</svg>

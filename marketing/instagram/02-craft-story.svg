@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- INSTAGRAM POST 2 — Craft story / behind the scenes (1080x1080) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e6c98f"/>
+      <stop offset="50%" stop-color="#c9a15a"/>
+      <stop offset="100%" stop-color="#8c6a2f"/>
+    </linearGradient>
+    <radialGradient id="ink" cx="50%" cy="45%" r="75%">
+      <stop offset="0%" stop-color="#171717"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </radialGradient>
+  </defs>
+  <rect width="1080" height="1080" fill="url(#ink)"/>
+
+  <!-- Big serif numeral -->
+  <text x="540" y="470" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="420" letter-spacing="-10" fill="url(#gold)" fill-opacity="0.9">120</text>
+
+  <text x="540" y="570" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="32" letter-spacing="12" fill="#c9a15a">HOURS  ·  BY  HAND</text>
+
+  <line x1="380" y1="620" x2="700" y2="620" stroke="url(#gold)" stroke-opacity="0.5" stroke-width="0.8"/>
+
+  <g font-family="'Outfit', sans-serif" font-weight="300" font-size="22" fill="#e5dfd0" text-anchor="middle">
+    <text x="540" y="700">Every ArtyFex piece is poured, veined,</text>
+    <text x="540" y="732">crystal-inlaid, cured and finished</text>
+    <text x="540" y="764">across four days — one artisan, one hand.</text>
+  </g>
+
+  <text x="540" y="880" text-anchor="middle" font-family="'Cormorant', serif" font-style="italic" font-weight="400" font-size="38" fill="url(#gold)">No moulds. No machines. No shortcuts.</text>
+
+  <text x="540" y="1010" text-anchor="middle" font-family="'Outfit', sans-serif" font-weight="300" font-size="14" letter-spacing="8" fill="#c9a15a" fill-opacity="0.6">@ARTYFEX.IN  ·  WWW.ARTYFEX.IN</text>
+</svg>

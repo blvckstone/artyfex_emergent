@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Business Card FRONT · 89mm x 54mm (with 3mm bleed → 95x60mm total) · print at 300dpi
+     Trim marks NOT shown here; add via your printer's template if required. -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="95mm" height="60mm"
+     viewBox="0 0 950 600"
+     preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e6c98f"/>
+      <stop offset="50%" stop-color="#c9a15a"/>
+      <stop offset="100%" stop-color="#8c6a2f"/>
+    </linearGradient>
+    <radialGradient id="ink" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#171717"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </radialGradient>
+    <pattern id="grain" x="0" y="0" width="3" height="3" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="0.25" fill="#c9a15a" fill-opacity="0.04"/>
+    </pattern>
+  </defs>
+  <!-- bleed background -->
+  <rect width="950" height="600" fill="url(#ink)"/>
+  <rect width="950" height="600" fill="url(#grain)"/>
+  <!-- inner safe area frame (30px = ~3mm from bleed edge) -->
+  <rect x="30" y="30" width="890" height="540" fill="none" stroke="url(#gold)" stroke-opacity="0.25" stroke-width="1"/>
+  <!-- ornamental corner accents (top-left / bottom-right) -->
+  <g stroke="url(#gold)" stroke-opacity="0.85" stroke-width="1.2" fill="none" stroke-linecap="round">
+    <path d="M 60 60 L 60 110 M 60 60 L 110 60"/>
+    <path d="M 890 540 L 890 490 M 890 540 L 840 540"/>
+  </g>
+  <!-- Monogram roundel -->
+  <g transform="translate(475 210)">
+    <circle r="110" fill="none" stroke="url(#gold)" stroke-opacity="0.30" stroke-width="1"/>
+    <circle r="90" fill="none" stroke="url(#gold)" stroke-opacity="0.55" stroke-width="0.6"/>
+    <text y="30" text-anchor="middle"
+          font-family="'Cormorant', 'Times New Roman', serif"
+          font-style="italic" font-weight="500" font-size="130"
+          fill="url(#gold)">Art</text>
+    <line x1="-50" y1="55" x2="50" y2="55" stroke="url(#gold)" stroke-opacity="0.9" stroke-width="1.4" stroke-linecap="round"/>
+  </g>
+  <!-- Wordmark -->
+  <text x="475" y="420" text-anchor="middle"
+        font-family="'Cormorant', serif" font-weight="500"
+        font-size="66" letter-spacing="5" fill="url(#gold)">Arty<tspan font-style="italic" font-weight="400">Fex</tspan></text>
+  <!-- Tagline -->
+  <line x1="330" y1="455" x2="620" y2="455" stroke="url(#gold)" stroke-opacity="0.35" stroke-width="0.5"/>
+  <text x="475" y="495" text-anchor="middle"
+        font-family="'Outfit', 'Helvetica', sans-serif" font-weight="300"
+        font-size="14" letter-spacing="8"
+        fill="#c9a15a" fill-opacity="0.85">DECORATIVE  LUXURY  BRAND</text>
+  <text x="475" y="530" text-anchor="middle"
+        font-family="'Outfit', sans-serif" font-weight="300"
+        font-size="10" letter-spacing="6"
+        fill="#c9a15a" fill-opacity="0.55">HANDMADE  IN  MUMBAI  ·  SINCE  2020</text>
+</svg>

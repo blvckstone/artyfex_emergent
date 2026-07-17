@@ -3181,3 +3181,70 @@ test_plan:
   test_all: false
   test_priority: "high_first"
 
+
+  - task: "Phase C · Prod pentest + fixes for FastAPI /docs exposure"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Prod pentest against https://artyfex-backend.onrender.com:
+          - /docs, /redoc, /openapi.json were 200 OK → recon-friendly for attackers
+          Fix: FastAPI now built with `docs_url=None if _is_prod else "/docs"`.
+          When user sets APP_ENV=production on Render, /docs will 404.
+          Verified locally: dev preview still exposes /docs (as intended).
+
+marketing:
+  - task: "Phase C · Print-ready marketing collateral kit"
+    implemented: true
+    working: "NA"
+    file: "marketing/**/*, frontend/public/downloads/artyfex-marketing-kit.zip"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Full brand kit generated per user request. All designs use the site's
+          gold-on-ink luxury theme (Cormorant Garamond + Outfit).
+          Deliverables:
+          - 5 logo SVGs: wordmark gold-on-ink, wordmark dark-on-cream, monogram square,
+            stacked lockup, symbol-only mono
+          - Business card 89x54mm with 3mm bleed: front + back SVG, individual PDFs,
+            combined 2-page PDF
+          - Tri-fold A4 brochure (outer + inner spreads), SVG + PDFs + 2-page PDF
+          - A4 letterhead SVG + PDF
+          - 6 Instagram post templates (1080x1080): new-drop, craft-story, categories,
+            testimonial, trade-bulk, gifting
+          - Preview PNG renders for every asset
+          - Full README with printer instructions, brand palette, typography guide
+          Bundle: /app/frontend/public/downloads/artyfex-marketing-kit.zip (2.2 MB, 46 files)
+          Also individual PDFs at /downloads/artyfex-business-card.pdf etc.
+          After next Vercel deploy user can share https://www.artyfex.in/downloads/artyfex-marketing-kit.zip
+          with the marketing/print team directly.
+
+  - agent: "main"
+    message: |
+      Phase C complete + prod is live with security fixes verified:
+      ✅ Rate limiting on 6 auth/abuse endpoints (10/min admin+user login, 5/min signup+b2b, 20/min coupon, 10/min google admin)
+      ✅ Security headers middleware on all responses (X-Content-Type-Options, X-Frame-Options DENY, Referrer-Policy, Permissions-Policy, HSTS on https)
+      ✅ CORS spec-compliant (no wildcard+credentials); APP_ENV=production narrows to allowlist
+      ✅ /docs, /redoc, /openapi.json disabled when APP_ENV=production
+      ✅ JWT_SECRET fail-fast if weak in prod
+      ✅ UserSignup/UserLogin field validators (password 8-128 chars)
+      ✅ Admin CMS: "Explore the Atelier / Curated worlds of luxury" section — tiles auto-seed with 5 luxury defaults so admin can immediately edit images, slugs, labels. "Reset to Luxury Defaults" button. CloudinaryUpload got new compact mode.
+      ✅ Favicon regenerated: "Art" monogram in gold-on-ink, 12 icon variants (SVG, ICO, PNGs, PWA maskables)
+      ✅ SEO: twitter:card + og:image + canonical + hreflang + JSON-LD Organization+WebSite in index.html
+      ✅ Marketing collateral: 5 logo SVGs, business card (F+B), tri-fold brochure, letterhead, 6 IG posts, all as SVG + print PDFs + PNG previews + README
+      ⏳ User still needs to:
+        1. Rotate 7 exposed secrets (Atlas, Razorpay live, Razorpay webhook, Google OAuth, Cloudinary, Resend, JWT)
+        2. Set APP_ENV=production + CORS_ORIGINS=https://www.artyfex.in,... on Render
+        3. Redeploy (auto)
+      After step 2, /docs will 404 and CORS will be strict allowlist.
+
