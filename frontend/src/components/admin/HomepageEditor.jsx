@@ -3,6 +3,16 @@ import { toast } from "sonner";
 import { Loader2, Save, Image as ImageIcon, Megaphone, Sparkles, Star, Hammer, LayoutGrid, MessageSquareQuote, AlertTriangle, Grid3x3, Trophy, Menu, PlusCircle, Trash2 } from "lucide-react";
 import CloudinaryUpload from "@/components/admin/CloudinaryUpload";
 
+// Mirror of the DEFAULTS in /components/CategoryMosaic.jsx — so the admin can see
+// what's currently rendering on the storefront and edit the images directly.
+const DEFAULT_CATEGORY_TILES = [
+  { slug: "mirrors", label: "Luxury Mirrors", keyword: "handmade resin · crystal", image: "https://images.unsplash.com/photo-1599696848652-f0ff23bc911f?auto=format&fit=crop&w=900&q=60" },
+  { slug: "wall-art", label: "Modern Wall Art", keyword: "statement pieces", image: "https://images.unsplash.com/photo-1555432384-3b2fa7b650c9?auto=format&fit=crop&w=900&q=60" },
+  { slug: "sculpture", label: "Sculpture", keyword: "limited editions", image: "https://images.unsplash.com/photo-1601887389937-0b02c26b602c?auto=format&fit=crop&w=700&q=60" },
+  { slug: "lighting", label: "Lighting", keyword: "resin · brass", image: "https://images.unsplash.com/photo-1507494924047-60b8ee826ca9?auto=format&fit=crop&w=700&q=60" },
+  { slug: "custom", label: "Bespoke / Custom", keyword: "designed with you", image: "https://images.unsplash.com/photo-1716221234833-1888747eabec?auto=format&fit=crop&w=700&q=60" },
+];
+
 const inp = "w-full bg-ink-950 border border-white/15 focus:border-gold focus:outline-none px-3 py-2.5 text-sm text-cream outline-none";
 const Fld = ({ label, children, hint }) => (
   <label className="block">
@@ -33,7 +43,16 @@ export default function HomepageEditor({ authed }) {
 
   useEffect(() => {
     if (!authed) return;
-    authed.get("/admin/homepage").then(({ data }) => setData(data)).catch(() => toast.error("Could not load homepage settings"));
+    authed.get("/admin/homepage").then(({ data }) => {
+      // If admin has never saved category tiles, seed the editor with the same
+      // defaults that the public CategoryMosaic renders. Admin can immediately
+      // swap the Unsplash placeholders with their own Cloudinary uploads.
+      const cs = data.category_section || {};
+      if (!cs.tiles || cs.tiles.length === 0) {
+        data.category_section = { ...cs, tiles: JSON.parse(JSON.stringify(DEFAULT_CATEGORY_TILES)) };
+      }
+      setData(data);
+    }).catch(() => toast.error("Could not load homepage settings"));
     authed.get("/products").then(({ data }) => setProductList(data)).catch(() => {});
     authed.get("/reviews").then(({ data }) => setReviewList(data)).catch(() => {});
   }, [authed]);
@@ -280,12 +299,12 @@ export default function HomepageEditor({ authed }) {
       </Section>
 
       {/* Category Mosaic (Curated worlds) */}
-      <Section icon={Grid3x3} title="Category mosaic — 'Curated worlds'" subtitle="The bento-grid of category tiles on the homepage. Add/remove tiles, edit label + image (Cloudinary uploader). Toggle the whole section off if you don't need it.">
+      <Section icon={Grid3x3} title="'Explore the Atelier · Curated worlds of luxury' — Category tiles" subtitle="This is the bento-grid section right below the hero on the homepage. Each tile below is one clickable card on the site — click the image thumbnail to upload your own via Cloudinary. Empty tiles = the storefront falls back to the Unsplash luxury defaults you see below.">
         <label className="flex items-center gap-2 text-sm text-cream/70 mb-4">
           <input type="checkbox" data-testid="cms-cat-enabled" checked={data.category_section?.enabled !== false} onChange={(e) => upd("category_section.enabled")(e.target.checked)} className="accent-gold" /> Show this section on homepage
         </label>
         <div className="grid sm:grid-cols-2 gap-4">
-          <Fld label="Eyebrow (small caps)"><input value={data.category_section?.eyebrow || ""} onChange={(e) => upd("category_section.eyebrow")(e.target.value)} className={inp} /></Fld>
+          <Fld label="Eyebrow (small caps)"><input value={data.category_section?.eyebrow || ""} onChange={(e) => upd("category_section.eyebrow")(e.target.value)} className={inp} placeholder="Explore the Atelier" /></Fld>
           <div />
           <Fld label="Headline line 1"><input value={data.category_section?.headline_line_1 || ""} onChange={(e) => upd("category_section.headline_line_1")(e.target.value)} className={inp} placeholder="Curated" /></Fld>
           <Fld label="Italic word / accent"><input value={data.category_section?.headline_italic || ""} onChange={(e) => upd("category_section.headline_italic")(e.target.value)} className={inp} placeholder="worlds" /></Fld>
@@ -293,28 +312,45 @@ export default function HomepageEditor({ authed }) {
           <div className="sm:col-span-2"><Fld label="Subtitle"><textarea rows={2} value={data.category_section?.subtitle || ""} onChange={(e) => upd("category_section.subtitle")(e.target.value)} className={inp} /></Fld></div>
         </div>
         <div className="mt-6">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-[10px] uppercase tracking-luxury text-cream/50">Tiles ({(data.category_section?.tiles || []).length}) — leave empty to use luxury defaults</div>
-            <button
-              type="button"
-              data-testid="cms-cat-add"
-              onClick={() => {
-                setData((prev) => {
-                  const clone = JSON.parse(JSON.stringify(prev));
-                  if (!clone.category_section) clone.category_section = { tiles: [] };
-                  if (!Array.isArray(clone.category_section.tiles)) clone.category_section.tiles = [];
-                  clone.category_section.tiles.push({ slug: "", label: "New tile", keyword: "", image: "" });
-                  return clone;
-                });
-              }}
-              className="inline-flex items-center gap-2 text-[10px] uppercase tracking-luxury text-gold hover:text-cream"
-            ><PlusCircle className="w-3.5 h-3.5" /> Add tile</button>
+          <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+            <div className="text-[10px] uppercase tracking-luxury text-cream/50">Tiles ({(data.category_section?.tiles || []).length}) — click image to upload · edit slug/label/keyword · order top-down</div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                data-testid="cms-cat-reset"
+                onClick={() => {
+                  if (!confirm("Reset all tiles to the luxury defaults? Your current tile edits will be replaced.")) return;
+                  setData((prev) => {
+                    const clone = JSON.parse(JSON.stringify(prev));
+                    if (!clone.category_section) clone.category_section = {};
+                    clone.category_section.tiles = JSON.parse(JSON.stringify(DEFAULT_CATEGORY_TILES));
+                    return clone;
+                  });
+                }}
+                className="inline-flex items-center gap-2 text-[10px] uppercase tracking-luxury text-cream/60 hover:text-cream border border-white/10 px-3 py-1.5"
+              >Reset to luxury defaults</button>
+              <button
+                type="button"
+                data-testid="cms-cat-add"
+                onClick={() => {
+                  setData((prev) => {
+                    const clone = JSON.parse(JSON.stringify(prev));
+                    if (!clone.category_section) clone.category_section = { tiles: [] };
+                    if (!Array.isArray(clone.category_section.tiles)) clone.category_section.tiles = [];
+                    clone.category_section.tiles.push({ slug: "", label: "New tile", keyword: "", image: "" });
+                    return clone;
+                  });
+                }}
+                className="inline-flex items-center gap-2 text-[10px] uppercase tracking-luxury text-gold hover:text-cream"
+              ><PlusCircle className="w-3.5 h-3.5" /> Add tile</button>
+            </div>
           </div>
           <div className="grid gap-3">
             {(data.category_section?.tiles || []).map((t, i) => (
-              <div key={i} className="grid sm:grid-cols-[80px_1fr_1fr_1fr_auto] gap-3 items-center border border-white/10 p-3">
-                <div className="w-[80px] h-[80px] bg-ink-950 border border-white/10 overflow-hidden">
+              <div key={i} className="grid sm:grid-cols-[96px_1fr_1fr_1fr_auto] gap-3 items-center border border-white/10 p-3">
+                <div className="w-[96px] h-[96px]">
                   <CloudinaryUpload
+                    compact
                     value={t.image}
                     onChange={(url) => {
                       setData((prev) => {

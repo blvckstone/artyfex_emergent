@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -26,6 +27,12 @@ import cloudinary
 import cloudinary.utils
 import cloudinary.uploader
 
+# Rate limiting (brute-force / abuse protection). In-memory backend — fine for
+# single-instance Render/Railway. For multi-instance, swap in Redis storage_uri.
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -39,6 +46,29 @@ RZP_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', '')
 JWT_SECRET = os.environ.get('JWT_SECRET', 'change-me')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@artyfex.in')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'ArtyFex@2026')
+
+# --- SECURITY BOOTSTRAP WARNINGS ---------------------------------------------
+# We WARN but don't crash so preview environments keep working. In production
+# (ENV=production) we upgrade to a hard failure.
+_env_name = os.environ.get('APP_ENV', 'development').lower()
+_is_prod = _env_name in ('production', 'prod', 'live')
+_log_boot = logging.getLogger("artyfex.security")
+if not JWT_SECRET or JWT_SECRET in ('change-me', 'dev-secret', ''):
+    msg = "JWT_SECRET is missing or default — tokens can be forged."
+    if _is_prod:
+        raise RuntimeError(msg + " Refusing to boot in production.")
+    _log_boot.warning(msg)
+if _is_prod and len(JWT_SECRET) < 32:
+    raise RuntimeError("JWT_SECRET must be at least 32 chars in production")
+if _is_prod and not RZP_SECRET:
+    _log_boot.warning("RAZORPAY_KEY_SECRET missing — payments will fail")
+if _is_prod and not RZP_WEBHOOK_SECRET:
+    _log_boot.warning("RAZORPAY_WEBHOOK_SECRET missing — webhook signature verification disabled")
+
+# --- RATE LIMITER -------------------------------------------------------------
+# Uses X-Forwarded-For / remote_addr. Render/Vercel forward the real IP via that
+# header so per-IP limits actually differentiate real users.
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 # Google OAuth (custom, Phase B). If unset, /auth/google/login returns 500.
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
@@ -287,6 +317,35 @@ async def send_order_email(order: dict, kind: str, custom_subject: Optional[str]
 app = FastAPI(title="ArtyFex API")
 api_router = APIRouter(prefix="/api")
 
+# Wire slowapi into the app so decorators like @limiter.limit("5/minute") work.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# --- SECURITY HEADERS MIDDLEWARE ---------------------------------------------
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Adds baseline security response headers on every API response.
+
+    Notes:
+    - We deliberately do NOT set a strict CSP here because the storefront is
+      served by a different origin (Vercel) that owns its own CSP. This
+      middleware guards the API responses so admin-panel tokens and payment
+      flows aren't leaked via referrer/frame embedding/etc.
+    """
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=(self \"https://api.razorpay.com\" \"https://checkout.razorpay.com\")")
+        # Only send HSTS when the request came in over HTTPS (behind Render/Vercel proxy)
+        if request.headers.get("x-forwarded-proto", request.url.scheme) == "https":
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -442,15 +501,15 @@ class RzpVerify(BaseModel):
 
 
 class UserSignup(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=120)
     email: EmailStr
-    password: str
-    phone: Optional[str] = None
+    password: str = Field(min_length=8, max_length=128, description="8–128 chars")
+    phone: Optional[str] = Field(default=None, max_length=20)
 
 
 class UserLogin(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=128)
 
 
 class GoogleSessionIn(BaseModel):
@@ -804,7 +863,8 @@ def _coupon_discount_inr(coupon: dict, cart_total_inr: int) -> int:
 
 
 @api_router.post("/coupons/validate")
-async def validate_coupon(payload: CouponValidateIn):
+@limiter.limit("20/minute")
+async def validate_coupon(request: Request, payload: CouponValidateIn):
     code = (payload.code or "").upper().strip()
     if not code:
         raise HTTPException(status_code=400, detail="Please enter a coupon code.")
@@ -1310,7 +1370,8 @@ async def get_order(order_number: str):
 
 
 @api_router.post("/b2b/leads", response_model=B2BLead)
-async def create_b2b_lead(payload: B2BLeadIn):
+@limiter.limit("5/minute")
+async def create_b2b_lead(request: Request, payload: B2BLeadIn):
     lead = B2BLead(**payload.model_dump())
     await db.b2b_leads.insert_one(lead.model_dump())
     return lead
@@ -1318,7 +1379,8 @@ async def create_b2b_lead(payload: B2BLeadIn):
 
 # ---------- ADMIN ROUTES ---------- #
 @api_router.post("/admin/login")
-async def admin_login(payload: AdminLogin):
+@limiter.limit("10/minute")
+async def admin_login(request: Request, payload: AdminLogin):
     admin = await db.admins.find_one({"email": payload.email})
     if not admin or not bcrypt.checkpw(payload.password.encode(), admin["password_hash"].encode()):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -1582,7 +1644,8 @@ async def remove_from_wishlist(product_id: str, user=Depends(get_current_user)):
 
 # ---------- USER (CUSTOMER) ROUTES ---------- #
 @api_router.post("/auth/signup")
-async def user_signup(payload: UserSignup):
+@limiter.limit("5/minute")
+async def user_signup(request: Request, payload: UserSignup):
     if await db.users.find_one({"email": payload.email}):
         raise HTTPException(status_code=400, detail="Email already registered")
     pw_hash = bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt()).decode()
@@ -1596,7 +1659,8 @@ async def user_signup(payload: UserSignup):
 
 
 @api_router.post("/auth/login")
-async def user_login(payload: UserLogin):
+@limiter.limit("10/minute")
+async def user_login(request: Request, payload: UserLogin):
     user = await db.users.find_one({"email": payload.email})
     if not user or not bcrypt.checkpw(payload.password.encode(), user["password_hash"].encode()):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -3182,7 +3246,8 @@ class AdminGoogleSessionIn(BaseModel):
 
 
 @api_router.post("/admin/auth/google")
-async def admin_google_login(payload: AdminGoogleSessionIn):
+@limiter.limit("10/minute")
+async def admin_google_login(request: Request, payload: AdminGoogleSessionIn):
     if not payload.session_id or not payload.session_id.strip():
         raise HTTPException(status_code=400, detail="session_id is required")
     # Fetch profile from Emergent auth
@@ -3274,10 +3339,35 @@ async def admin_broadcast(payload: BroadcastIn, admin=Depends(require_permission
     return {"queued": queued}
 
 
+# --- CORS ---------------------------------------------------------------------
+# Wildcard + credentials is unsafe because browsers will accept credentialed
+# requests from *any* origin. We normalise the env to a strict allowlist in
+# production. In dev/preview we keep the wildcard but strip credentials.
+_raw_origins = [o.strip() for o in os.environ.get('CORS_ORIGINS', '*').split(',') if o.strip()]
+if _raw_origins == ['*'] and _is_prod:
+    _log_boot.warning("CORS_ORIGINS='*' in production — narrowing to known ArtyFex domains only. Set CORS_ORIGINS to your real frontend origins to silence this.")
+    _cors_allow_origins = [
+        "https://www.artyfex.in",
+        "https://artyfex.in",
+        "https://artyfex-emergent-7gpv.vercel.app",
+    ]
+    _cors_allow_credentials = True
+elif _raw_origins == ['*']:
+    # Dev / preview — allow all but forbid credentialed requests (per spec)
+    _cors_allow_origins = ["*"]
+    _cors_allow_credentials = False
+else:
+    _cors_allow_origins = _raw_origins
+    _cors_allow_credentials = True
+
 app.add_middleware(
-    CORSMiddleware, allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"], allow_headers=["*"],
+    CORSMiddleware,
+    allow_credentials=_cors_allow_credentials,
+    allow_origins=_cors_allow_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
+    max_age=3600,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

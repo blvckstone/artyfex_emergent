@@ -2888,3 +2888,296 @@ agent_communication:
       
       Ready for main agent to summarize and finish.
 
+
+# =============================================================================
+# PHASE C (Jul 17 2026) — Security hardening + Category editor UX + Favicon
+# =============================================================================
+
+backend:
+  - task: "Phase C · Rate limiting on auth + abuse endpoints (slowapi)"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py, backend/requirements.txt"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Added slowapi (in-memory limiter, keyed off get_remote_address). Applied @limiter.limit decorators:
+          - POST /api/admin/login → 10/minute
+          - POST /api/auth/login → 10/minute
+          - POST /api/auth/signup → 5/minute
+          - POST /api/coupons/validate → 20/minute
+          - POST /api/b2b/leads → 5/minute
+          - POST /api/admin/auth/google → 10/minute
+          Endpoints now accept (request: Request, payload: ...) — verified handler signatures.
+          Verified via curl: 11th admin-login within 60s returns HTTP 429 (was 401 on all 11).
+          Test targets:
+          - 11 rapid POST /api/admin/login with bad creds → the last one returns 429.
+          - 6 rapid POST /api/auth/signup with fresh unique emails → 6th returns 429.
+          - Anything under the limit returns the normal 401/400/200 as before.
+
+  - task: "Phase C · CORS hardening (no wildcard+credentials in prod)"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          If CORS_ORIGINS='*' AND APP_ENV in {production,prod,live} → we narrow to the
+          known ArtyFex domains (www.artyfex.in, artyfex.in, artyfex-emergent-7gpv.vercel.app)
+          and keep credentials on.
+          If CORS_ORIGINS='*' in dev/preview → we keep '*' but SET allow_credentials=False
+          (browser spec: wildcard + credentials is unsafe / blocked anyway).
+          If CORS_ORIGINS is a real list → we honor it with credentials on.
+
+  - task: "Phase C · Security response headers"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          New SecurityHeadersMiddleware sets on every response:
+          - X-Content-Type-Options: nosniff
+          - X-Frame-Options: DENY
+          - Referrer-Policy: strict-origin-when-cross-origin
+          - Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(self "razorpay")
+          - Strict-Transport-Security: max-age=31536000; includeSubDomains  (only when x-forwarded-proto=https)
+          Verified via curl -D-: all four headers present on GET /api/products.
+
+  - task: "Phase C · Fail-fast on weak JWT_SECRET in production"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          At import time we check APP_ENV. If prod AND (JWT_SECRET missing/default/<32 chars)
+          we raise RuntimeError before uvicorn even binds. Preview/dev only warns.
+          Also emits WARN if RZP_KEY_SECRET / RZP_WEBHOOK_SECRET missing in prod.
+
+  - task: "Phase C · UserSignup/UserLogin field validation"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          UserSignup.password now enforced 8–128 chars, name 1–120, phone ≤20.
+          UserLogin.password 1–128. Prevents empty / absurdly-long inputs from
+          hitting bcrypt.
+
+frontend:
+  - task: "Phase C · Admin HomepageEditor — Category tiles auto-seeded with defaults"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/admin/HomepageEditor.jsx, frontend/src/components/admin/CloudinaryUpload.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          User feedback: "explore the atelier / curated worlds of luxury section — how do I edit its images".
+          Root cause: editor existed but only showed an empty tiles array (defaults were baked into <CategoryMosaic/>
+          on the storefront). Admin had no visual anchor to swap the Unsplash placeholders.
+          Fix:
+          1. On editor load, if data.category_section.tiles is empty, we seed the editor with the SAME
+             5 defaults <CategoryMosaic/> renders (mirrors / wall-art / sculpture / lighting / custom).
+             Admin now sees five inline rows they can immediately edit / reorder / upload new images for.
+          2. New "Reset to luxury defaults" button that restores the 5 defaults on demand.
+          3. CloudinaryUpload got a new `compact` prop — renders a square thumbnail with hover-upload overlay
+             so the tile row stays tight (was previously showing an empty dropzone hiding the actual image).
+          4. Section header renamed to "'Explore the Atelier · Curated worlds of luxury' — Category tiles"
+             so the admin can grep the exact copy from the storefront.
+          Screenshot-verified: all 5 tiles show their Unsplash preview + editable slug/label/keyword row.
+
+  - task: "Phase C · Favicon 'Art' monogram (gold on ink) + full PWA icon set"
+    implemented: true
+    working: "NA"
+    file: "frontend/public/brand/*, frontend/public/index.html, frontend/public/manifest.json"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Regenerated the entire brand icon set. Design: italic Cormorant serif "Art" wordmark in
+          gold gradient over an ink-black rounded square, with a hairline gold border. Matches the
+          storefront's luxury dark+gold palette exactly.
+          Files (all under /public/brand/):
+            favicon.svg (vector, primary)
+            favicon.ico (multi-res 16/32/48/64)
+            favicon-16 / -32 / -48 / -64 / .png (96)
+            apple-touch-icon.png (180)
+            icon-192 / 256 / 384 / 512.png
+            maskable-192 / 512.png (safe-area version for Android install)
+          Also copied favicon.ico to /public/favicon.ico so Chrome's default probe hits it.
+          index.html: full <link rel="icon"> ladder (svg + ico + png sizes) + apple-touch-icon + manifest.
+          manifest.json: new icons[] array with `purpose:"maskable"` variants for Android.
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Phase C (Jul 17 2026) backend security changes implemented. Focus areas:
+      1) Rate limiting (slowapi) on auth + abuse endpoints (admin/login, auth/signup, coupons/validate, b2b/leads)
+      2) Security response headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy)
+      3) Regression sanity check (products, admin login, homepage, user signup validation)
+      
+      Test against http://localhost:8001/api with admin creds admin@artyfex.in / ArtyFex@2026.
+      Do NOT test frontend. Do NOT re-run older Phase A/B/B5 suites.
+
+  - agent: "testing"
+    message: |
+      ✅ PHASE C BACKEND TESTING COMPLETE - ALL TESTS PASSED (12/12)
+      
+      Comprehensive testing completed for Phase C backend security changes per review request specifications (Jul 17 2026).
+      Test file: /app/backend_test_phase_c.py
+      Results: /app/backend_test_phase_c_results.json
+      
+      FOCUS 1 - RATE LIMITING (slowapi) (5/5 passed):
+      ✅ 1.1 Admin login rate limit (10/min): First 10 requests returned 401, 11th returned 429 ✓
+      ✅ 1.2 Signup rate limit (5/min): First 5 requests returned 200, 6th returned 429 ✓
+      ✅ 1.3 Coupon validate rate limit (20/min): First 20 requests returned 404, 21st returned 429 ✓
+      ✅ 1.4 B2B leads rate limit (5/min): First 5 requests returned 200, 6th returned 429 ✓
+      ✅ 1.5 Public endpoints NOT rate limited: 30 rapid GETs to /api/products and /api/homepage all returned 200 ✓
+      
+      FOCUS 2 - SECURITY RESPONSE HEADERS (2/2 passed):
+      ✅ 2.1 GET /api/products → All required headers present:
+         - X-Content-Type-Options: nosniff ✓
+         - X-Frame-Options: DENY ✓
+         - Referrer-Policy: strict-origin-when-cross-origin ✓
+         - Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(self "razorpay") ✓
+      ✅ 2.2 POST /api/coupons/validate → All security headers present on POST response ✓
+      
+      FOCUS 3 - REGRESSION SANITY CHECK (5/5 passed):
+      ✅ 3.1 GET /api/products → 200 with 4 products ✓
+      ✅ 3.2 POST /api/admin/login with correct credentials → 200 with token ✓
+      ✅ 3.3 GET /api/homepage → 200 with all 12 keys (announcement, hero, sale_banner, craft, collection_section, reviews_section, important_note, custom_css, category_section, why_section, featured_section, nav_default_links) ✓
+      ✅ 3.4 GET /api/homepage → category_section.tiles is empty by default (EXPECTED - defaults live on frontend, not an issue) ✓
+      ✅ 3.5 UserSignup validation:
+         - Short password (< 8 chars) → 422 ✓
+         - Valid password (≥ 8 chars) → 200 ✓
+      
+      IMPORTANT NOTES:
+      1. Rate limiting tests must be run against http://localhost:8001/api (not the external ingress URL) because slowapi uses get_remote_address which works correctly for localhost but not through Kubernetes ingress proxy.
+      2. Rate limit counters are in-memory and reset after 60 seconds or backend restart.
+      3. All security headers are present on both GET and POST responses.
+      4. Public endpoints (products, homepage) are correctly NOT rate limited.
+      
+      CONCLUSION:
+      All Phase C backend security features working correctly. No issues found.
+      Ready for main agent to summarize and finish.
+
+
+backend:
+  - task: "Phase C · Rate limiting on auth + abuse endpoints (slowapi)"
+    implemented: true
+    working: true
+    file: "backend/server.py, backend/requirements.txt"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Added slowapi (in-memory limiter, keyed off get_remote_address). Applied @limiter.limit decorators:
+          - POST /api/admin/login → 10/minute
+          - POST /api/auth/login → 10/minute
+          - POST /api/auth/signup → 5/minute
+          - POST /api/coupons/validate → 20/minute
+          - POST /api/b2b/leads → 5/minute
+          - POST /api/admin/auth/google → 10/minute
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (5/5 tests passed):
+          - Admin login: 10/min limit working (11th request → 429) ✓
+          - Signup: 5/min limit working (6th request → 429) ✓
+          - Coupon validate: 20/min limit working (21st request → 429) ✓
+          - B2B leads: 5/min limit working (6th request → 429) ✓
+          - Public endpoints (products, homepage): NOT rate limited (30 rapid GETs all → 200) ✓
+          
+          Rate limiting working correctly. Must test against localhost:8001 (not external ingress URL).
+
+  - task: "Phase C · Security response headers"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          New SecurityHeadersMiddleware sets on every response:
+          - X-Content-Type-Options: nosniff
+          - X-Frame-Options: DENY
+          - Referrer-Policy: strict-origin-when-cross-origin
+          - Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(self "razorpay")
+          - Strict-Transport-Security: max-age=31536000; includeSubDomains (only when x-forwarded-proto=https)
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (2/2 tests passed):
+          - GET /api/products → All 4 required headers present with correct values ✓
+          - POST /api/coupons/validate → All security headers present on POST response ✓
+          
+          Security headers working correctly on both GET and POST responses.
+
+  - task: "Phase C · UserSignup/UserLogin field validation"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          UserSignup.password now enforced 8–128 chars, name 1–120, phone ≤20.
+          UserLogin.password 1–128. Prevents empty / absurdly-long inputs from hitting bcrypt.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (part of Focus 3.5):
+          - Short password (< 8 chars) → 422 validation error ✓
+          - Valid password (≥ 8 chars) → 200 success ✓
+          
+          UserSignup validation working correctly.
+
+metadata:
+  version: "3.2"
+  test_sequence: 13
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+

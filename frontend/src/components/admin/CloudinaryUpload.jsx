@@ -24,6 +24,7 @@ export default function CloudinaryUpload({
   folder = "artyfex",
   label = "Drop image or click to upload",
   testid = "cldn",
+  compact = false,
 }) {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -101,6 +102,58 @@ export default function CloudinaryUpload({
       onChange("");
     }
   };
+
+  // COMPACT MODE: renders a square thumbnail with a hover-upload overlay.
+  // Ideal for grid rows / inline editors where a full dropzone eats too much space.
+  if (compact && !multiple) {
+    const url = urls[0];
+    return (
+      <div
+        data-testid={`${testid}-wrap`}
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+        className={`group relative w-full h-full min-w-[80px] min-h-[80px] bg-ink-950 border ${dragOver ? "border-gold" : "border-white/15"} hover:border-gold/60 cursor-pointer overflow-hidden`}
+        title={url ? "Click to replace image" : "Click to upload image"}
+      >
+        {url ? (
+          // eslint-disable-next-line
+          <img src={url} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center text-cream/50 gap-1 p-2">
+            <UploadCloud className="w-4 h-4 text-gold" />
+            <span className="text-[9px] uppercase tracking-luxury text-center leading-tight">Upload</span>
+          </div>
+        )}
+        {/* hover overlay */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/55 transition-colors flex items-center justify-center pointer-events-none">
+          {uploading ? (
+            <Loader2 className="w-4 h-4 animate-spin text-gold" />
+          ) : url ? (
+            <UploadCloud className="w-4 h-4 text-gold opacity-0 group-hover:opacity-100 transition-opacity" />
+          ) : null}
+        </div>
+        {url && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onChange(""); }}
+            className="absolute top-1 right-1 bg-black/70 hover:bg-red-500 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label="Remove image"
+            data-testid={`${testid}-remove`}
+          ><X className="w-3 h-3" /></button>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={onFilesSelected}
+          data-testid={`${testid}-input`}
+        />
+      </div>
+    );
+  }
 
   return (
     <div data-testid={`${testid}-wrap`} className="space-y-3">
