@@ -14,7 +14,7 @@ import re
 from typing import Dict, Any
 
 # Backend URL from frontend/.env
-BASE_URL = "https://atelier-worlds.preview.emergentagent.com/api"
+BASE_URL = "https://backend-migration-24.preview.emergentagent.com/api"
 
 # Admin credentials from /app/memory/test_credentials.md
 ADMIN_EMAIL = "admin@artyfex.in"
