@@ -28,7 +28,7 @@ import cloudinary.utils
 import cloudinary.uploader
 
 # Rate limiting (brute-force / abuse protection). In-memory backend — fine for
-# single-instance Render/Railway. For multi-instance, swap in Redis storage_uri.
+# single-instance Northflank. For multi-instance, swap in Redis storage_uri.
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -66,15 +66,16 @@ if _is_prod and not RZP_WEBHOOK_SECRET:
     _log_boot.warning("RAZORPAY_WEBHOOK_SECRET missing — webhook signature verification disabled")
 
 # --- RATE LIMITER -------------------------------------------------------------
-# Uses X-Forwarded-For / remote_addr. Render/Vercel forward the real IP via that
-# header so per-IP limits actually differentiate real users.
+# Uses X-Forwarded-For / remote_addr. Northflank/Vercel forward the real IP via
+# that header so per-IP limits actually differentiate real users.
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 # Google OAuth (custom, Phase B). If unset, /auth/google/login returns 500.
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 # Public URLs used to build OAuth redirect + final frontend hand-off.
-# In production set BACKEND_PUBLIC_URL to your Render URL and FRONTEND_PUBLIC_URL to https://www.artyfex.in.
+# In production set BACKEND_PUBLIC_URL to the Northflank custom domain
+# (e.g. https://api.artyfex.in) and FRONTEND_PUBLIC_URL to https://www.artyfex.in.
 BACKEND_PUBLIC_URL = (os.environ.get('BACKEND_PUBLIC_URL', '') or 'http://localhost:8001').rstrip('/')
 FRONTEND_PUBLIC_URL = (os.environ.get('FRONTEND_PUBLIC_URL', '') or 'http://localhost:3000').rstrip('/')
 
@@ -834,6 +835,43 @@ async def get_current_user(authorization: str = Header(None)):
 @api_router.get("/")
 async def root():
     return {"brand": "ArtyFex"}
+
+
+@api_router.get("/health")
+async def health():
+    """Deep-health probe. Reports readiness of every 3rd-party dependency so we
+    can spot which service is misconfigured after a deploy. Safe to expose — no
+    secrets are returned, only booleans + short status strings."""
+    checks = {
+        "app": "ok",
+        "env": _env_name,
+    }
+    # MongoDB
+    try:
+        await db.command("ping")
+        checks["mongo"] = "ok"
+    except Exception as e:
+        checks["mongo"] = f"fail: {type(e).__name__}"
+    # Razorpay
+    checks["razorpay_configured"] = bool(RZP_KEY and RZP_SECRET)
+    checks["razorpay_webhook_configured"] = bool(RZP_WEBHOOK_SECRET)
+    # Resend email
+    checks["resend_configured"] = bool(RESEND_API_KEY)
+    checks["sender_email"] = SENDER_EMAIL if RESEND_API_KEY else None
+    # Google OAuth
+    checks["google_oauth_configured"] = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+    # Cloudinary (image uploads in admin)
+    checks["cloudinary_configured"] = bool(
+        CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET
+    )
+    # URL / CORS visibility
+    checks["backend_public_url"] = BACKEND_PUBLIC_URL
+    checks["frontend_public_url"] = FRONTEND_PUBLIC_URL
+    checks["cors_allow_origins"] = _cors_allow_origins
+    checks["cors_allow_credentials"] = _cors_allow_credentials
+    # JWT secret sanity (no leaking the value)
+    checks["jwt_secret_strength"] = "strong" if len(JWT_SECRET) >= 32 else "weak"
+    return checks
 
 
 # ---------- COUPON HELPERS ----------
@@ -1684,8 +1722,8 @@ async def user_me(user=Depends(get_current_user)):
 
 # ---------- GOOGLE OAUTH (Custom, Phase B) ----------
 # Server-side OAuth 2.0 code flow. redirect_uri is derived from the INCOMING request
-# (honors X-Forwarded-Proto / X-Forwarded-Host that Render/Vercel add), so it works
-# on prod, preview, and local WITHOUT setting BACKEND_PUBLIC_URL/FRONTEND_PUBLIC_URL.
+# (honors X-Forwarded-Proto / X-Forwarded-Host that Northflank/Vercel add), so it
+# works on prod, preview, and local WITHOUT setting BACKEND_PUBLIC_URL/FRONTEND_PUBLIC_URL.
 # `BACKEND_PUBLIC_URL` remains an optional explicit override if you want to force one.
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -1702,7 +1740,7 @@ ALLOWED_FRONTEND_ORIGINS = {
 
 
 def _resolve_backend_base(request: Request) -> str:
-    """Return the public base URL of THIS backend, e.g. https://artyfex-backend.onrender.com.
+    """Return the public base URL of THIS backend, e.g. https://api.artyfex.in.
     Priority: explicit env override → X-Forwarded-* (proxy) → request.url."""
     override = os.environ.get('BACKEND_PUBLIC_URL', '').strip()
     if override:
@@ -3351,13 +3389,13 @@ async def admin_broadcast(payload: BroadcastIn, admin=Depends(require_permission
 # requests from *any* origin. We normalise the env to a strict allowlist in
 # production. In dev/preview we keep the wildcard but strip credentials.
 _raw_origins = [o.strip() for o in os.environ.get('CORS_ORIGINS', '*').split(',') if o.strip()]
+_default_prod_origins = [
+    "https://www.artyfex.in",
+    "https://artyfex.in",
+]
 if _raw_origins == ['*'] and _is_prod:
     _log_boot.warning("CORS_ORIGINS='*' in production — narrowing to known ArtyFex domains only. Set CORS_ORIGINS to your real frontend origins to silence this.")
-    _cors_allow_origins = [
-        "https://www.artyfex.in",
-        "https://artyfex.in",
-        "https://artyfex-emergent-7gpv.vercel.app",
-    ]
+    _cors_allow_origins = list(_default_prod_origins)
     _cors_allow_credentials = True
 elif _raw_origins == ['*']:
     # Dev / preview — allow all but forbid credentialed requests (per spec)
@@ -3367,10 +3405,15 @@ else:
     _cors_allow_origins = _raw_origins
     _cors_allow_credentials = True
 
+# Regex fallback: any Vercel preview deployment for this project should also work.
+# Vercel preview URLs look like https://<project>-<hash>-<team>.vercel.app.
+_cors_allow_origin_regex = r"https://.*\.vercel\.app$"
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=_cors_allow_credentials,
     allow_origins=_cors_allow_origins,
+    allow_origin_regex=_cors_allow_origin_regex,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["Content-Disposition"],

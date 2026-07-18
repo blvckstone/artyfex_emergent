@@ -1,0 +1,117 @@
+{
+  "total": 22,
+  "passed": 22,
+  "failed": 0,
+  "results": [
+    {
+      "name": "1.1 Health endpoint returns 200",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "1.2 Health endpoint returns valid JSON",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "1.3 Health endpoint has all required keys",
+      "passed": true,
+      "details": "All 11 keys present"
+    },
+    {
+      "name": "1.4 Health endpoint does NOT leak secrets",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "1.5 Health endpoint app status is 'ok'",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "1.6 Health endpoint env is 'development'",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "1.7 Health endpoint mongo status is 'ok'",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "1.8 Health endpoint razorpay_configured is boolean",
+      "passed": true,
+      "details": "Value: False"
+    },
+    {
+      "name": "1.8 Health endpoint resend_configured is boolean",
+      "passed": true,
+      "details": "Value: False"
+    },
+    {
+      "name": "1.8 Health endpoint google_oauth_configured is boolean",
+      "passed": true,
+      "details": "Value: False"
+    },
+    {
+      "name": "1.8 Health endpoint cloudinary_configured is boolean",
+      "passed": true,
+      "details": "Value: False"
+    },
+    {
+      "name": "1.9 Health endpoint jwt_secret_strength is valid",
+      "passed": true,
+      "details": "Value: strong"
+    },
+    {
+      "name": "2.1 CORS allows vercel.app origin",
+      "passed": true,
+      "details": "Access-Control-Allow-Origin: *"
+    },
+    {
+      "name": "2.2 CORS rejects evil.example.com (or disallows credentials)",
+      "passed": true,
+      "details": "Wildcard without credentials (safe)"
+    },
+    {
+      "name": "3.1 GET /api/products returns 200 with JSON list",
+      "passed": true,
+      "details": "Found 4 products"
+    },
+    {
+      "name": "3.2 GET /api/ returns {\"brand\":\"ArtyFex\"}",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "3.3 POST /api/admin/login returns JWT token",
+      "passed": true,
+      "details": "Token length: 159"
+    },
+    {
+      "name": "3.4 Admin token works for GET /api/admin/orders",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "3.5 Admin token works for GET /api/admin/homepage",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "4.1 GET /api/auth/google/login returns 500 with correct error",
+      "passed": true,
+      "details": "Detail: Google OAuth not configured on server"
+    },
+    {
+      "name": "4.2 Google OAuth error is handled gracefully (no crash/traceback)",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "5.1 GET /api/products (healthcheck path) returns 200 with list",
+      "passed": true,
+      "details": "Found 4 products"
+    }
+  ]
+}
