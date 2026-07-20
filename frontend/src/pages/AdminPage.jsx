@@ -333,6 +333,38 @@ export default function AdminPage() {
     }
   };
 
+  const nimbusShip = async (num) => {
+    try {
+      const res = await authed.post(`/admin/orders/${num}/nimbuspost/ship`);
+      toast.success(`Shipment created · AWB ${res?.data?.awb || "—"}`);
+      reload();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "NimbusPost shipment failed");
+    }
+  };
+  const nimbusTrack = async (num) => {
+    try {
+      const res = await authed.get(`/admin/orders/${num}/nimbuspost/track`);
+      const status = res?.data?.data?.status || res?.data?.data?.data?.status || JSON.stringify(res?.data?.data).slice(0, 180);
+      toast.success(`Live status: ${status || "See console"}`);
+      // eslint-disable-next-line no-console
+      console.log("NimbusPost tracking:", res?.data);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Tracking failed");
+    }
+  };
+  const nimbusCancel = async (num) => {
+    if (!window.confirm("Cancel this NimbusPost shipment? Wallet balance is auto-refunded by NimbusPost if not yet manifested.")) return;
+    try {
+      await authed.post(`/admin/orders/${num}/nimbuspost/cancel`);
+      toast.success("Shipment cancelled");
+      reload();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Cancel failed");
+    }
+  };
+
+
   const updateLeadStatus = async (id, status) => {
     await authed.patch(`/admin/leads/${id}`, { status });
     reload();
@@ -640,7 +672,7 @@ export default function AdminPage() {
                   <div className="grid gap-3">
                     {slice.length === 0 && <div className="text-cream/40 text-sm italic py-6">No orders match your filters.</div>}
                     {slice.map((o) => (
-                      <OrderRow key={o.order_number} o={o} onStatus={updateOrderStatus} onTracking={updateOrderTracking} onNotify={setNotifyOrder} />
+                      <OrderRow key={o.order_number} o={o} onStatus={updateOrderStatus} onTracking={updateOrderTracking} onNotify={setNotifyOrder} onNimbusShip={nimbusShip} onNimbusTrack={nimbusTrack} onNimbusCancel={nimbusCancel} />
                     ))}
                   </div>
                   {pages > 1 && (
@@ -661,7 +693,10 @@ export default function AdminPage() {
         )}
 
         {tab === "shipping" && (
-          <ShippingEditor authed={authed} api={api} />
+          <>
+            <ShippingEditor authed={authed} api={api} />
+            <NimbusPostCard authed={authed} />
+          </>
         )}
 
         {tab === "gst" && (
@@ -1726,7 +1761,7 @@ function CouponEditor({ initial, onCancel, onSave, saving }) {
   );
 }
 
-function OrderRow({ o, onStatus, onTracking, onNotify }) {
+function OrderRow({ o, onStatus, onTracking, onNotify, onNimbusShip, onNimbusTrack, onNimbusCancel }) {
   const [trackingId, setTrackingId] = useState(o.tracking_id || "");
   const [trackingUrl, setTrackingUrl] = useState(o.tracking_url || "");
   const [trackingCarrier, setTrackingCarrier] = useState(o.tracking_carrier || "");
@@ -1922,6 +1957,43 @@ function OrderRow({ o, onStatus, onTracking, onNotify }) {
           >
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save tracking"}
           </button>
+        </div>
+      )}
+
+      {/* NimbusPost quick actions (Task 7 / Batch 4) */}
+      {(onNimbusShip || onNimbusTrack || onNimbusCancel) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/5 pt-3">
+          <span className="text-[10px] uppercase tracking-luxury text-cream/40 mr-1">NimbusPost</span>
+          {!o.tracking_id ? (
+            <button
+              type="button"
+              data-testid={`nimbus-ship-${o.order_number}`}
+              onClick={() => onNimbusShip?.(o.order_number)}
+              className="text-[10px] uppercase tracking-luxury text-ink-950 bg-gold hover:bg-cream px-3 py-1"
+            >
+              Ship via NimbusPost
+            </button>
+          ) : (
+            <>
+              <span className="text-[10px] text-cream/60 font-mono">AWB {o.tracking_id}</span>
+              <button
+                type="button"
+                data-testid={`nimbus-track-${o.order_number}`}
+                onClick={() => onNimbusTrack?.(o.order_number)}
+                className="text-[10px] uppercase tracking-luxury text-gold border border-gold/40 px-3 py-1 hover:bg-gold/10"
+              >
+                Live tracking
+              </button>
+              <button
+                type="button"
+                data-testid={`nimbus-cancel-${o.order_number}`}
+                onClick={() => onNimbusCancel?.(o.order_number)}
+                className="text-[10px] uppercase tracking-luxury text-red-300 border border-red-500/40 px-3 py-1 hover:bg-red-500/10"
+              >
+                Cancel shipment
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -2383,3 +2455,118 @@ function BulkInvoiceDownloader({ authed }) {
     </>
   );
 }
+
+// -------------- NimbusPost config card (Task 7 / Batch 4) --------------
+function NimbusPostCard({ authed }) {
+  const [cfg, setCfg] = useState(null);
+  const [warehouse, setWarehouse] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [pin, setPin] = useState("110001");
+  const [svc, setSvc] = useState(null);
+  const [checking, setChecking] = useState(false);
+
+  const load = async () => {
+    try {
+      const r = await authed.get("/admin/nimbuspost/config");
+      setCfg(r.data);
+      setWarehouse(r.data?.warehouse_name || "");
+    } catch (err) {
+      toast.error("Failed to load NimbusPost config");
+    }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await authed.patch("/admin/nimbuspost/config", { warehouse_name: warehouse });
+      toast.success("NimbusPost warehouse saved");
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const check = async () => {
+    setChecking(true); setSvc(null);
+    try {
+      const r = await authed.post("/admin/nimbuspost/serviceability", { pincode: pin, cod: false, weight_g: 500 });
+      setSvc(r.data);
+    } catch (err) {
+      setSvc({ error: err?.response?.data?.detail || "Serviceability failed" });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <div className="mt-8 hairline p-6" data-testid="nimbuspost-card">
+      <div className="flex items-center gap-3">
+        <h2 className="font-serif text-2xl">NimbusPost Courier</h2>
+        {cfg && (
+          <span className={`text-[10px] uppercase tracking-luxury px-2 py-0.5 border ${cfg.configured ? "text-gold border-gold/40" : "text-red-300 border-red-500/40"}`}>
+            {cfg.configured ? `Connected · ${cfg.auth_mode}` : "Not configured"}
+          </span>
+        )}
+      </div>
+      <p className="mt-2 text-sm text-cream/60 max-w-2xl">
+        Set the exact warehouse / pickup name registered on your NimbusPost dashboard.
+        Once saved, every admin order card will show a <b>Ship via NimbusPost</b> button that creates an AWB and pushes tracking back to the customer.
+      </p>
+
+      <div className="mt-5 grid sm:grid-cols-[1fr_auto] gap-3 items-end">
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Warehouse / Pickup name (must match dashboard exactly)</span>
+          <input
+            data-testid="nimbus-warehouse-input"
+            value={warehouse}
+            onChange={(e) => setWarehouse(e.target.value)}
+            placeholder="e.g. ArtyFex Mumbai Warehouse"
+            className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none"
+          />
+        </label>
+        <button
+          data-testid="nimbus-warehouse-save"
+          onClick={save}
+          disabled={saving}
+          className="px-5 py-2 bg-gold text-ink-950 hover:bg-cream text-xs uppercase tracking-luxury disabled:opacity-60"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+
+      <div className="mt-6 border-t border-white/5 pt-5">
+        <div className="text-[10px] uppercase tracking-luxury text-cream/40">Serviceability check</div>
+        <div className="mt-2 flex flex-wrap gap-2 items-center">
+          <input
+            data-testid="nimbus-svc-pin"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            placeholder="Pincode"
+            className="bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none font-mono w-40"
+          />
+          <button
+            data-testid="nimbus-svc-check"
+            onClick={check}
+            disabled={checking}
+            className="px-4 py-2 border border-gold/40 text-gold hover:bg-gold/10 text-xs uppercase tracking-luxury disabled:opacity-60"
+          >
+            {checking ? "Checking…" : "Check"}
+          </button>
+        </div>
+        {svc && (
+          <pre className="mt-3 text-[11px] text-cream/60 bg-ink-950/60 border border-white/5 p-3 overflow-auto max-h-56">{JSON.stringify(svc, null, 2)}</pre>
+        )}
+      </div>
+
+      <div className="mt-5 text-[11px] text-cream/40 leading-relaxed">
+        <b className="text-cream/60">Tips:</b> NimbusPost deducts wallet ₹ the instant an AWB is created — cancel before manifest to refund.
+        Add funds at <span className="text-cream/60">nimbuspost.com → Wallet</span>.
+        Auth mode is JWT (auto-refreshed every ~23h) with the legacy API key as fallback.
+      </div>
+    </div>
+  );
+}
+

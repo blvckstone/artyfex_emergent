@@ -3234,6 +3234,123 @@ async def admin_update_tracking(order_number: str, payload: TrackingUpdate, admi
 
 
 # =============================================================================
+# ------------------ TASK 7 (BATCH 4): NIMBUSPOST COURIER  --------------------
+# =============================================================================
+import nimbuspost_service as nimbus  # noqa: E402  (kept close to route defs)
+
+
+class NimbusConfigIn(BaseModel):
+    warehouse_name: str = ""
+
+
+DEFAULT_NIMBUS_CFG = {"warehouse_name": os.getenv("NIMBUSPOST_WAREHOUSE_NAME", "").strip()}
+
+
+async def _nimbus_warehouse() -> str:
+    cfg = await load_site_setting("nimbuspost", DEFAULT_NIMBUS_CFG)
+    return (cfg.get("warehouse_name") or "").strip()
+
+
+@api_router.get("/admin/nimbuspost/config")
+async def admin_get_nimbus_config(admin=Depends(get_current_admin)):
+    cfg = await load_site_setting("nimbuspost", DEFAULT_NIMBUS_CFG)
+    return {
+        "configured": nimbus.is_configured(),
+        "warehouse_name": cfg.get("warehouse_name") or "",
+        "auth_mode": "jwt" if (os.getenv("NIMBUSPOST_EMAIL") and os.getenv("NIMBUSPOST_PASSWORD")) else ("legacy" if os.getenv("NIMBUSPOST_LEGACY_KEY") else "none"),
+    }
+
+
+@api_router.patch("/admin/nimbuspost/config")
+async def admin_patch_nimbus_config(payload: NimbusConfigIn, admin=Depends(require_permission("manage_shipping"))):
+    data = {"warehouse_name": (payload.warehouse_name or "").strip()}
+    await save_site_setting("nimbuspost", data)
+    return {**data, "configured": nimbus.is_configured()}
+
+
+@api_router.post("/admin/orders/{order_number}/nimbuspost/ship")
+async def admin_nimbus_ship(order_number: str, admin=Depends(require_permission("manage_orders"))):
+    order = await db.orders.find_one({"order_number": order_number}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.get("tracking_id"):
+        raise HTTPException(status_code=400, detail=f"Shipment already exists (AWB {order['tracking_id']}). Cancel it first if you want to re-ship.")
+    warehouse = await _nimbus_warehouse()
+    result = await nimbus.create_shipment(order, warehouse)
+    if not result["ok"]:
+        raise HTTPException(status_code=502 if result.get("status") in (None, 502) else 400, detail=result["error"] or "NimbusPost error")
+
+    body = result["data"] or {}
+    # NimbusPost's response envelope varies slightly across endpoints:
+    d = body.get("data") if isinstance(body.get("data"), dict) else body
+    awb = str(d.get("awb_number") or d.get("awb") or d.get("shipment_id") or "").strip()
+    courier = str(d.get("courier_name") or d.get("courier") or "NimbusPost")
+    tracking_url = str(d.get("tracking_url") or (f"https://nimbuspost.com/track/{awb}" if awb else ""))
+    if not awb:
+        # Store raw response for debugging but surface a friendly error
+        raise HTTPException(status_code=502, detail=f"NimbusPost returned no AWB: {str(body)[:300]}")
+
+    update = {
+        "tracking_id": awb,
+        "tracking_carrier": courier,
+        "tracking_url": tracking_url,
+        "tracking_updated_at": now_iso(),
+        "nimbuspost_response": d,
+    }
+    await db.orders.update_one({"order_number": order_number}, {"$set": update})
+    doc = await db.orders.find_one({"order_number": order_number}, {"_id": 0})
+    return {"ok": True, "awb": awb, "courier": courier, "tracking_url": tracking_url, "order": doc}
+
+
+@api_router.get("/admin/orders/{order_number}/nimbuspost/track")
+async def admin_nimbus_track(order_number: str, admin=Depends(require_permission("manage_orders"))):
+    order = await db.orders.find_one({"order_number": order_number}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    awb = (order.get("tracking_id") or "").strip()
+    if not awb:
+        raise HTTPException(status_code=400, detail="No AWB — create a NimbusPost shipment first")
+    result = await nimbus.track_shipment(awb)
+    if not result["ok"]:
+        raise HTTPException(status_code=502, detail=result["error"] or "NimbusPost tracking failed")
+    return {"ok": True, "awb": awb, "data": result["data"]}
+
+
+@api_router.post("/admin/orders/{order_number}/nimbuspost/cancel")
+async def admin_nimbus_cancel(order_number: str, admin=Depends(require_permission("manage_orders"))):
+    order = await db.orders.find_one({"order_number": order_number}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    awb = (order.get("tracking_id") or "").strip()
+    if not awb:
+        raise HTTPException(status_code=400, detail="No AWB to cancel")
+    result = await nimbus.cancel_shipment(awb)
+    if not result["ok"]:
+        raise HTTPException(status_code=502, detail=result["error"] or "NimbusPost cancel failed")
+    await db.orders.update_one(
+        {"order_number": order_number},
+        {"$set": {"tracking_id": None, "tracking_url": None, "tracking_updated_at": now_iso()}},
+    )
+    return {"ok": True, "data": result["data"]}
+
+
+class NimbusServiceCheckIn(BaseModel):
+    pincode: str
+    cod: bool = False
+    weight_g: int = 500
+
+
+@api_router.post("/admin/nimbuspost/serviceability")
+async def admin_nimbus_serviceability(payload: NimbusServiceCheckIn, admin=Depends(require_permission("manage_shipping"))):
+    result = await nimbus.check_serviceability(payload.pincode, payload.cod, payload.weight_g)
+    if not result["ok"]:
+        raise HTTPException(status_code=502, detail=result["error"] or "NimbusPost serviceability failed")
+    return result["data"]
+
+
+
+
+# =============================================================================
 # ------------------ PHASE B: ANALYTICS, LIVE, RBAC, EMPLOYEES ----------------
 # =============================================================================
 
