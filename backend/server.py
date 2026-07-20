@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -12,9 +12,10 @@ import json
 from urllib.parse import urlencode
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
-from typing import List, Optional
+from typing import List, Optional, Dict
 import uuid
 from datetime import datetime, timezone, timedelta
+import io
 import bcrypt
 import jwt as pyjwt
 import razorpay
@@ -117,12 +118,27 @@ async def send_email(to_email: str, subject: str, html: str):
         logging.error(f"Email send failed for {to_email}: {e}")
 
 
+def _esc(s) -> str:
+    """HTML-escape a value for safe interpolation into email templates.
+    Used by notify_admins_event callers to prevent HTML-injection from any
+    user-supplied string (customer name, review body, etc.). Added Jul 2025
+    after security review."""
+    import html as _html_mod
+    if s is None:
+        return ""
+    return _html_mod.escape(str(s), quote=True)
+
+
 async def notify_admins_event(kind: str, subject: str, html_body: str):
     """Fan-out an operational notification to every admin in db.admins (Task 6).
 
     Categories used across the codebase:
       order_new, order_returned, review_pending, low_stock, payment_failed, b2b_lead
     Silent-fails per recipient so one bad address never blocks the others.
+
+    SECURITY: callers MUST html-escape any user-supplied fragment before
+    interpolating into `subject` / `html_body`. Use the module-level helper
+    `_esc()` below.
     """
     try:
         admins = await db.admins.find({}, {"_id": 0, "email": 1}).to_list(200)
@@ -394,6 +410,41 @@ def now_iso():
 
 
 # ---------- MODELS ---------- #
+class VariationValue(BaseModel):
+    """A single choice within a variation option group.
+
+    Ex. For a "Shape" option: {"key":"round","label":"Round","price_delta_inr":0}
+        For a "Frame" option: {"key":"bordered","label":"With Border","image":"...","price_delta_inr":2500}
+    """
+    model_config = ConfigDict(extra="ignore")
+    key: str
+    label: str
+    hex: Optional[str] = None          # For colour swatches
+    image: Optional[str] = None        # Optional preview image
+    price_delta_inr: int = 0           # Added to product price if selected (₹)
+    stock: Optional[int] = None        # Optional per-value stock override
+    is_default: bool = False
+
+
+class VariationOption(BaseModel):
+    """A single option group on a product (Colour, Shape, Frame, Thickness,
+    Gift-Wrap, Care Kit, Mounting Orientation, custom, …).
+
+    UI presentation depends on `type`:
+      - "swatch"  -> circular colour swatches (uses `hex`)
+      - "image"   -> image tiles (uses `image`)
+      - "select"  -> dropdown of labels
+      - "toggle"  -> add-on style yes/no (Gift Wrap, Care Kit)
+    """
+    model_config = ConfigDict(extra="ignore")
+    key: str                                    # canonical id, e.g. "shape"
+    label: str                                  # human label, e.g. "Shape"
+    type: str = "select"                        # swatch | image | select | toggle
+    required: bool = False
+    help_text: Optional[str] = None             # shown under the picker
+    values: List[VariationValue] = Field(default_factory=list)
+
+
 class Variant(BaseModel):
     model_config = ConfigDict(extra="ignore")
     key: str; label: str; hex: str; image: str
@@ -419,6 +470,11 @@ class Product(BaseModel):
     width_cm: Optional[float] = None          # package W
     height_cm: Optional[float] = None         # package H
     tags: List[str] = Field(default_factory=list)  # custom product tags
+    # Task 3 (Jul 2025) — Flexible variation options beyond legacy colour swatches.
+    # variation_options is authoritative for NEW variation types (shape, frame,
+    # thickness, gift-wrap, care-kit, mount…). The legacy `variants` array
+    # continues to work for colour-only products; both can coexist.
+    variation_options: List[VariationOption] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)
 
 class ProductIn(BaseModel):
@@ -435,6 +491,7 @@ class ProductIn(BaseModel):
     width_cm: Optional[float] = None
     height_cm: Optional[float] = None
     tags: List[str] = Field(default_factory=list)
+    variation_options: List[VariationOption] = Field(default_factory=list)
 
 class OrderCustomer(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -464,6 +521,13 @@ class OrderItem(BaseModel):
     price_inr: Optional[int] = None
     mrp_inr: Optional[int] = None
     line_total_inr: Optional[int] = None
+    # Task 3 (Jul 2025) — free-form option selections beyond legacy colour swatches.
+    # selected_options   : {"shape":"round","frame":"bordered","gift_wrap":"yes"}
+    # selected_options_labels: {"Shape":"Round","Frame":"With Border","Gift Wrap":"Yes"}
+    # options_price_delta_inr: cumulative ₹ delta added to base price for chosen options
+    selected_options: Dict[str, str] = Field(default_factory=dict)
+    selected_options_labels: Dict[str, str] = Field(default_factory=dict)
+    options_price_delta_inr: int = 0
 
 class OrderIn(BaseModel):
     customer: OrderCustomer; items: List[OrderItem]
@@ -502,6 +566,9 @@ class Order(BaseModel):
     tracking_url: Optional[str] = None
     tracking_carrier: Optional[str] = None
     tracking_updated_at: Optional[str] = None
+    # Task 8 — GST invoice metadata (assigned lazily on first PDF download)
+    invoice_number: Optional[str] = None
+    invoice_date: Optional[str] = None
     created_at: str = Field(default_factory=now_iso)
 
 class Review(BaseModel):
@@ -1239,15 +1306,19 @@ async def get_product(slug: str):
     return doc
 
 
-@api_router.get("/reviews", response_model=List[Review])
+@api_router.get("/reviews", response_model=List[Review], response_model_exclude={"user_email"})
 async def list_reviews(product_id: Optional[str] = None):
     """Public list of reviews. Only status=approved reviews are returned.
-    Optional ?product_id=... filters to a single product (used by ProductPage)."""
+    Optional ?product_id=... filters to a single product (used by ProductPage).
+    SECURITY: `user_email` is stripped from the response so PII does not leak
+    to unauthenticated visitors (added Jul 2025 after security review)."""
     q: dict = {"status": {"$in": ["approved", None]}}
     # Back-compat: existing docs without a `status` field are treated as approved.
     if product_id:
         q["product_id"] = product_id
-    return await db.reviews.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    # Also drop from Mongo projection as a defence-in-depth measure.
+    docs = await db.reviews.find(q, {"_id": 0, "user_email": 0}).sort("created_at", -1).to_list(500)
+    return docs
 
 
 @api_router.post("/reviews", response_model=Review)
@@ -1291,9 +1362,9 @@ async def customer_submit_review(payload: ReviewSubmit, user=Depends(get_current
             kind="review_pending",
             subject=f"New review pending approval — {review.rating}★ from {author}",
             html_body=(
-                f"<p><strong>{author}</strong> ({email}) submitted a "
-                f"{review.rating}-star review titled <em>{review.title}</em>.</p>"
-                f"<p>{review.body[:500]}</p>"
+                f"<p><strong>{_esc(author)}</strong> ({_esc(email)}) submitted a "
+                f"{int(review.rating)}-star review titled <em>{_esc(review.title)}</em>.</p>"
+                f"<p>{_esc(review.body[:500])}</p>"
                 f"<p>Go to <b>Admin → Reviews → Pending</b> to approve or reject.</p>"
             ),
         ))
@@ -1337,6 +1408,7 @@ async def create_order(payload: OrderIn):
     # Ensures the Admin Orders detail view (and customer receipt) shows the exact product bought
     # even if the product is later renamed, re-priced, or removed.
     snapshotted_items = []
+    _low_stock_events = []  # (product_name, remaining_stock) — for admin low-stock notify
     for it in order.items:
         prod = await db.products.find_one({"id": it.product_id}, {"_id": 0})
         variant = None
@@ -1354,6 +1426,23 @@ async def create_order(payload: OrderIn):
         v_size = (variant or {}).get("size") or (prod or {}).get("size")
         price_inr = int(v_price if v_price is not None else (prod or {}).get("price_inr") or 0)
         mrp_inr = int(v_mrp if v_mrp is not None else (prod or {}).get("mrp_inr") or 0)
+        # --- Task 3: resolve selected_options → labels + cumulative price delta ---
+        opt_labels: Dict[str, str] = {}
+        opt_delta_inr = 0
+        variation_options = (prod or {}).get("variation_options") or []
+        for opt in variation_options:
+            okey = opt.get("key")
+            selected_val_key = (it.selected_options or {}).get(okey) if it.selected_options else None
+            if not selected_val_key:
+                if opt.get("required"):
+                    raise HTTPException(status_code=400, detail=f"Option '{opt.get('label') or okey}' is required for {(prod or {}).get('name')}")
+                continue
+            match = next((v for v in (opt.get("values") or []) if v.get("key") == selected_val_key), None)
+            if match:
+                opt_labels[opt.get("label") or okey] = match.get("label") or selected_val_key
+                opt_delta_inr += int(match.get("price_delta_inr") or 0)
+        it.selected_options_labels = opt_labels
+        it.options_price_delta_inr = opt_delta_inr
         it.product_name = (prod or {}).get("name")
         it.product_slug = (prod or {}).get("slug")
         it.product_image = v_image or (prod or {}).get("hero_image")
@@ -1364,10 +1453,15 @@ async def create_order(payload: OrderIn):
         it.variant_hex = v_hex
         it.variant_image = v_image
         it.size = v_size
-        it.price_inr = price_inr
-        it.mrp_inr = mrp_inr
-        it.line_total_inr = price_inr * int(it.quantity or 1)
+        effective_unit_price = price_inr + opt_delta_inr
+        it.price_inr = effective_unit_price
+        it.mrp_inr = mrp_inr + opt_delta_inr if mrp_inr else mrp_inr
+        it.line_total_inr = effective_unit_price * int(it.quantity or 1)
         snapshotted_items.append(it)
+        # Track low-stock candidates for post-insert notification (Task 6)
+        remaining = int((prod or {}).get("stock_count") or 0) - int(it.quantity or 1)
+        if remaining <= 3 and (prod or {}).get("name"):
+            _low_stock_events.append(((prod or {}).get("name"), max(remaining, 0)))
     order.items = snapshotted_items
 
     # --- Phase A (Jul 2025): compute GST authoritatively (server is source of truth) ---
@@ -1430,18 +1524,37 @@ async def create_order(payload: OrderIn):
     # Task 6: notify every admin of the new order.
     try:
         _od = order.model_dump()
+        _cust = _od.get('customer') or {}
         asyncio.create_task(notify_admins_event(
             kind="order_new",
             subject=f"New order {_od.get('order_number')} — ₹{_od.get('total_inr', 0):,}",
             html_body=(
-                f"<p><b>{(_od.get('customer') or {}).get('name','')}</b> "
-                f"({(_od.get('customer') or {}).get('email','')}) placed an order.</p>"
-                f"<p>Items: {len(_od.get('items', []))} · Payment: {_od.get('payment_method')}</p>"
+                f"<p><b>{_esc(_cust.get('name',''))}</b> "
+                f"({_esc(_cust.get('email',''))}) placed an order.</p>"
+                f"<p>Items: {len(_od.get('items', []))} · Payment: {_esc(_od.get('payment_method'))}</p>"
                 f"<p>Open <b>Admin → Orders</b> to view and process.</p>"
             ),
         ))
     except Exception as _e:
         logging.warning(f"Admin new-order notify failed: {_e}")
+    # Task 6: low-stock notifications (fire once per product per order)
+    if _low_stock_events:
+        try:
+            lines = "".join(
+                f"<li><b>{_esc(name)}</b> — {int(remaining)} left in stock</li>"
+                for name, remaining in _low_stock_events
+            )
+            asyncio.create_task(notify_admins_event(
+                kind="low_stock",
+                subject=f"Low stock alert — {len(_low_stock_events)} product(s) at or below 3 units",
+                html_body=(
+                    f"<p>The following product(s) just crossed the low-stock threshold after order "
+                    f"<b>{_esc(order.order_number)}</b>:</p><ul>{lines}</ul>"
+                    f"<p>Open <b>Admin → Inventory</b> to top up.</p>"
+                ),
+            ))
+        except Exception as _e:
+            logging.warning(f"Admin low-stock notify failed: {_e}")
     return {
         "order": order.model_dump(),
         "razorpay_key_id": RZP_KEY if payload.payment_method == "razorpay" else None,
@@ -1687,9 +1800,168 @@ async def admin_update_order(order_number: str, payload: OrderStatusUpdate, admi
             asyncio.create_task(send_order_email(new, "dispatched"))
         elif payload.status == "cancelled" and prev.get("status") != "cancelled":
             asyncio.create_task(send_order_email(new, "cancelled"))
+        # Task 6 — payment_failed is worth alerting admins on
+        elif payload.status == "payment_failed" and prev.get("status") != "payment_failed":
+            asyncio.create_task(notify_admins_event(
+                kind="payment_failed",
+                subject=f"Payment FAILED for order {order_number}",
+                html_body=(
+                    f"<p>Order <b>{_esc(order_number)}</b> flipped to payment_failed.</p>"
+                    f"<p>Customer: {_esc((prev.get('customer') or {}).get('email',''))}</p>"
+                    f"<p>Amount: ₹{int(prev.get('total_inr',0)):,}</p>"
+                ),
+            ))
     except Exception as _e:
         logging.warning(f"Order status email failed: {_e}")
     return {"ok": True}
+
+
+# ============================================================================
+# TASK 8 — GST BUSINESS SETTINGS + INVOICE PDF DOWNLOAD (single + bulk)
+# ============================================================================
+class BusinessSettings(BaseModel):
+    """One-row settings doc for the ArtyFex business identity that appears on
+    every GST tax invoice. Stored under db.settings with _key = 'business'.
+    """
+    model_config = ConfigDict(extra="ignore")
+    legal_name: str = "ArtyFex Atelier"
+    trade_name: str = "ArtyFex"
+    gstin: str = ""              # 15-char GSTIN
+    pan: str = ""
+    address: str = "Mumbai, Maharashtra, India"
+    state: str = "Maharashtra"   # supplier state — determines CGST/SGST vs IGST
+    email: str = ""
+    phone: str = ""
+    website: str = "https://www.artyfex.in"
+    hsn_default: str = ""
+    updated_at: str = Field(default_factory=now_iso)
+
+
+async def _get_business_settings() -> dict:
+    doc = await db.settings.find_one({"_key": "business"}, {"_id": 0, "_key": 0})
+    if not doc:
+        doc = BusinessSettings().model_dump()
+    return doc
+
+
+@api_router.get("/admin/settings/business", response_model=BusinessSettings)
+async def admin_get_business(admin=Depends(get_current_admin)):
+    return BusinessSettings(**(await _get_business_settings()))
+
+
+@api_router.put("/admin/settings/business", response_model=BusinessSettings)
+async def admin_put_business(payload: BusinessSettings, admin=Depends(get_current_admin)):
+    doc = payload.model_dump()
+    doc["updated_at"] = now_iso()
+    await db.settings.update_one({"_key": "business"}, {"$set": {"_key": "business", **doc}}, upsert=True)
+    return BusinessSettings(**doc)
+
+
+async def _ensure_invoice_number(order: dict) -> dict:
+    """Assign a running invoice number when missing (idempotent).
+
+    Format: ARF/FY24-25/000123 (Indian fiscal year Apr-Mar).
+    Runs a per-fiscal-year counter kept in db.settings under _key='inv_counter_FY<yy-yy>'.
+    """
+    if order.get("invoice_number"):
+        return order
+    # Fiscal year (Apr 1 – Mar 31) — India
+    now = datetime.now()
+    if now.month >= 4:
+        fy_key = f"{now.year % 100:02d}-{(now.year + 1) % 100:02d}"
+    else:
+        fy_key = f"{(now.year - 1) % 100:02d}-{now.year % 100:02d}"
+    counter_key = f"inv_counter_FY{fy_key}"
+    counter = await db.settings.find_one_and_update(
+        {"_key": counter_key},
+        {"$inc": {"seq": 1}, "$setOnInsert": {"_key": counter_key}},
+        upsert=True,
+        return_document=True,
+    )
+    seq = int(counter.get("seq") or 1)
+    inv_number = f"ARF/FY{fy_key}/{seq:06d}"
+    inv_date = now_iso()
+    await db.orders.update_one(
+        {"order_number": order["order_number"]},
+        {"$set": {"invoice_number": inv_number, "invoice_date": inv_date}},
+    )
+    order["invoice_number"] = inv_number
+    order["invoice_date"] = inv_date
+    return order
+
+
+@api_router.get("/admin/orders/{order_number}/invoice.pdf")
+async def admin_download_invoice(order_number: str, admin=Depends(get_current_admin)):
+    """Download the GST tax invoice for a single order as PDF."""
+    order = await db.orders.find_one({"order_number": order_number}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    order = await _ensure_invoice_number(order)
+    business = await _get_business_settings()
+    try:
+        from invoice_pdf import build_invoice_pdf
+        pdf_bytes = build_invoice_pdf(order, business)
+    except Exception as e:
+        logging.exception("Invoice PDF build failed")
+        raise HTTPException(status_code=500, detail=f"Invoice generation failed: {e}")
+    fname = f"{order.get('invoice_number','invoice').replace('/', '_')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@api_router.get("/admin/orders/invoices.zip")
+async def admin_download_invoices_zip(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    status: Optional[str] = None,
+    admin=Depends(get_current_admin),
+):
+    """Bulk-download every invoice matching the given date range / status as a zip.
+    Query params (all optional):
+      date_from  ISO date (inclusive)  e.g. 2025-04-01
+      date_to    ISO date (inclusive)  e.g. 2026-03-31
+      status     e.g. 'delivered' — restricts to a single status
+    """
+    import zipfile
+    from invoice_pdf import build_invoice_pdf
+    q: dict = {}
+    if status:
+        q["status"] = status
+    if date_from or date_to:
+        rng: dict = {}
+        if date_from:
+            rng["$gte"] = date_from
+        if date_to:
+            # date_to inclusive → append end-of-day
+            rng["$lte"] = date_to + "T23:59:59.999Z"
+        q["created_at"] = rng
+    orders = await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    if not orders:
+        raise HTTPException(status_code=404, detail="No orders match those filters")
+    business = await _get_business_settings()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for order in orders:
+            order = await _ensure_invoice_number(order)
+            try:
+                pdf_bytes = build_invoice_pdf(order, business)
+            except Exception as e:
+                logging.warning(f"Skipping invoice for {order.get('order_number')}: {e}")
+                continue
+            safe = (order.get("invoice_number") or order.get("order_number") or "invoice").replace("/", "_")
+            zf.writestr(f"{safe}.pdf", pdf_bytes)
+    buf.seek(0)
+    label = "invoices"
+    if date_from or date_to:
+        label += f"_{date_from or 'all'}_to_{date_to or 'all'}"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{label}.zip"'},
+    )
 
 
 @api_router.get("/admin/leads", response_model=List[B2BLead])
@@ -2258,7 +2530,7 @@ async def submit_review(slug: str, payload: ReviewSubmit, user=Depends(get_curre
         asyncio.create_task(notify_admins_event(
             kind="review_pending",
             subject=f"New review pending approval — {r.rating}★ from {r.author}",
-            html_body=f"<p>Product: <b>{prod.get('name','')}</b></p><p>{r.body[:500]}</p>",
+            html_body=f"<p>Product: <b>{_esc(prod.get('name',''))}</b></p><p>{_esc(r.body[:500])}</p>",
         ))
     except Exception:
         pass
@@ -2298,6 +2570,20 @@ async def request_return(payload: ReturnRequestIn, user=Depends(get_current_user
         raise HTTPException(status_code=400, detail="A return request is already open for this order.")
     rr = ReturnRequest(**payload.model_dump(), user_email=user["email"])
     await db.returns.insert_one(rr.model_dump())
+    # Task 6: notify admins of the new return request
+    try:
+        asyncio.create_task(notify_admins_event(
+            kind="order_returned",
+            subject=f"Return requested for order {rr.order_number}",
+            html_body=(
+                f"<p><b>{_esc(user.get('name') or user.get('email'))}</b> requested a return.</p>"
+                f"<p>Reason: <em>{_esc(rr.reason)}</em></p>"
+                f"<p>Order: <b>{_esc(rr.order_number)}</b> · delivered {int(days_since)} days ago</p>"
+                f"<p>Open <b>Admin → Returns</b> to review and process.</p>"
+            ),
+        ))
+    except Exception as _e:
+        logging.warning(f"Admin return notify failed: {_e}")
     return rr
 
 

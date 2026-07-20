@@ -157,31 +157,52 @@ export const ProductShowcase = ({ product }) => {
               {product.description}
             </p>
 
-            {/* Customizer */}
-            <div className="mt-10">
-              <div className="flex items-center justify-between mb-4">
-                <div className="text-[10px] uppercase tracking-luxury text-cream/50">
-                  Colourway
+            {/* Customizer — Task 3 fix: dedupe by hex+key so the same colour never appears twice
+                (previously, colour variants like "Signature Gold · 24\"" and "Signature Gold · 36\""
+                showed the same gold swatch twice — one per size row). Also hides the swatch row
+                completely when the product only has a single default variant. */}
+            {(() => {
+              const seen = new Set();
+              const uniqueVariants = (product.variants || []).filter((v) => {
+                const dedupKey = `${(v.hex || "").toLowerCase()}|${((v.label || "").split("·")[0]).trim().toLowerCase()}`;
+                if (seen.has(dedupKey)) return false;
+                seen.add(dedupKey);
+                return true;
+              });
+              const isDefaultOnly = uniqueVariants.length === 1
+                && ((uniqueVariants[0].key === "default")
+                    || (uniqueVariants[0].label || "").toLowerCase() === "default");
+              if (uniqueVariants.length < 2 || isDefaultOnly) return null;
+              return (
+                <div className="mt-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-[10px] uppercase tracking-luxury text-cream/50">Colourway</div>
+                    <div className="text-xs text-gold-soft italic font-serif">
+                      {(activeVariant.label || "").split("·")[0].trim() || activeVariant.label}
+                    </div>
+                  </div>
+                  <div className="flex gap-3 flex-wrap">
+                    {uniqueVariants.map((v) => {
+                      const isActive = (v.hex || "").toLowerCase() === (activeVariant.hex || "").toLowerCase();
+                      return (
+                        <button
+                          key={v.key}
+                          data-testid={IDS.product.variantSwatch(v.key)}
+                          onClick={() => setVariantKey(v.key)}
+                          className={`group relative w-14 h-14 rounded-full transition-all ${
+                            isActive ? "ring-2 ring-offset-4 ring-offset-ink-950 ring-gold" : "ring-1 ring-white/20"
+                          }`}
+                          style={{ background: `radial-gradient(circle at 30% 30%, ${v.hex}, #0a0a0a 80%)` }}
+                          aria-label={v.label}
+                        >
+                          <span className="absolute inset-0 rounded-full ring-1 ring-inset ring-white/10" />
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="text-xs text-gold-soft italic font-serif">{activeVariant.label}</div>
-              </div>
-              <div className="flex gap-3">
-                {product.variants.map((v) => (
-                  <button
-                    key={v.key}
-                    data-testid={IDS.product.variantSwatch(v.key)}
-                    onClick={() => setVariantKey(v.key)}
-                    className={`group relative w-14 h-14 rounded-full transition-all ${
-                      variantKey === v.key ? "ring-2 ring-offset-4 ring-offset-ink-950 ring-gold" : "ring-1 ring-white/20"
-                    }`}
-                    style={{ background: `radial-gradient(circle at 30% 30%, ${v.hex}, #0a0a0a 80%)` }}
-                    aria-label={v.label}
-                  >
-                    <span className="absolute inset-0 rounded-full ring-1 ring-inset ring-white/10" />
-                  </button>
-                ))}
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Materials */}
             <div className="mt-12 hairline p-6">

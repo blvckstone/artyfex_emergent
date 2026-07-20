@@ -46,14 +46,34 @@ export const CartProvider = ({ children }) => {
     else localStorage.removeItem(COUPON_KEY);
   }, [coupon]);
 
-  const addItem = (product, variantKey, quantity = 1) => {
+  const addItem = (product, variantKey, quantity = 1, selectedOptions = null) => {
     const variant = product.variants.find((v) => v.key === variantKey) || product.variants[0];
     // Resolve per-variant overrides with fallback to product-level
-    const price = variant?.price_inr ?? product.price_inr;
+    const basePrice = variant?.price_inr ?? product.price_inr;
     const image = variant?.image || product.hero_image;
     const variantSize = variant?.size || null;
+    // Task 3 — compute price delta from selected extra options (Shape/Frame/Gift…)
+    const options = selectedOptions || {};
+    const optionLabels = {};
+    let optionsDelta = 0;
+    (product.variation_options || []).forEach((opt) => {
+      const chosenKey = options[opt.key];
+      if (!chosenKey) return;
+      const match = (opt.values || []).find((v) => v.key === chosenKey);
+      if (match) {
+        optionLabels[opt.label || opt.key] = match.label || match.key;
+        optionsDelta += Number(match.price_delta_inr || 0);
+      }
+    });
+    const finalPrice = basePrice + optionsDelta;
+    // Same product + variant + option-set → treat as same cart line (merge qty)
+    const optionsKey = JSON.stringify(options || {});
     setItems((prev) => {
-      const idx = prev.findIndex((i) => i.product_id === product.id && i.variant_key === variant.key);
+      const idx = prev.findIndex(
+        (i) => i.product_id === product.id
+          && i.variant_key === variant.key
+          && JSON.stringify(i.selected_options || {}) === optionsKey,
+      );
       if (idx >= 0) {
         const clone = [...prev];
         clone[idx] = { ...clone[idx], quantity: clone[idx].quantity + quantity };
@@ -69,8 +89,11 @@ export const CartProvider = ({ children }) => {
           variant_label: variant.label,
           variant_size: variantSize,
           image,
-          price_inr: price,
+          price_inr: finalPrice,
           quantity,
+          selected_options: options,
+          selected_options_labels: optionLabels,
+          options_price_delta_inr: optionsDelta,
         },
       ];
     });

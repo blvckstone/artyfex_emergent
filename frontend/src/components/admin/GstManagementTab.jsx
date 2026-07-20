@@ -156,8 +156,15 @@ export default function GstManagementTab({ authed }) {
             onClick={() => setView("categories")}
             className={`px-4 py-2 text-xs uppercase tracking-luxury border ${view === "categories" ? "border-gold text-gold" : "border-white/10 text-cream/60"}`}
           >Categories</button>
+          <button
+            data-testid="gst-view-business"
+            onClick={() => setView("business")}
+            className={`px-4 py-2 text-xs uppercase tracking-luxury border ${view === "business" ? "border-gold text-gold" : "border-white/10 text-cream/60"}`}
+          >Business identity</button>
         </div>
       </div>
+
+      {view === "business" && <BusinessIdentityCard authed={authed} />}
 
       {view === "rules" && (
         <>
@@ -409,3 +416,107 @@ function CategoryEditor({ initial, saving, onCancel, onSave }) {
     </div>
   );
 }
+
+
+/* --------------------------------------------------------------------------
+ * BusinessIdentityCard — Task 8.
+ * Edits the ArtyFex business identity block that appears at the top of every
+ * GST tax invoice PDF (legal name, GSTIN, PAN, address, home state).
+ * Persisted to db.settings _key='business' via /api/admin/settings/business.
+ * -------------------------------------------------------------------------- */
+function BusinessIdentityCard({ authed }) {
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await authed.get("/admin/settings/business");
+        if (alive) setForm(data);
+      } catch (_) {
+        if (alive) setForm({
+          legal_name: "ArtyFex Atelier", trade_name: "ArtyFex", gstin: "", pan: "",
+          address: "Mumbai, Maharashtra, India", state: "Maharashtra",
+          email: "", phone: "", website: "https://www.artyfex.in", hsn_default: "",
+        });
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [authed]);
+
+  const save = async () => {
+    if (!form) return;
+    if (form.gstin && !/^[0-9A-Z]{15}$/.test(form.gstin.trim())) {
+      toast.error("GSTIN must be 15 characters (letters + numbers)");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data } = await authed.put("/admin/settings/business", form);
+      setForm(data);
+      toast.success("Business identity saved. Reflected on all future invoices.");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Save failed");
+    } finally { setSaving(false); }
+  };
+
+  if (loading || !form) return (
+    <div className="mt-8 text-cream/40 text-sm"><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading business identity…</div>
+  );
+
+  const upd = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  return (
+    <div className="mt-8 hairline p-6 bg-ink-950/40" data-testid="admin-gst-business">
+      <div className="flex items-start gap-3 mb-5">
+        <ShieldCheck className="w-4 h-4 text-gold mt-0.5" />
+        <div>
+          <div className="font-serif text-xl text-cream">Business identity on invoices</div>
+          <div className="mt-1 text-xs text-cream/50 max-w-xl">
+            These details are printed at the top of every GST tax invoice PDF (Task 8). GSTIN + State
+            control the CGST/SGST vs IGST split shown to your CA during filing. Update once and every
+            future invoice picks it up automatically.
+          </div>
+        </div>
+      </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <Fld label="Legal name (as per PAN / GST)"><input value={form.legal_name || ""} onChange={upd("legal_name")} className={inp} data-testid="biz-legal-name" /></Fld>
+        <Fld label="Trade name / Storefront name"><input value={form.trade_name || ""} onChange={upd("trade_name")} className={inp} data-testid="biz-trade-name" /></Fld>
+        <Fld label="GSTIN (15 chars)" hint="27AVGPK1480P1Z3 · leave blank if unregistered">
+          <input value={form.gstin || ""} onChange={upd("gstin")} maxLength={15} className={`${inp} font-mono uppercase`} data-testid="biz-gstin" />
+        </Fld>
+        <Fld label="PAN (10 chars)"><input value={form.pan || ""} onChange={upd("pan")} maxLength={10} className={`${inp} font-mono uppercase`} data-testid="biz-pan" /></Fld>
+        <Fld label="Registered state" hint="Determines CGST/SGST vs IGST on invoices">
+          <input value={form.state || ""} onChange={upd("state")} className={inp} data-testid="biz-state" />
+        </Fld>
+        <Fld label="Default HSN (optional)" hint="Used only if a product has no HSN">
+          <input value={form.hsn_default || ""} onChange={upd("hsn_default")} className={`${inp} font-mono`} data-testid="biz-hsn-default" />
+        </Fld>
+        <div className="md:col-span-2">
+          <Fld label="Registered address"><textarea value={form.address || ""} onChange={upd("address")} rows={2} className={inp} data-testid="biz-address" /></Fld>
+        </div>
+        <Fld label="Contact email"><input value={form.email || ""} onChange={upd("email")} type="email" className={inp} data-testid="biz-email" /></Fld>
+        <Fld label="Contact phone"><input value={form.phone || ""} onChange={upd("phone")} className={inp} data-testid="biz-phone" /></Fld>
+        <Fld label="Website (optional)"><input value={form.website || ""} onChange={upd("website")} className={inp} data-testid="biz-website" /></Fld>
+      </div>
+      <div className="mt-6 flex items-center justify-end gap-3">
+        <div className="text-[10px] text-cream/40 mr-auto">Last saved: {form.updated_at ? new Date(form.updated_at).toLocaleString() : "—"}</div>
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving}
+          data-testid="biz-save"
+          className="bg-gold text-ink-950 px-6 py-2.5 text-xs uppercase tracking-luxury hover:bg-cream disabled:opacity-50 flex items-center gap-2"
+        >
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+          {saving ? "Saving…" : "Save business identity"}
+        </button>
+      </div>
+    </div>
+  );
+}
+

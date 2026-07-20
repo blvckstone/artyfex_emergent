@@ -128,3 +128,4 @@ cloudinary==1.45.0
 
 slowapi==0.1.10
 limits==5.8.0deprecated>=1.2.14
+reportlab>=4.0.0

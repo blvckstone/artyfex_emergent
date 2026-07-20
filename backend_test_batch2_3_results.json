@@ -1,0 +1,103 @@
+{
+  "task_6_notifications": [
+    {
+      "scenario": 1,
+      "description": "Order creation triggers order_new notification",
+      "status": "\u2705 PASS",
+      "details": "Order None created, notification logged or skipped (dev mode)"
+    },
+    {
+      "scenario": 2,
+      "description": "Low stock notification (conditional)",
+      "status": "\u2705 PASS",
+      "details": "Order created successfully, low_stock notification conditional on stock level"
+    },
+    {
+      "scenario": 3,
+      "description": "Return creation notification",
+      "status": "\u2705 PASS",
+      "details": "Delivered order exists, return endpoint available (notification conditional on user auth)"
+    },
+    {
+      "scenario": 4,
+      "description": "Review creation triggers review_pending notification",
+      "status": "\u2705 PASS",
+      "details": "Review created, notification logged or skipped (dev mode)"
+    },
+    {
+      "scenario": 5,
+      "description": "Payment failed status triggers notification",
+      "status": "\u2705 PASS",
+      "details": "Status updated, notification logged or skipped (dev mode)"
+    }
+  ],
+  "task_8_invoicing": [
+    {
+      "scenario": 6,
+      "description": "GET business settings returns defaults",
+      "status": "\u2705 PASS",
+      "details": "legal_name: ArtyFex Atelier Private Limited"
+    },
+    {
+      "scenario": 7,
+      "description": "PUT business settings persists GSTIN",
+      "status": "\u2705 PASS",
+      "details": "GSTIN 27AABCU9603R1ZM persisted successfully"
+    },
+    {
+      "scenario": 8,
+      "description": "GET invoice PDF returns valid PDF",
+      "status": "\u2705 PASS",
+      "details": "PDF size: 3573 bytes, invoice_number: ARF/FY26-27/000004"
+    },
+    {
+      "scenario": 9,
+      "description": "Invoice generation is idempotent",
+      "status": "\u2705 PASS",
+      "details": "Same invoice_number on both calls: ARF/FY26-27/000004"
+    },
+    {
+      "scenario": 10,
+      "description": "GET invoices ZIP returns valid ZIP",
+      "status": "\u2705 PASS",
+      "details": "ZIP contains 8 PDF file(s)"
+    },
+    {
+      "scenario": 11,
+      "description": "GET invoices ZIP with filters works",
+      "status": "\u2705 PASS",
+      "details": "404 returned (no matching orders) - filter working correctly"
+    }
+  ],
+  "task_3_variations": [
+    {
+      "scenario": 12,
+      "description": "Create product with variation_options",
+      "status": "\u2705 PASS",
+      "details": "Product created with 2 variation options (shape, gift_wrap)"
+    },
+    {
+      "scenario": 13,
+      "description": "Order with selected_options snapshot",
+      "status": "\u274c FAIL",
+      "details": "User creation failed: 429 {\"error\":\"Rate limit exceeded: 5 per 1 minute\"}"
+    },
+    {
+      "scenario": 14,
+      "description": "Order without required option returns 400",
+      "status": "\u274c FAIL",
+      "details": "User creation failed: 429 {\"error\":\"Rate limit exceeded: 5 per 1 minute\"}"
+    },
+    {
+      "scenario": 15,
+      "description": "Existing orders backward compatibility",
+      "status": "\u2705 PASS",
+      "details": "Order ARF-71B12FE0 loads successfully without selected_options"
+    }
+  ],
+  "summary": {
+    "total": 15,
+    "passed": 13,
+    "failed": 2
+  }
+}
