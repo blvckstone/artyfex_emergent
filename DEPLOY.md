@@ -64,6 +64,12 @@ GOOGLE_CLIENT_SECRET   = xxx
 CLOUDINARY_CLOUD_NAME  = xxx
 CLOUDINARY_API_KEY     = xxx
 CLOUDINARY_API_SECRET  = xxx
+
+# NimbusPost courier (Task 7 / Batch 4)
+NIMBUSPOST_EMAIL          = artyfex.in+xxxx@gmail.com   # created in NimbusPost → Settings → API
+NIMBUSPOST_PASSWORD       = xxxxxxxxxxxx                # ditto
+NIMBUSPOST_LEGACY_KEY     = xxx                         # fallback old API key
+NIMBUSPOST_WAREHOUSE_NAME =                             # OPTIONAL — leave blank and set in Admin → Shipping
 ```
 
 After changing any secret in Northflank, click **Restart** on the service. Environment variables are only re-read on process boot.
