@@ -6,7 +6,7 @@ import requests
 from datetime import datetime, timezone, timedelta
 from pymongo import MongoClient
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://backend-migration-24.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://html-inject-scan.preview.emergentagent.com').rstrip('/')
 API = f"{BASE_URL}/api"
 
 # Load backend env for MongoDB access

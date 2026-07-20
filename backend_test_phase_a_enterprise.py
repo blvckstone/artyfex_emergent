@@ -8,7 +8,7 @@ import json
 import sys
 from typing import Dict, Any
 
-BASE_URL = "https://backend-migration-24.preview.emergentagent.com/api"
+BASE_URL = "https://html-inject-scan.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@artyfex.in"
 ADMIN_PASSWORD = "ArtyFex@2026"
 
