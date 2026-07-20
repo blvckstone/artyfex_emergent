@@ -61,3 +61,16 @@ Build a highly attractive, ultra-premium, fully functional SPA e-commerce websit
   - Testing agent iteration_11: **100% pass** (15/15 backend, all Phase B frontend flows).
   - Files touched: `backend/server.py`, `frontend/src/App.js`, `frontend/src/components/{Craftsmanship,Collection,Reviews,Footer,admin/HomepageEditor}.jsx`, `frontend/src/pages/AdminPage.jsx`.
   - Deferred (won't fix now — noted in code review): partial-merge PATCH for `/admin/homepage`; explicit `has_variations` persisted on Product model.
+
+- **[Batches 1–3 — Jul 2026] Trust + Ops Polish**:
+  - Batch 1: Cloudinary migration (no more URL text field on admin), review moderation with `helpful_votes`, verified-collector badge, /shop pagination + sort.
+  - Batch 2/3: Admin realtime notifications (new order + pending review + low-stock), Task 8 GST-compliant invoice PDF generator (`invoice_pdf.py`) with wholesale/retail toggles, Task 3 product variations overhaul (visual editor, per-variant image/price/stock/SKU).
+  - Security patch: PII leak in `GET /api/reviews` (user_email now excluded via `response_model_exclude` + Mongo projection). HTML injection in customer-review email templates now escaped via `_esc()` helper. Verified 9/9 tests.
+
+- **[Batch 4 — Jul 2026] Task 7 · NimbusPost Courier**:
+  - New `backend/nimbuspost_service.py` with async httpx client. JWT auth (23h in-process cache) + legacy-key fallback. Env keys `NIMBUSPOST_{BASE_URL,EMAIL,PASSWORD,LEGACY_KEY,WAREHOUSE_NAME}`.
+  - Admin endpoints under `/api/admin/nimbuspost/*` (config CRUD, serviceability) + `/api/admin/orders/{n}/nimbuspost/{ship|track|cancel}`. Writes `tracking_id/carrier/url` back to order on success.
+  - Admin UI: `NimbusPostCard` component inside Shipping tab (warehouse name, live serviceability check widget) + per-order "Ship / Track / Cancel" action pills below every order row.
+  - Backend tests: 22/23 passed (one transient timing quirk). Frontend UI verified end-to-end. Real API round-trip succeeds — NimbusPost surfaces a dashboard-side "OTP-verified support email & phone required" message which is a one-time NimbusPost dashboard setup, not a code issue.
+  - Docs: `DEPLOY.md` updated with `NIMBUSPOST_*` env keys.
+
