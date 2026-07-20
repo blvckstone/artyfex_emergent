@@ -462,7 +462,19 @@ export default function ProductPage() {
         </div>
 
         {/* CUSTOMER REVIEWS (Amazon/Flipkart-style) */}
-        <ProductReviewsSection reviews={reviews} avg={ratingStats.avg} count={ratingStats.count} />
+        <ProductReviewsSection
+          reviews={reviews}
+          avg={ratingStats.avg}
+          count={ratingStats.count}
+          product={product}
+          user={user}
+          openAuth={openAuth}
+          onSubmitted={(newReview) => {
+            // Optimistically insert (as pending) even though we filter for
+            // approved only elsewhere — this gives the customer instant feedback.
+            setReviews((prev) => [{ ...newReview }, ...prev]);
+          }}
+        />
       </div>
       {/* Sticky mobile Add-to-Cart bar (native app feel) */}
       <div
@@ -515,10 +527,11 @@ function StarRow({ rating, size = "sm" }) {
   );
 }
 
-function ProductReviewsSection({ reviews, avg, count }) {
+function ProductReviewsSection({ reviews, avg, count, product, user, openAuth, onSubmitted }) {
   const [sort, setSort] = useState("recent");
   const [filterStar, setFilterStar] = useState(0);
   const [limit, setLimit] = useState(6);
+  const [writeOpen, setWriteOpen] = useState(false);
 
   const buckets = useMemo(() => {
     const b = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
@@ -546,15 +559,39 @@ function ProductReviewsSection({ reviews, avg, count }) {
         </div>
         <h2 className="font-serif text-2xl md:text-3xl text-cream">No reviews yet</h2>
         <p className="mt-3 text-cream/50 text-sm md:text-base font-light">Be the first to share your experience with this piece.</p>
+        <button
+          type="button"
+          onClick={() => (user ? setWriteOpen(true) : openAuth?.("login"))}
+          data-testid="review-write-cta-empty"
+          className="mt-6 inline-flex items-center gap-2 border border-gold/40 text-gold text-xs uppercase tracking-luxury px-5 py-3 hover:bg-gold hover:text-ink-950 transition-colors"
+        >
+          <Star className="w-3.5 h-3.5" /> Write a review
+        </button>
+        <WriteReviewDialog
+          open={writeOpen}
+          onClose={() => setWriteOpen(false)}
+          product={product}
+          onSubmitted={(rv) => { onSubmitted?.(rv); setWriteOpen(false); }}
+        />
       </section>
     );
   }
 
   return (
     <section id="reviews" data-testid="product-reviews" className="mt-16 md:mt-24 pt-10 md:pt-16 border-t border-white/5">
-      <div className="flex items-center gap-3 mb-6 md:mb-8">
-        <span className="gold-line w-8 md:w-10" />
-        <span className="text-[10px] uppercase tracking-luxury text-gold-soft">Customer Reviews</span>
+      <div className="flex items-center justify-between gap-3 mb-6 md:mb-8">
+        <div className="flex items-center gap-3">
+          <span className="gold-line w-8 md:w-10" />
+          <span className="text-[10px] uppercase tracking-luxury text-gold-soft">Customer Reviews</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => (user ? setWriteOpen(true) : openAuth?.("login"))}
+          data-testid="review-write-cta"
+          className="inline-flex items-center gap-2 border border-gold/40 text-gold text-[10px] uppercase tracking-luxury px-3 py-2 hover:bg-gold hover:text-ink-950 transition-colors"
+        >
+          <Star className="w-3 h-3" /> Write a review
+        </button>
       </div>
 
       <div className="grid md:grid-cols-3 gap-6 md:gap-10 mb-8 md:mb-12">
@@ -565,7 +602,7 @@ function ProductReviewsSection({ reviews, avg, count }) {
             <span className="text-cream/50 text-sm">/ 5</span>
           </div>
           <StarRow rating={avg} size="lg" />
-          <div className="mt-2 text-xs text-cream/60">Based on {count} verified {count === 1 ? "review" : "reviews"}</div>
+          <div className="mt-2 text-xs text-cream/60">Based on {count} {count === 1 ? "review" : "reviews"}</div>
         </div>
         {/* Rating breakdown */}
         <div className="md:col-span-2 bg-ink-900 border border-white/10 rounded-xl md:rounded-none p-5 md:p-6">
@@ -676,6 +713,111 @@ function ProductReviewsSection({ reviews, avg, count }) {
           >Load more reviews</button>
         </div>
       )}
+      <WriteReviewDialog
+        open={writeOpen}
+        onClose={() => setWriteOpen(false)}
+        product={product}
+        onSubmitted={(rv) => { onSubmitted?.(rv); setWriteOpen(false); }}
+      />
     </section>
+  );
+}
+
+
+/* Task 5 · Customer "Write a review" modal.
+   Requires the user to be signed in. Backend applies the actual verified-buyer
+   check server-side + queues the review as "pending" for admin approval. */
+function WriteReviewDialog({ open, onClose, product, onSubmitted }) {
+  const [rating, setRating] = useState(5);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    setRating(5); setTitle(""); setBody(""); setBusy(false);
+  }, [open]);
+  if (!open || !product) return null;
+  const submit = async () => {
+    if (!title.trim() || !body.trim()) {
+      toast.error("Title and body are required");
+      return;
+    }
+    if (rating < 1 || rating > 5) {
+      toast.error("Please pick 1–5 stars");
+      return;
+    }
+    setBusy(true);
+    try {
+      const token = (typeof window !== "undefined") ? localStorage.getItem("artyfex_user_token") : "";
+      const r = await api.post(`/products/${product.slug}/reviews`, {
+        rating, title: title.trim(), body: body.trim(),
+        product_id: product.id,
+      }, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      toast.success("Thank you — your review is pending admin approval.", { duration: 4500 });
+      onSubmitted?.(r.data);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not submit review");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4" onClick={onClose} data-testid="review-modal">
+      <div className="bg-ink-950 border border-gold/30 w-full max-w-lg p-6 md:p-8" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h3 className="font-serif text-xl md:text-2xl text-cream">Write a review</h3>
+          <button onClick={onClose} className="text-cream/50 hover:text-red-400 text-xl leading-none" aria-label="Close">×</button>
+        </div>
+        <p className="text-xs text-cream/50 mb-5">Reviewing <span className="text-cream">{product.name}</span>. Your review will be visible after admin approval. If you have a delivered order for this piece, you will automatically show as a Verified purchase.</p>
+        <label className="block text-[10px] uppercase tracking-luxury text-gold-soft mb-2">Your rating</label>
+        <div className="flex items-center gap-1 mb-4">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setRating(n)}
+              data-testid={`review-rating-${n}`}
+              className="p-1"
+              aria-label={`${n} stars`}
+            >
+              <Star className={`w-6 h-6 transition ${rating >= n ? "fill-gold text-gold" : "text-cream/25"}`} />
+            </button>
+          ))}
+        </div>
+        <label className="block text-[10px] uppercase tracking-luxury text-gold-soft mb-2">Title</label>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={140}
+          placeholder="Sums up your experience in a few words"
+          data-testid="review-title"
+          className="w-full bg-ink-900 border border-white/10 text-cream text-sm px-3 py-2.5 mb-4 focus:border-gold outline-none"
+        />
+        <label className="block text-[10px] uppercase tracking-luxury text-gold-soft mb-2">Your review</label>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={5}
+          maxLength={4000}
+          placeholder="What did you love? Anything the atelier can improve?"
+          data-testid="review-body"
+          className="w-full bg-ink-900 border border-white/10 text-cream text-sm px-3 py-2.5 mb-4 focus:border-gold outline-none resize-y"
+        />
+        <div className="flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs uppercase tracking-luxury text-cream/60 hover:text-cream px-4 py-2"
+          >Cancel</button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={submit}
+            data-testid="review-submit"
+            className="text-xs uppercase tracking-luxury bg-gold text-ink-950 px-5 py-2.5 hover:bg-gold-soft disabled:opacity-50"
+          >{busy ? "Submitting…" : "Submit review"}</button>
+        </div>
+      </div>
+    </div>
   );
 }
