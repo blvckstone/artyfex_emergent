@@ -1,0 +1,152 @@
+{
+  "test_suite": "Batch 1 - Review Moderation & Cloudinary",
+  "timestamp": "2026-07-20T10:06:06.889776",
+  "tests": [
+    {
+      "test": "Test 1.1: GET /api/reviews returns approved reviews only",
+      "passed": true,
+      "details": "Found 6 reviews, all approved or legacy (no status field)",
+      "response": {
+        "count": 6,
+        "sample": {
+          "id": "508bc6bd-d583-423b-ae47-41513a111d80",
+          "author": "Meera & Arjun Bhatia",
+          "location": "Golf Links, New Delhi",
+          "rating": 5,
+          "title": "Custom dimensions, flawless execution.",
+          "body": "We asked for a non-standard 3\u00d74 ft variant for our foyer. Maloni personally sent us three moodboards before pouring. The finished piece is a work of art.",
+          "image": null,
+          "verified": true,
+          "featured": false,
+          "status": "approved",
+          "product_id": null,
+          "user_email": null,
+          "created_at": "2026-07-18T13:04:20.051476+00:00"
+        }
+      }
+    },
+    {
+      "test": "Test 2.1: GET /api/reviews?product_id filters correctly",
+      "passed": true,
+      "details": "Found 0 reviews for product 1723675f-171b-489c-b392-49c139022b9b, all match filter",
+      "response": {
+        "count": 0
+      }
+    },
+    {
+      "test": "Test 3.1: POST /api/reviews without auth \u2192 401",
+      "passed": true,
+      "details": "Expected 401, got 401",
+      "response": {
+        "status": 401
+      }
+    },
+    {
+      "test": "Test 3.2: POST /api/reviews with auth but no product_id \u2192 verified=false",
+      "passed": true,
+      "details": "Review created with verified=False",
+      "response": {
+        "review_id": "290df7c4-dd9f-4e6b-b018-1ec13f32087e",
+        "verified": false
+      }
+    },
+    {
+      "test": "Test 4.1: POST /api/products/{slug}/reviews first submission \u2192 200",
+      "passed": true,
+      "details": "First review created successfully",
+      "response": {
+        "review_id": "e06aa59b-c2ba-4f7e-b529-281ffb37fe5a"
+      }
+    },
+    {
+      "test": "Test 4.2: POST /api/products/{slug}/reviews duplicate \u2192 409",
+      "passed": true,
+      "details": "Expected 409, got 409",
+      "response": {
+        "status": 409,
+        "detail": "You have already reviewed this product"
+      }
+    },
+    {
+      "test": "Test 5.1: Pending review NOT in GET /api/reviews (public)",
+      "passed": true,
+      "details": "Pending review NOT FOUND in public list (expected NOT FOUND)",
+      "response": {
+        "pending_review_id": "e06aa59b-c2ba-4f7e-b529-281ffb37fe5a",
+        "found_in_public": false
+      }
+    },
+    {
+      "test": "Test 5.2: Pending review FOUND in GET /api/admin/reviews?status=pending",
+      "passed": true,
+      "details": "Pending review FOUND in admin pending list (expected FOUND)",
+      "response": {
+        "pending_review_id": "e06aa59b-c2ba-4f7e-b529-281ffb37fe5a",
+        "found_in_admin": true,
+        "admin_pending_count": 2
+      }
+    },
+    {
+      "test": "Test 6.1: PATCH /api/admin/reviews/{id}/moderate status=approved \u2192 200",
+      "passed": true,
+      "details": "Review moderated to approved",
+      "response": {
+        "review_id": "e06aa59b-c2ba-4f7e-b529-281ffb37fe5a",
+        "status": "approved"
+      }
+    },
+    {
+      "test": "Test 6.2: Approved review NOW appears in GET /api/reviews",
+      "passed": true,
+      "details": "Approved review FOUND in public list (expected FOUND)",
+      "response": {
+        "review_id": "e06aa59b-c2ba-4f7e-b529-281ffb37fe5a",
+        "found_in_public": true
+      }
+    },
+    {
+      "test": "Test 7.1: POST /api/orders \u2192 200 (admin notification queued, no exception)",
+      "passed": true,
+      "details": "Order created successfully: None",
+      "response": {
+        "order_number": null,
+        "status": null
+      }
+    },
+    {
+      "test": "Test 8.1: GET /api/admin/reviews without auth \u2192 401",
+      "passed": true,
+      "details": "Expected 401, got 401",
+      "response": {
+        "status": 401
+      }
+    },
+    {
+      "test": "Test 8.2: GET /api/admin/reviews with admin token \u2192 200",
+      "passed": true,
+      "details": "Expected 200, got 200",
+      "response": {
+        "status": 200,
+        "count": 8
+      }
+    },
+    {
+      "test": "Test 9.1: GET /api/cloudinary/signature \u2192 500 'Cloudinary not configured' (PASS in dev)",
+      "passed": true,
+      "details": "Expected 'Cloudinary not configured' error in dev, got: Cloudinary not configured",
+      "response": {
+        "status": 500,
+        "detail": "Cloudinary not configured"
+      }
+    },
+    {
+      "test": "Test 10.1: DELETE /api/cloudinary/asset \u2192 500 'Cloudinary not configured' (PASS in dev)",
+      "passed": true,
+      "details": "Expected 'Cloudinary not configured' error in dev, got: Cloudinary not configured",
+      "response": {
+        "status": 500,
+        "detail": "Cloudinary not configured"
+      }
+    }
+  ]
+}

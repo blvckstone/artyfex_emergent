@@ -117,6 +117,40 @@ async def send_email(to_email: str, subject: str, html: str):
         logging.error(f"Email send failed for {to_email}: {e}")
 
 
+async def notify_admins_event(kind: str, subject: str, html_body: str):
+    """Fan-out an operational notification to every admin in db.admins (Task 6).
+
+    Categories used across the codebase:
+      order_new, order_returned, review_pending, low_stock, payment_failed, b2b_lead
+    Silent-fails per recipient so one bad address never blocks the others.
+    """
+    try:
+        admins = await db.admins.find({}, {"_id": 0, "email": 1}).to_list(200)
+    except Exception:
+        admins = []
+    seen: set = set()
+    envelope = (
+        f"<div style='font-family:Cormorant Garamond,Georgia,serif;padding:24px;background:#050505;color:#f5f1e8'>"
+        f"<div style='font-size:11px;letter-spacing:.2em;color:#c9a15a;text-transform:uppercase;margin-bottom:8px'>ArtyFex · {kind.replace('_',' ').title()}</div>"
+        f"<div style='font-size:22px;color:#f5f1e8;margin-bottom:16px'>{subject}</div>"
+        f"<div style='font-family:Outfit,Arial,sans-serif;font-size:14px;color:#f5f1e8/70;line-height:1.6'>{html_body}</div>"
+        f"<hr style='border:none;border-top:1px solid #333;margin:24px 0'/>"
+        f"<div style='font-size:11px;color:#888'>Automated notification from ArtyFex Atelier · you receive these because you are an admin on the platform.</div>"
+        f"</div>"
+    )
+    for a in admins:
+        em = (a.get("email") or "").lower().strip()
+        if not em or em in seen:
+            continue
+        seen.add(em)
+        try:
+            await send_email(em, f"[ArtyFex Admin] {subject}", envelope)
+        except Exception as e:
+            logging.error(f"admin notify failed for {em}: {e}")
+
+
+
+
 def render_return_email(status: str, customer_name: str, order_number: str, admin_notes: Optional[str], is_genuine: Optional[bool]) -> tuple[str, str]:
     approved = status == "approved"
     accent = "#D4AF37" if approved else "#E37878"
@@ -476,12 +510,23 @@ class Review(BaseModel):
     author: str; location: str; rating: int
     title: str; body: str; image: Optional[str] = None
     verified: bool = True; featured: bool = False
+    # Task 5: moderation. "approved" reviews show publicly. "pending" wait for
+    # admin to approve. "rejected" are archived. Admin-created reviews auto-
+    # approve; user-submitted reviews start "pending".
+    status: str = "approved"
+    # Optional link to the product being reviewed (used for storefront filtering)
+    product_id: Optional[str] = None
+    # Author identity — used to gate "verified buyer" badge + prevent duplicate reviews.
+    user_email: Optional[str] = None
     created_at: str = Field(default_factory=now_iso)
 
 class ReviewIn(BaseModel):
     author: str; location: str; rating: int
     title: str; body: str; image: Optional[str] = None
     featured: bool = False
+    verified: bool = True
+    status: str = "approved"
+    product_id: Optional[str] = None
 
 class B2BLeadIn(BaseModel):
     full_name: str; company: str; email: EmailStr; phone: str
@@ -529,11 +574,13 @@ class ReviewPromptDelay(BaseModel):
 
 
 class ReviewSubmit(BaseModel):
-    rating: int
-    title: str
-    body: str
+    rating: int = Field(ge=1, le=5)
+    title: str = Field(min_length=1, max_length=140)
+    body: str = Field(min_length=1, max_length=4000)
     location: Optional[str] = None
     image: Optional[str] = None
+    product_id: Optional[str] = None
+    author_name: Optional[str] = None
 
 
 class ReturnRequestIn(BaseModel):
@@ -1193,8 +1240,83 @@ async def get_product(slug: str):
 
 
 @api_router.get("/reviews", response_model=List[Review])
-async def list_reviews():
-    return await db.reviews.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+async def list_reviews(product_id: Optional[str] = None):
+    """Public list of reviews. Only status=approved reviews are returned.
+    Optional ?product_id=... filters to a single product (used by ProductPage)."""
+    q: dict = {"status": {"$in": ["approved", None]}}
+    # Back-compat: existing docs without a `status` field are treated as approved.
+    if product_id:
+        q["product_id"] = product_id
+    return await db.reviews.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api_router.post("/reviews", response_model=Review)
+async def customer_submit_review(payload: ReviewSubmit, user=Depends(get_current_user)):
+    """Logged-in customer submits a review. Starts as status=pending — admin
+    must approve. If we can prove the user has a delivered order containing
+    this product, we set verified=true (the storefront shows a badge)."""
+    email = (user.get("email") or "").lower().strip()
+    if not email:
+        raise HTTPException(status_code=401, detail="Login required to review")
+
+    # Verified-buyer check: any order for this email that is delivered AND
+    # contains the given product_id.
+    is_verified = False
+    if payload.product_id:
+        q = {"customer.email": email, "status": "delivered", "items.product_id": payload.product_id}
+        if await db.orders.count_documents(q) > 0:
+            is_verified = True
+        # Prevent duplicate review from same buyer on same product
+        if await db.reviews.count_documents({"user_email": email, "product_id": payload.product_id, "status": {"$ne": "rejected"}}) > 0:
+            raise HTTPException(status_code=409, detail="You have already reviewed this product")
+
+    author = (payload.author_name or user.get("name") or email.split("@")[0]).strip()[:80]
+    review = Review(
+        author=author,
+        location=(payload.location or "").strip()[:80] or "India",
+        rating=int(payload.rating),
+        title=payload.title.strip(),
+        body=payload.body.strip(),
+        image=payload.image,
+        verified=is_verified,
+        featured=False,
+        status="pending",
+        product_id=payload.product_id,
+        user_email=email,
+    )
+    await db.reviews.insert_one(review.model_dump())
+    # Fire-and-forget admin notification (see notify_admins helper defined below).
+    try:
+        asyncio.create_task(notify_admins_event(
+            kind="review_pending",
+            subject=f"New review pending approval — {review.rating}★ from {author}",
+            html_body=(
+                f"<p><strong>{author}</strong> ({email}) submitted a "
+                f"{review.rating}-star review titled <em>{review.title}</em>.</p>"
+                f"<p>{review.body[:500]}</p>"
+                f"<p>Go to <b>Admin → Reviews → Pending</b> to approve or reject.</p>"
+            ),
+        ))
+    except Exception:
+        pass
+    return review
+
+
+class ReviewModerateIn(BaseModel):
+    status: str  # approved | rejected
+
+
+@api_router.patch("/admin/reviews/{review_id}/moderate", response_model=Review)
+async def admin_moderate_review(review_id: str, payload: ReviewModerateIn, admin=Depends(get_current_admin)):
+    """Approve or reject a pending customer review (Task 5)."""
+    if payload.status not in ("approved", "rejected"):
+        raise HTTPException(status_code=400, detail="status must be approved or rejected")
+    doc = await db.reviews.find_one({"id": review_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Review not found")
+    await db.reviews.update_one({"id": review_id}, {"$set": {"status": payload.status}})
+    doc["status"] = payload.status
+    return Review(**doc)
 
 
 @api_router.post("/orders", response_model=dict)
@@ -1305,6 +1427,21 @@ async def create_order(payload: OrderIn):
         asyncio.create_task(send_order_email(order.model_dump(), "placed"))
     except Exception as _e:
         logging.warning(f"Order-placed email queue failed: {_e}")
+    # Task 6: notify every admin of the new order.
+    try:
+        _od = order.model_dump()
+        asyncio.create_task(notify_admins_event(
+            kind="order_new",
+            subject=f"New order {_od.get('order_number')} — ₹{_od.get('total_inr', 0):,}",
+            html_body=(
+                f"<p><b>{(_od.get('customer') or {}).get('name','')}</b> "
+                f"({(_od.get('customer') or {}).get('email','')}) placed an order.</p>"
+                f"<p>Items: {len(_od.get('items', []))} · Payment: {_od.get('payment_method')}</p>"
+                f"<p>Open <b>Admin → Orders</b> to view and process.</p>"
+            ),
+        ))
+    except Exception as _e:
+        logging.warning(f"Admin new-order notify failed: {_e}")
     return {
         "order": order.model_dump(),
         "razorpay_key_id": RZP_KEY if payload.payment_method == "razorpay" else None,
@@ -1570,9 +1707,20 @@ async def admin_update_lead(lead_id: str, payload: B2BStatusUpdate, admin=Depend
 
 @api_router.post("/admin/reviews", response_model=Review)
 async def admin_create_review(payload: ReviewIn, admin=Depends(get_current_admin)):
+    """Admin creates a review directly. Auto-approved (Task 5)."""
     r = Review(**payload.model_dump())
+    r.status = "approved"
     await db.reviews.insert_one(r.model_dump())
     return r
+
+
+@api_router.get("/admin/reviews", response_model=List[Review])
+async def admin_list_reviews(status: Optional[str] = None, admin=Depends(get_current_admin)):
+    """Admin listing — supports ?status=pending|approved|rejected. No filter = all."""
+    q: dict = {}
+    if status in ("pending", "approved", "rejected"):
+        q["status"] = status
+    return await db.reviews.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
 
 class ReviewFeaturedIn(BaseModel):
@@ -2081,20 +2229,39 @@ async def my_orders(user=Depends(get_current_user)):
 
 @api_router.post("/products/{slug}/reviews", response_model=Review)
 async def submit_review(slug: str, payload: ReviewSubmit, user=Depends(get_current_user)):
+    """Legacy slug-based review submission. Kept for backward compat with the
+    older ProductPage code. New callers should POST /reviews with product_id."""
     prod = await db.products.find_one({"slug": slug}, {"_id": 0})
     if not prod:
         raise HTTPException(status_code=404, detail="Product not found")
     if payload.rating < 1 or payload.rating > 5:
         raise HTTPException(status_code=400, detail="Rating 1-5")
+    email = (user.get("email") or "").lower().strip()
+    product_id = prod.get("id")
+    # Verified-buyer check: any delivered order for this email containing this product.
+    is_verified = False
+    if await db.orders.count_documents({
+        "customer.email": email, "status": "delivered", "items.product_id": product_id,
+    }) > 0:
+        is_verified = True
+    if await db.reviews.count_documents({"user_email": email, "product_id": product_id, "status": {"$ne": "rejected"}}) > 0:
+        raise HTTPException(status_code=409, detail="You have already reviewed this product")
     r = Review(
-        author=user["name"], location=payload.location or "",
-        rating=payload.rating, title=payload.title, body=payload.body,
-        image=payload.image, verified=True,
+        author=(payload.author_name or user.get("name") or email.split("@")[0]).strip()[:80],
+        location=(payload.location or "").strip()[:80] or "India",
+        rating=payload.rating, title=payload.title.strip(), body=payload.body.strip(),
+        image=payload.image, verified=is_verified, featured=False,
+        status="pending", product_id=product_id, user_email=email,
     )
-    doc = r.model_dump()
-    doc["product_slug"] = slug
-    doc["user_email"] = user["email"]
-    await db.reviews.insert_one(doc)
+    await db.reviews.insert_one(r.model_dump())
+    try:
+        asyncio.create_task(notify_admins_event(
+            kind="review_pending",
+            subject=f"New review pending approval — {r.rating}★ from {r.author}",
+            html_body=f"<p>Product: <b>{prod.get('name','')}</b></p><p>{r.body[:500]}</p>",
+        ))
+    except Exception:
+        pass
     return r
 
 
@@ -3206,9 +3373,15 @@ async def admin_change_password(payload: PasswordChange, admin=Depends(get_curre
 async def cloudinary_signature(
     folder: str = "artyfex",
     resource_type: str = "image",
+    public_id: Optional[str] = None,
     admin=Depends(get_current_admin),
 ):
-    """Generate signed upload params for direct browser-to-Cloudinary upload."""
+    """Generate signed upload params for direct browser-to-Cloudinary upload.
+
+    If `public_id` is passed (e.g. a SHA-1 hash of file contents), we sign it
+    with overwrite=false → Cloudinary will silently reuse an existing asset
+    with the same public_id rather than storing a duplicate. This is our
+    content-based dedup mechanism (Task 1)."""
     if not CLOUDINARY_CLOUD_NAME or not CLOUDINARY_API_KEY or not CLOUDINARY_API_SECRET:
         raise HTTPException(status_code=500, detail="Cloudinary not configured")
     if resource_type not in ("image", "video"):
@@ -3217,7 +3390,14 @@ async def cloudinary_signature(
     if not folder.startswith("artyfex"):
         raise HTTPException(status_code=400, detail="Invalid folder path")
     ts = int(time.time())
-    params_to_sign = {"timestamp": ts, "folder": folder}
+    params_to_sign: dict = {"timestamp": ts, "folder": folder}
+    if public_id:
+        # Sanitise: only allow letters/digits/dashes/underscore
+        clean_pid = re.sub(r"[^a-zA-Z0-9_-]", "", public_id)[:64]
+        if clean_pid:
+            params_to_sign["public_id"] = clean_pid
+            params_to_sign["overwrite"] = "false"
+            params_to_sign["invalidate"] = "true"
     signature = cloudinary.utils.api_sign_request(params_to_sign, CLOUDINARY_API_SECRET)
     return {
         "signature": signature,
@@ -3226,7 +3406,52 @@ async def cloudinary_signature(
         "api_key": CLOUDINARY_API_KEY,
         "folder": folder,
         "resource_type": resource_type,
+        "public_id": params_to_sign.get("public_id"),
+        "overwrite": params_to_sign.get("overwrite"),
+        "invalidate": params_to_sign.get("invalidate"),
     }
+
+
+def _cloudinary_public_id_from_url(url: str) -> Optional[str]:
+    """Extract the Cloudinary public_id (including folder path) from a secure_url.
+
+    Ex: https://res.cloudinary.com/<cloud>/image/upload/v123456/artyfex/homepage/hash.jpg
+       → "artyfex/homepage/hash"
+    Returns None if the URL isn't a Cloudinary asset for our cloud.
+    """
+    if not url or "res.cloudinary.com" not in url:
+        return None
+    try:
+        # After /upload/ (optionally /v<digits>/) the rest is <public_id>.<ext>
+        parts = url.split("/upload/", 1)
+        if len(parts) != 2:
+            return None
+        tail = parts[1]
+        # Strip optional version prefix "v123456/"
+        tail = re.sub(r"^v\d+/", "", tail)
+        # Strip file extension
+        tail = re.sub(r"\.[a-zA-Z0-9]+$", "", tail)
+        # Strip any transformation prefix (rare, but just in case)
+        return tail or None
+    except Exception:
+        return None
+
+
+@api_router.delete("/cloudinary/asset")
+async def cloudinary_destroy(url: str, admin=Depends(get_current_admin)):
+    """Delete a Cloudinary asset by its secure_url. Called by the admin
+    image-uploader when the user removes an image, so we don't accumulate
+    dead assets (Task 1)."""
+    if not CLOUDINARY_CLOUD_NAME or not CLOUDINARY_API_KEY or not CLOUDINARY_API_SECRET:
+        raise HTTPException(status_code=500, detail="Cloudinary not configured")
+    public_id = _cloudinary_public_id_from_url(url)
+    if not public_id:
+        raise HTTPException(status_code=400, detail="Not a Cloudinary URL")
+    try:
+        result = cloudinary.uploader.destroy(public_id, invalidate=True)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Cloudinary destroy failed: {e}")
+    return {"public_id": public_id, "result": result.get("result", "unknown")}
 
 
 # --- Admin whitelist (Google login access) ---

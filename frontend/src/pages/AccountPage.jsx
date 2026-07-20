@@ -37,6 +37,14 @@ export default function AccountPage() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [returnFor, setReturnFor] = useState(null);
+  // Task 4: client-side pagination for orders/returns/messages. Amazon-style —
+  // show N rows, let the user click "Show more" to reveal the next batch.
+  const PAGE_SIZE = 10;
+  const [ordersVisible, setOrdersVisible] = useState(PAGE_SIZE);
+  const [returnsVisible, setReturnsVisible] = useState(PAGE_SIZE);
+  const [messagesVisible, setMessagesVisible] = useState(PAGE_SIZE);
+  const [orderStatusFilter, setOrderStatusFilter] = useState("all");
+  const [orderQuery, setOrderQuery] = useState("");
 
   // Sync tab if query param changes (e.g., user clicks Saved on tab-bar while on Account)
   useEffect(() => {
@@ -163,44 +171,109 @@ export default function AccountPage() {
           {!loading && tab === "orders" && (
             <div className="grid gap-4">
               {orders.length === 0 && <div className="hairline p-10 text-center text-cream/40">No orders yet. <a href="/shop" className="text-gold hover:text-cream">Browse the collection →</a></div>}
-              {orders.map((o) => (
-                <div key={o.order_number} className="hairline p-6">
-                  <div className="flex flex-wrap items-center gap-4">
-                    <div>
-                      <div className="text-gold font-mono text-sm">{o.order_number}</div>
-                      <div className="text-xs text-cream/50">{new Date(o.created_at).toLocaleString()}</div>
-                    </div>
-                    <div className={`text-xs uppercase tracking-luxury ml-auto ${statusColor(o.status)}`}>{o.status.replace(/_/g, " ")}</div>
-                    <div className="font-serif text-2xl text-cream">{formatINR(o.total_inr)}</div>
-                  </div>
-                  <div className="mt-3 text-xs text-cream/50">
-                    {o.items.length} item(s) · {o.customer.city}
-                    {o.customer.state ? `, ${o.customer.state}` : ""} · {o.customer.pincode}
-                  </div>
-                  {(o.tracking_id || o.tracking_url) && (
-                    <div className="mt-4 border-t border-gold/20 pt-4 flex flex-wrap items-center gap-3 bg-gold/5 -mx-6 -mb-6 px-6 py-4">
-                      <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Tracking</div>
-                      {o.tracking_carrier && <div className="text-xs text-cream/70">{o.tracking_carrier}</div>}
-                      {o.tracking_id && (
-                        <div className="font-mono text-sm text-gold" data-testid={`order-tracking-${o.order_number}`}>
-                          {o.tracking_id}
-                        </div>
-                      )}
-                      {o.tracking_url && (
-                        <a
-                          href={o.tracking_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          data-testid={`order-track-link-${o.order_number}`}
-                          className="ml-auto text-[10px] uppercase tracking-luxury text-gold border border-gold/40 px-3 py-1.5 hover:bg-gold hover:text-ink-950 transition-colors"
+              {orders.length > 0 && (() => {
+                // Filter + search + paginate (Task 4)
+                const filtered = orders.filter((o) => {
+                  if (orderStatusFilter !== "all" && o.status !== orderStatusFilter) return false;
+                  if (orderQuery) {
+                    const q = orderQuery.toLowerCase();
+                    const inNumber = (o.order_number || "").toLowerCase().includes(q);
+                    const inItems = (o.items || []).some((it) => (it.product_name || it.name || "").toLowerCase().includes(q));
+                    if (!inNumber && !inItems) return false;
+                  }
+                  return true;
+                });
+                const visible = filtered.slice(0, ordersVisible);
+                const statusOptions = ["all", "pending_payment", "confirmed", "packed", "shipped", "delivered", "cancelled", "payment_failed"];
+                return (
+                  <>
+                    {/* Filter bar — appears only when there are enough orders to warrant it */}
+                    {orders.length > 5 && (
+                      <div className="flex flex-wrap items-center gap-2 -mt-2 mb-2">
+                        <input
+                          value={orderQuery}
+                          onChange={(e) => { setOrderQuery(e.target.value); setOrdersVisible(PAGE_SIZE); }}
+                          placeholder="Search order # or product…"
+                          data-testid="orders-search"
+                          className="flex-1 min-w-[200px] bg-ink-950 border border-white/10 text-cream text-xs px-3 py-2 focus:border-gold outline-none"
+                        />
+                        <select
+                          value={orderStatusFilter}
+                          onChange={(e) => { setOrderStatusFilter(e.target.value); setOrdersVisible(PAGE_SIZE); }}
+                          data-testid="orders-status-filter"
+                          className="bg-ink-950 border border-white/10 text-cream text-xs px-3 py-2 focus:border-gold outline-none"
                         >
-                          Track shipment →
-                        </a>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
+                          {statusOptions.map((s) => (
+                            <option key={s} value={s}>{s === "all" ? "All statuses" : s.replace(/_/g, " ")}</option>
+                          ))}
+                        </select>
+                        <div className="text-[10px] uppercase tracking-luxury text-cream/40 ml-auto">
+                          Showing {Math.min(visible.length, filtered.length)} of {filtered.length}
+                        </div>
+                      </div>
+                    )}
+                    {visible.length === 0 && (
+                      <div className="hairline p-6 text-center text-cream/40 text-sm">No orders match this filter.</div>
+                    )}
+                    {visible.map((o) => (
+                      <div key={o.order_number} className="hairline p-6">
+                        <div className="flex flex-wrap items-center gap-4">
+                          <div>
+                            <div className="text-gold font-mono text-sm">{o.order_number}</div>
+                            <div className="text-xs text-cream/50">{new Date(o.created_at).toLocaleString()}</div>
+                          </div>
+                          <div className={`text-xs uppercase tracking-luxury ml-auto ${statusColor(o.status)}`}>{o.status.replace(/_/g, " ")}</div>
+                          <div className="font-serif text-2xl text-cream">{formatINR(o.total_inr)}</div>
+                        </div>
+                        <div className="mt-3 text-xs text-cream/50">
+                          {o.items.length} item(s) · {o.customer.city}
+                          {o.customer.state ? `, ${o.customer.state}` : ""} · {o.customer.pincode}
+                        </div>
+                        {/* Task 4: Only show tracking block while the order is in transit.
+                            Once status is "delivered", hide the live tracking CTA (the
+                            carrier link becomes irrelevant, and often 404s). */}
+                        {(o.tracking_id || o.tracking_url) && o.status !== "delivered" && o.status !== "cancelled" && (
+                          <div className="mt-4 border-t border-gold/20 pt-4 flex flex-wrap items-center gap-3 bg-gold/5 -mx-6 -mb-6 px-6 py-4">
+                            <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Tracking</div>
+                            {o.tracking_carrier && <div className="text-xs text-cream/70">{o.tracking_carrier}</div>}
+                            {o.tracking_id && (
+                              <div className="font-mono text-sm text-gold" data-testid={`order-tracking-${o.order_number}`}>
+                                {o.tracking_id}
+                              </div>
+                            )}
+                            {o.tracking_url && (
+                              <a
+                                href={o.tracking_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                data-testid={`order-track-link-${o.order_number}`}
+                                className="ml-auto text-[10px] uppercase tracking-luxury text-gold border border-gold/40 px-3 py-1.5 hover:bg-gold hover:text-ink-950 transition-colors"
+                              >
+                                Track shipment →
+                              </a>
+                            )}
+                          </div>
+                        )}
+                        {o.status === "delivered" && (
+                          <div className="mt-4 text-[10px] uppercase tracking-luxury text-emerald-400/80">
+                            Delivered {o.delivered_at ? `· ${new Date(o.delivered_at).toLocaleDateString()}` : ""}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {filtered.length > ordersVisible && (
+                      <button
+                        type="button"
+                        onClick={() => setOrdersVisible((v) => v + PAGE_SIZE)}
+                        data-testid="orders-load-more"
+                        className="mx-auto mt-2 text-xs uppercase tracking-luxury text-gold border border-gold/40 px-6 py-3 hover:bg-gold hover:text-ink-950 transition-colors"
+                      >
+                        Show more ({filtered.length - ordersVisible} left)
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
 
