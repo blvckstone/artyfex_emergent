@@ -27,9 +27,9 @@ CI/CD flow: `git push origin main` → **Vercel** rebuilds frontend + **Northfla
 | File | Purpose |
 |---|---|
 | `backend/Dockerfile` | Reproducible Python 3.11 build. Northflank uses this if you pick "Dockerfile" as the build type. |
-| `backend/nixpacks.toml` | Alternative: buildpack config, used when Northflank build type is "Buildpack". |
-| `backend/Procfile` | Start command hint for Nixpacks + local `heroku`/`foreman` runs. |
-| `backend/runtime.txt` + `backend/.python-version` | Pins Python 3.11.9 across build systems. |
+| `backend/nixpacks.toml` | Alternative: buildpack config, used when Northflank build type is "Buildpack (Nixpacks)". |
+| `backend/Procfile` | Start command hint for the Heroku-style buildpack (which Northflank uses by default in Combined services). |
+| `backend/.python-version` | Pins Python to major version **3.11** (Heroku Python buildpack v6+ requires major-only). |
 | `backend/.dockerignore` | Keeps the image slim. |
 | `backend/.env.example` | Reference list of every backend env var. **Never** commit the real `.env`. |
 | `frontend/vercel.json` | Tells Vercel to use `yarn`, build with `yarn build`, output `build/`, and SPA-rewrite everything to `index.html`. |
