@@ -118,12 +118,27 @@ async def send_email(to_email: str, subject: str, html: str):
         logging.error(f"Email send failed for {to_email}: {e}")
 
 
+def _esc(s) -> str:
+    """HTML-escape a value for safe interpolation into email templates.
+    Used by notify_admins_event callers to prevent HTML-injection from any
+    user-supplied string (customer name, review body, etc.). Added Jul 2025
+    after security review."""
+    import html as _html_mod
+    if s is None:
+        return ""
+    return _html_mod.escape(str(s), quote=True)
+
+
 async def notify_admins_event(kind: str, subject: str, html_body: str):
     """Fan-out an operational notification to every admin in db.admins (Task 6).
 
     Categories used across the codebase:
       order_new, order_returned, review_pending, low_stock, payment_failed, b2b_lead
     Silent-fails per recipient so one bad address never blocks the others.
+
+    SECURITY: callers MUST html-escape any user-supplied fragment before
+    interpolating into `subject` / `html_body`. Use the module-level helper
+    `_esc()` below.
     """
     try:
         admins = await db.admins.find({}, {"_id": 0, "email": 1}).to_list(200)
@@ -1291,15 +1306,19 @@ async def get_product(slug: str):
     return doc
 
 
-@api_router.get("/reviews", response_model=List[Review])
+@api_router.get("/reviews", response_model=List[Review], response_model_exclude={"user_email"})
 async def list_reviews(product_id: Optional[str] = None):
     """Public list of reviews. Only status=approved reviews are returned.
-    Optional ?product_id=... filters to a single product (used by ProductPage)."""
+    Optional ?product_id=... filters to a single product (used by ProductPage).
+    SECURITY: `user_email` is stripped from the response so PII does not leak
+    to unauthenticated visitors (added Jul 2025 after security review)."""
     q: dict = {"status": {"$in": ["approved", None]}}
     # Back-compat: existing docs without a `status` field are treated as approved.
     if product_id:
         q["product_id"] = product_id
-    return await db.reviews.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    # Also drop from Mongo projection as a defence-in-depth measure.
+    docs = await db.reviews.find(q, {"_id": 0, "user_email": 0}).sort("created_at", -1).to_list(500)
+    return docs
 
 
 @api_router.post("/reviews", response_model=Review)
@@ -1343,9 +1362,9 @@ async def customer_submit_review(payload: ReviewSubmit, user=Depends(get_current
             kind="review_pending",
             subject=f"New review pending approval — {review.rating}★ from {author}",
             html_body=(
-                f"<p><strong>{author}</strong> ({email}) submitted a "
-                f"{review.rating}-star review titled <em>{review.title}</em>.</p>"
-                f"<p>{review.body[:500]}</p>"
+                f"<p><strong>{_esc(author)}</strong> ({_esc(email)}) submitted a "
+                f"{int(review.rating)}-star review titled <em>{_esc(review.title)}</em>.</p>"
+                f"<p>{_esc(review.body[:500])}</p>"
                 f"<p>Go to <b>Admin → Reviews → Pending</b> to approve or reject.</p>"
             ),
         ))
@@ -1505,13 +1524,14 @@ async def create_order(payload: OrderIn):
     # Task 6: notify every admin of the new order.
     try:
         _od = order.model_dump()
+        _cust = _od.get('customer') or {}
         asyncio.create_task(notify_admins_event(
             kind="order_new",
             subject=f"New order {_od.get('order_number')} — ₹{_od.get('total_inr', 0):,}",
             html_body=(
-                f"<p><b>{(_od.get('customer') or {}).get('name','')}</b> "
-                f"({(_od.get('customer') or {}).get('email','')}) placed an order.</p>"
-                f"<p>Items: {len(_od.get('items', []))} · Payment: {_od.get('payment_method')}</p>"
+                f"<p><b>{_esc(_cust.get('name',''))}</b> "
+                f"({_esc(_cust.get('email',''))}) placed an order.</p>"
+                f"<p>Items: {len(_od.get('items', []))} · Payment: {_esc(_od.get('payment_method'))}</p>"
                 f"<p>Open <b>Admin → Orders</b> to view and process.</p>"
             ),
         ))
@@ -1521,7 +1541,7 @@ async def create_order(payload: OrderIn):
     if _low_stock_events:
         try:
             lines = "".join(
-                f"<li><b>{name}</b> — {remaining} left in stock</li>"
+                f"<li><b>{_esc(name)}</b> — {int(remaining)} left in stock</li>"
                 for name, remaining in _low_stock_events
             )
             asyncio.create_task(notify_admins_event(
@@ -1529,7 +1549,7 @@ async def create_order(payload: OrderIn):
                 subject=f"Low stock alert — {len(_low_stock_events)} product(s) at or below 3 units",
                 html_body=(
                     f"<p>The following product(s) just crossed the low-stock threshold after order "
-                    f"<b>{order.order_number}</b>:</p><ul>{lines}</ul>"
+                    f"<b>{_esc(order.order_number)}</b>:</p><ul>{lines}</ul>"
                     f"<p>Open <b>Admin → Inventory</b> to top up.</p>"
                 ),
             ))
@@ -1786,9 +1806,9 @@ async def admin_update_order(order_number: str, payload: OrderStatusUpdate, admi
                 kind="payment_failed",
                 subject=f"Payment FAILED for order {order_number}",
                 html_body=(
-                    f"<p>Order <b>{order_number}</b> flipped to payment_failed.</p>"
-                    f"<p>Customer: {(prev.get('customer') or {}).get('email','')}</p>"
-                    f"<p>Amount: ₹{prev.get('total_inr',0):,}</p>"
+                    f"<p>Order <b>{_esc(order_number)}</b> flipped to payment_failed.</p>"
+                    f"<p>Customer: {_esc((prev.get('customer') or {}).get('email',''))}</p>"
+                    f"<p>Amount: ₹{int(prev.get('total_inr',0)):,}</p>"
                 ),
             ))
     except Exception as _e:
@@ -2510,7 +2530,7 @@ async def submit_review(slug: str, payload: ReviewSubmit, user=Depends(get_curre
         asyncio.create_task(notify_admins_event(
             kind="review_pending",
             subject=f"New review pending approval — {r.rating}★ from {r.author}",
-            html_body=f"<p>Product: <b>{prod.get('name','')}</b></p><p>{r.body[:500]}</p>",
+            html_body=f"<p>Product: <b>{_esc(prod.get('name',''))}</b></p><p>{_esc(r.body[:500])}</p>",
         ))
     except Exception:
         pass
@@ -2556,9 +2576,9 @@ async def request_return(payload: ReturnRequestIn, user=Depends(get_current_user
             kind="order_returned",
             subject=f"Return requested for order {rr.order_number}",
             html_body=(
-                f"<p><b>{user.get('name') or user.get('email')}</b> requested a return.</p>"
-                f"<p>Reason: <em>{rr.reason}</em></p>"
-                f"<p>Order: <b>{rr.order_number}</b> · delivered {days_since} days ago</p>"
+                f"<p><b>{_esc(user.get('name') or user.get('email'))}</b> requested a return.</p>"
+                f"<p>Reason: <em>{_esc(rr.reason)}</em></p>"
+                f"<p>Order: <b>{_esc(rr.order_number)}</b> · delivered {int(days_since)} days ago</p>"
                 f"<p>Open <b>Admin → Returns</b> to review and process.</p>"
             ),
         ))
