@@ -94,6 +94,40 @@ export default function ProductPage() {
       .map((v) => ({ key: v.key, size: v.size, stock: v.stock ?? product.stock, price_inr: v.price_inr ?? product.price_inr }));
   }, [product, activeVariant, hasSizeAxis]);
 
+  // Task 3 — hide the colour swatches when the product has no real colour choice
+  // (only "Default" variant OR only one option OR variants collapsed to a single dummy).
+  const hasRealColourChoice = useMemo(() => {
+    if (!product) return false;
+    if (colourOptions.length < 2) return false;
+    // If the only "colours" are the single default seeded variant, hide.
+    const isDefaultOnly = (product.variants || []).length === 1
+      && ((product.variants[0].key === "default") || (product.variants[0].label || "").toLowerCase() === "default");
+    return !isDefaultOnly;
+  }, [product, colourOptions]);
+
+  // Task 3 — user's chosen values for extra variation options (Shape / Frame / …).
+  // Initialise from is_default flags when the product loads.
+  const [selectedOptions, setSelectedOptions] = useState({});
+  useEffect(() => {
+    if (!product) return;
+    const init = {};
+    (product.variation_options || []).forEach((opt) => {
+      const def = (opt.values || []).find((v) => v.is_default) || (opt.values || [])[0];
+      if (def) init[opt.key] = def.key;
+    });
+    setSelectedOptions(init);
+  }, [product?.id]); // eslint-disable-line
+
+  const optionsPriceDelta = useMemo(() => {
+    let d = 0;
+    (product?.variation_options || []).forEach((opt) => {
+      const chosen = selectedOptions[opt.key];
+      const m = (opt.values || []).find((v) => v.key === chosen);
+      if (m) d += Number(m.price_delta_inr || 0);
+    });
+    return d;
+  }, [product, selectedOptions]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-ink-950 text-cream">
@@ -127,7 +161,14 @@ export default function ProductPage() {
 
   const handleAdd = () => {
     if (outOfStock) { toast.error("This piece is currently out of stock."); return; }
-    addItem(product, variantKey, qty);
+    // Task 3 — enforce required options
+    for (const opt of (product.variation_options || [])) {
+      if (opt.required && !selectedOptions[opt.key]) {
+        toast.error(`Please choose ${opt.label}`);
+        return;
+      }
+    }
+    addItem(product, variantKey, qty, selectedOptions);
     setAdded(true);
     setTimeout(() => setAdded(false), 1600);
   };
@@ -297,7 +338,7 @@ export default function ProductPage() {
             <p className="mt-8 text-base text-cream/70 leading-relaxed font-light">{product.description}</p>
 
             {/* Variants */}
-            {colourOptions.length > 0 && (
+            {hasRealColourChoice && (
               <div className="mt-10">
                 <div className="flex items-center justify-between mb-4">
                   <div className="text-[10px] uppercase tracking-luxury text-cream/50">Colourway</div>
@@ -333,6 +374,62 @@ export default function ProductPage() {
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {/* Task 3 — Extra option groups (Shape / Frame / Thickness / Gift Wrap / Care Kit / Mount) */}
+            {(product.variation_options || []).length > 0 && (
+              <div className="mt-8 space-y-6" data-testid="product-options">
+                {(product.variation_options || []).map((opt) => {
+                  const chosen = selectedOptions[opt.key];
+                  return (
+                    <div key={opt.key} data-testid={`product-option-${opt.key}`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-[10px] uppercase tracking-luxury text-cream/50">
+                          {opt.label}{opt.required && <span className="text-gold ml-1">*</span>}
+                        </div>
+                        {chosen && (
+                          <div className="text-xs text-gold-soft italic font-serif">
+                            {((opt.values || []).find((v) => v.key === chosen) || {}).label || chosen}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(opt.values || []).map((v) => {
+                          const isActive = chosen === v.key;
+                          const delta = Number(v.price_delta_inr || 0);
+                          return (
+                            <button
+                              key={v.key}
+                              type="button"
+                              onClick={() => setSelectedOptions((prev) => ({ ...prev, [opt.key]: v.key }))}
+                              data-testid={`product-option-${opt.key}-${v.key}`}
+                              className={`px-4 py-2.5 text-xs uppercase tracking-luxury border transition-all ${
+                                isActive
+                                  ? "border-gold text-gold bg-gold/5"
+                                  : "border-white/15 text-cream/80 hover:border-gold/40 hover:text-gold"
+                              }`}
+                            >
+                              {v.label}
+                              {delta > 0 && (
+                                <span className="ml-2 text-[10px] text-cream/60 normal-case tracking-normal">+{formatINR(delta)}</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {opt.help_text && (
+                        <div className="mt-2 text-[11px] italic text-cream/40">{opt.help_text}</div>
+                      )}
+                    </div>
+                  );
+                })}
+                {optionsPriceDelta > 0 && (
+                  <div className="text-xs text-gold-soft border-t border-white/5 pt-3">
+                    Add-ons total: <span className="font-serif text-cream">+{formatINR(optionsPriceDelta)}</span>
+                    <span className="text-cream/50 ml-2">·  new unit price {formatINR(effectivePrice + optionsPriceDelta)}</span>
+                  </div>
+                )}
               </div>
             )}
 

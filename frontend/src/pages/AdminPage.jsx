@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast, Toaster } from "sonner";
-import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2, Settings as SettingsIcon, Truck, Palette, ShieldCheck, Percent, FileText } from "lucide-react";
+import { LogOut, Package, ShoppingBag, Users, Star, LayoutGrid, Plus, Trash2, Loader2, RotateCcw, UserCircle, MessageSquare, Send, X, Search, Tag, AlertTriangle, Edit2, Settings as SettingsIcon, Truck, Palette, ShieldCheck, Percent, FileText, Download } from "lucide-react";
 import HomepageEditor from "@/components/admin/HomepageEditor";
 import ShippingEditor from "@/components/admin/ShippingEditor";
 import AnalyticsDashboard from "@/components/admin/AnalyticsDashboard";
@@ -125,7 +125,7 @@ function useAuthedApi(token) {
   }, [token]);
 }
 
-const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: [{ key: "default", label: "Default", hex: "#333333", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null }], has_variations: false, stock: 5, is_hero: false, category: "", hsn_code: "", sku: "", weight_grams: "", length_cm: "", width_cm: "", height_cm: "", tags: "" };
+const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: [{ key: "default", label: "Default", hex: "#333333", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null }], has_variations: false, stock: 5, is_hero: false, category: "", hsn_code: "", sku: "", weight_grams: "", length_cm: "", width_cm: "", height_cm: "", tags: "", variation_options: [] };
 
 export default function AdminPage() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
@@ -282,6 +282,26 @@ export default function AdminPage() {
         width_cm: numOrNull(form.width_cm),
         height_cm: numOrNull(form.height_cm),
         tags: parseTags(form.tags),
+        // Task 3 — Extra variation options (Shape/Frame/Thickness/Gift Wrap/Care Kit/Mount)
+        variation_options: (Array.isArray(form.variation_options) ? form.variation_options : [])
+          .filter((o) => (o.key || o.label) && Array.isArray(o.values) && o.values.length > 0)
+          .map((o) => ({
+            key: (o.key || o.label || "").toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
+            label: o.label || o.key,
+            type: o.type || "select",
+            required: !!o.required,
+            help_text: o.help_text || null,
+            values: (o.values || [])
+              .filter((v) => v.key || v.label)
+              .map((v) => ({
+                key: (v.key || v.label || "").toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
+                label: v.label || v.key,
+                hex: v.hex || null,
+                image: v.image || null,
+                price_delta_inr: Number(v.price_delta_inr || 0),
+                is_default: !!v.is_default,
+              })),
+          })),
       };
       if (form.id) await authed.put(`/admin/products/${form.id}`, payload);
       else await authed.post("/admin/products", payload);
@@ -547,6 +567,7 @@ export default function AdminPage() {
                             width_cm: p.width_cm ?? "",
                             height_cm: p.height_cm ?? "",
                             tags: Array.isArray(p.tags) ? p.tags.join(", ") : (p.tags || ""),
+                            variation_options: Array.isArray(p.variation_options) ? p.variation_options : [],
                           });
                         }} className="text-xs text-gold hover:text-cream border border-gold/30 px-3 py-1.5">Edit</button>
                         <button onClick={()=>deleteProduct(p.id)} className="text-red-400 hover:text-red-300 p-2"><Trash2 className="w-4 h-4" /></button>
@@ -565,7 +586,10 @@ export default function AdminPage() {
 
         {tab === "orders" && (
           <>
-            <h1 className="font-serif text-4xl">Orders</h1>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <h1 className="font-serif text-4xl">Orders</h1>
+              <BulkInvoiceDownloader authed={authed} />
+            </div>
             <div className="mt-4 mb-4 flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[220px]">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-cream/40" />
@@ -1228,6 +1252,7 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
   const upd = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
 
   const variants = Array.isArray(f.variants) ? f.variants : [];
+  const options = Array.isArray(f.variation_options) ? f.variation_options : [];
 
   const updVariant = (idx, field) => (e) => {
     const v = e && e.target ? (e.target.type === "checkbox" ? e.target.checked : e.target.value) : e;
@@ -1242,6 +1267,79 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
     variants: [...(prev.variants || []), { key: "", label: "", hex: "#D4AF37", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null }],
   }));
   const removeVariant = (idx) => setF((prev) => ({ ...prev, variants: (prev.variants || []).filter((_, i) => i !== idx) }));
+
+  /* Task 3 — variation_options helpers (Shape / Frame / Thickness / Gift Wrap / Care Kit / Mount) */
+  const addOption = (preset) => setF((prev) => ({
+    ...prev,
+    variation_options: [
+      ...(prev.variation_options || []),
+      preset || { key: "", label: "New option", type: "select", required: false, help_text: "", values: [] },
+    ],
+  }));
+  const updOption = (oi, field, val) => setF((prev) => {
+    const arr = [...(prev.variation_options || [])];
+    arr[oi] = { ...arr[oi], [field]: val };
+    return { ...prev, variation_options: arr };
+  });
+  const removeOption = (oi) => setF((prev) => ({
+    ...prev,
+    variation_options: (prev.variation_options || []).filter((_, i) => i !== oi),
+  }));
+  const addOptionValue = (oi) => setF((prev) => {
+    const arr = [...(prev.variation_options || [])];
+    const vals = [...(arr[oi]?.values || [])];
+    vals.push({ key: "", label: "", hex: "", image: "", price_delta_inr: 0 });
+    arr[oi] = { ...arr[oi], values: vals };
+    return { ...prev, variation_options: arr };
+  });
+  const updOptionValue = (oi, vi, field, val) => setF((prev) => {
+    const arr = [...(prev.variation_options || [])];
+    const vals = [...(arr[oi]?.values || [])];
+    vals[vi] = { ...vals[vi], [field]: val };
+    arr[oi] = { ...arr[oi], values: vals };
+    return { ...prev, variation_options: arr };
+  });
+  const removeOptionValue = (oi, vi) => setF((prev) => {
+    const arr = [...(prev.variation_options || [])];
+    arr[oi] = { ...arr[oi], values: (arr[oi]?.values || []).filter((_, i) => i !== vi) };
+    return { ...prev, variation_options: arr };
+  });
+
+  /* Presets requested by the atelier (Task 3) — one-click add so the uploader
+     never has to think about the correct key/label/type. */
+  const OPTION_PRESETS = [
+    { key: "shape",     label: "Shape",     type: "select", help_text: "Product outline: round, square, oval, freeform.",
+      values: [
+        { key: "round",  label: "Round",  price_delta_inr: 0 },
+        { key: "square", label: "Square", price_delta_inr: 0 },
+        { key: "oval",   label: "Oval",   price_delta_inr: 0 },
+      ] },
+    { key: "frame",     label: "Frame",     type: "select", help_text: "With a decorative border or borderless.",
+      values: [
+        { key: "borderless", label: "Borderless", price_delta_inr: 0 },
+        { key: "bordered",   label: "With Border", price_delta_inr: 1500 },
+      ] },
+    { key: "thickness", label: "Thickness", type: "select", help_text: "Thickness of the resin pour.",
+      values: [
+        { key: "standard", label: "Standard (12 mm)", price_delta_inr: 0 },
+        { key: "premium",  label: "Premium (18 mm)",  price_delta_inr: 1200 },
+      ] },
+    { key: "gift_wrap", label: "Gift Wrap", type: "toggle", help_text: "Adds premium gift packaging + handwritten note.",
+      values: [
+        { key: "no",  label: "No",  price_delta_inr: 0, is_default: true },
+        { key: "yes", label: "Yes · Premium wrap", price_delta_inr: 500 },
+      ] },
+    { key: "care_kit",  label: "Care Kit",  type: "toggle", help_text: "Add resin care + microfibre cleaning cloth set.",
+      values: [
+        { key: "no",  label: "No",  price_delta_inr: 0, is_default: true },
+        { key: "yes", label: "Yes · Add care kit", price_delta_inr: 750 },
+      ] },
+    { key: "mount",     label: "Mounting",  type: "select", help_text: "Pre-installed wall hardware or tabletop stand.",
+      values: [
+        { key: "wall_mount",  label: "Wall Mount (hardware pre-installed)", price_delta_inr: 0 },
+        { key: "tabletop",    label: "Tabletop Stand", price_delta_inr: 600 },
+      ] },
+  ];
 
   return (
     <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onCancel}>
@@ -1351,16 +1449,16 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
               data-testid="pe-has-variations"
             />
             <div>
-              <div className="text-sm text-cream">Does this product have variations?</div>
-              <div className="text-xs text-cream/50">Tick this if the item comes in different sizes, colours or shapes.</div>
+              <div className="text-sm text-cream">Product has colour swatches?</div>
+              <div className="text-xs text-cream/50">Tick only if the buyer must pick a colour (e.g. gold / silver / rose). Leave unticked for one-of-one pieces or if colour doesn&apos;t apply — the colour picker will be hidden on the product page.</div>
             </div>
           </label>
 
           {f.has_variations && (
             <div className="mt-6 space-y-4" data-testid="pe-variations-editor">
-              <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Variations · {variants.length}</div>
+              <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Colour swatches · {variants.length}</div>
               {variants.length === 0 && (
-                <div className="text-xs text-cream/50">No variations yet. Click &quot;+ Add variation&quot; to add one.</div>
+                <div className="text-xs text-cream/50">No colour swatches yet. Click &quot;+ Add colour&quot; to add one.</div>
               )}
               {variants.map((v, idx) => (
                 <div key={idx} className="border border-white/10 p-4 bg-ink-900" data-testid={`pe-variant-row-${idx}`}>
@@ -1413,10 +1511,152 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
                 </div>
               ))}
               <button type="button" onClick={addVariant} className="inline-flex items-center gap-2 text-xs uppercase tracking-luxury border border-gold/40 text-gold px-4 py-2.5 hover:bg-gold/10" data-testid="pe-add-variation">
-                <Plus className="w-3.5 h-3.5" /> Add variation
+                <Plus className="w-3.5 h-3.5" /> Add colour
               </button>
             </div>
           )}
+        </div>
+
+        {/* ----------------------------------------------------------------
+         * Task 3 — Extra variation options
+         * (Shape / Frame / Thickness / Gift Wrap / Care Kit / Mounting …)
+         * Distinct from colour swatches: buyers can pick one value per option
+         * and the choice snapshots into the order line (visible in Admin
+         * order details) with a cumulative price delta.
+         * ---------------------------------------------------------------- */}
+        <div className="mt-6 border border-white/10 p-5 bg-ink-950/40">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <div className="text-sm text-cream">Extra option groups (shape · frame · thickness · gift wrap · care kit · mount)</div>
+              <div className="text-xs text-cream/50 mt-1 max-w-2xl">
+                Optional. Add any option group the buyer must choose <em>in addition</em> to colour.
+                Each option can have a price delta (e.g. Gift Wrap +₹500). Selected values will be
+                saved onto the order and shown in <b>Admin → Orders → View details</b>.
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {OPTION_PRESETS.filter(p => !(options || []).some(o => o.key === p.key)).map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => addOption(p)}
+                  data-testid={`pe-add-preset-${p.key}`}
+                  className="text-[10px] uppercase tracking-luxury text-gold-soft border border-gold/25 px-2.5 py-1 hover:bg-gold/10"
+                >+ {p.label}</button>
+              ))}
+              <button
+                type="button"
+                onClick={() => addOption()}
+                data-testid="pe-add-option-custom"
+                className="text-[10px] uppercase tracking-luxury text-cream/70 border border-white/15 px-2.5 py-1 hover:text-gold hover:border-gold/40"
+              >+ Custom</button>
+            </div>
+          </div>
+
+          {options.length === 0 && (
+            <div className="mt-4 text-[11px] text-cream/40 italic">No extra options yet. Click a preset above to add one, or &ldquo;+ Custom&rdquo; for a free-form option.</div>
+          )}
+
+          <div className="mt-4 space-y-3">
+            {options.map((opt, oi) => (
+              <div key={oi} className="border border-white/10 bg-ink-900 p-4" data-testid={`pe-option-${oi}`}>
+                <div className="flex flex-wrap items-center gap-3 mb-3">
+                  <input
+                    value={opt.label || ""}
+                    onChange={(e) => updOption(oi, "label", e.target.value)}
+                    onBlur={(e) => { if (!opt.key && e.target.value) updOption(oi, "key", e.target.value.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")); }}
+                    placeholder="Option label — e.g. Shape"
+                    className="bg-ink-950 border border-white/15 focus:border-gold text-sm text-cream px-3 py-2 outline-none flex-1 min-w-[160px]"
+                    data-testid={`pe-option-label-${oi}`}
+                  />
+                  <input
+                    value={opt.key || ""}
+                    onChange={(e) => updOption(oi, "key", e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
+                    placeholder="key (auto)"
+                    className="bg-ink-950 border border-white/15 focus:border-gold text-xs font-mono text-cream/70 px-3 py-2 outline-none w-32"
+                  />
+                  <select
+                    value={opt.type || "select"}
+                    onChange={(e) => updOption(oi, "type", e.target.value)}
+                    className="bg-ink-950 border border-white/15 text-xs uppercase tracking-luxury text-cream px-3 py-2 outline-none"
+                  >
+                    <option value="select">Dropdown</option>
+                    <option value="toggle">Add-on toggle</option>
+                  </select>
+                  <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-luxury text-cream/60">
+                    <input type="checkbox" checked={!!opt.required} onChange={(e) => updOption(oi, "required", e.target.checked)} className="accent-gold" /> Required
+                  </label>
+                  <button type="button" onClick={() => removeOption(oi)} className="text-red-400 hover:text-red-300 p-1" data-testid={`pe-option-remove-${oi}`}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <input
+                  value={opt.help_text || ""}
+                  onChange={(e) => updOption(oi, "help_text", e.target.value)}
+                  placeholder="Help note shown to buyer (optional)"
+                  className="w-full bg-ink-950 border border-white/10 text-[11px] italic text-cream/60 px-3 py-1.5 outline-none focus:border-gold mb-3"
+                />
+                {/* Values */}
+                <div className="space-y-1.5">
+                  {(opt.values || []).map((v, vi) => (
+                    <div key={vi} className="grid grid-cols-[1fr_1fr_80px_100px_auto] gap-2 items-center">
+                      <input
+                        value={v.label || ""}
+                        onChange={(e) => updOptionValue(oi, vi, "label", e.target.value)}
+                        onBlur={(e) => { if (!v.key && e.target.value) updOptionValue(oi, vi, "key", e.target.value.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")); }}
+                        placeholder="Value label — e.g. Round"
+                        className="bg-ink-950 border border-white/10 text-xs text-cream px-2.5 py-1.5 outline-none focus:border-gold"
+                        data-testid={`pe-option-${oi}-value-${vi}`}
+                      />
+                      <input
+                        value={v.key || ""}
+                        onChange={(e) => updOptionValue(oi, vi, "key", e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
+                        placeholder="key"
+                        className="bg-ink-950 border border-white/10 text-[11px] font-mono text-cream/60 px-2.5 py-1.5 outline-none focus:border-gold"
+                      />
+                      <input
+                        type="number" min="0"
+                        value={v.price_delta_inr ?? 0}
+                        onChange={(e) => updOptionValue(oi, vi, "price_delta_inr", parseInt(e.target.value || "0", 10))}
+                        title="Price delta (₹) — added to product price if selected"
+                        className="bg-ink-950 border border-white/10 text-xs font-mono text-gold px-2 py-1.5 outline-none focus:border-gold"
+                      />
+                      {opt.type !== "toggle" ? (
+                        <input
+                          type="color"
+                          value={v.hex || "#050505"}
+                          onChange={(e) => updOptionValue(oi, vi, "hex", e.target.value)}
+                          title="Swatch colour (optional)"
+                          className="bg-ink-950 border border-white/10 h-8 w-full cursor-pointer"
+                        />
+                      ) : <div />}
+                      <button type="button" onClick={() => removeOptionValue(oi, vi)} className="text-red-400 hover:text-red-300 p-1">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => addOptionValue(oi)} className="text-[10px] uppercase tracking-luxury text-gold-soft hover:text-gold border border-white/10 px-2.5 py-1 mt-1" data-testid={`pe-option-${oi}-add-value`}>
+                    + Add value
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ------- Task 3 — Product uploader help notes (always visible) ------- */}
+        <div className="mt-6 border border-gold/25 bg-gold/5 p-4 text-[11px] text-cream/70 leading-relaxed" data-testid="pe-help-notes">
+          <div className="flex items-center gap-2 text-gold text-[10px] uppercase tracking-luxury mb-2">
+            <AlertTriangle className="w-3 h-3" /> Notes for product uploader
+          </div>
+          <ul className="list-disc pl-5 space-y-1.5">
+            <li><b>Colour swatches</b> are for products the buyer chooses a colour finish on. If your piece has only one colour, leave this <em>unticked</em> — the colour picker will not appear.</li>
+            <li><b>Extra option groups</b> (Shape, Frame, Thickness, Gift Wrap, Care Kit, Mount, or Custom) let the buyer pick <em>additional</em> variations. Each value can add ₹ to the price via &ldquo;Price delta&rdquo;.</li>
+            <li>Set an option <b>Required</b> to force the buyer to choose a value before checkout (e.g. Shape). Add-on toggles (Gift Wrap, Care Kit) are usually optional.</li>
+            <li>Everything the buyer picks is <b>snapshotted onto the order</b> — you will see it under Admin → Orders → View details for every line item.</li>
+            <li>When multiple products share the same option set (e.g. all mirrors have the same Shape / Frame choices), use the same preset buttons on each product for consistency. In future you&apos;ll be able to save & re-apply option templates.</li>
+            <li>Prices are always in whole rupees (₹). GST is added on top automatically per your HSN / Category rules under the GST tab.</li>
+          </ul>
         </div>
 
         <label className="mt-6 flex items-center gap-2 text-sm text-cream/70">
@@ -1555,6 +1795,7 @@ function OrderRow({ o, onStatus, onTracking, onNotify }) {
         >
           {expanded ? "Hide details" : "View details"}
         </button>
+        <InvoiceButton orderNumber={o.order_number} />
         <button
           type="button"
           onClick={() => onNotify?.(o)}
@@ -1606,6 +1847,26 @@ function OrderRow({ o, onStatus, onTracking, onNotify }) {
                         {it.product_sku && <span>SKU: <span className="font-mono text-cream/60">{it.product_sku}</span></span>}
                         {it.product_hsn_code && <span>HSN: <span className="font-mono text-cream/60">{it.product_hsn_code}</span></span>}
                       </div>
+                      {/* Task 3 — Selected variation options (Shape / Frame / Gift Wrap / Care Kit / Mount…) */}
+                      {it.selected_options_labels && Object.keys(it.selected_options_labels).length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {Object.entries(it.selected_options_labels).map(([k, v]) => (
+                            <span
+                              key={k}
+                              className="inline-flex items-center gap-1 text-[10px] bg-gold/10 border border-gold/30 text-gold-soft px-2 py-0.5"
+                              title="Customer-selected option"
+                            >
+                              <span className="uppercase tracking-luxury text-[9px] text-gold-soft/70">{k}:</span>
+                              <span className="text-cream">{v}</span>
+                            </span>
+                          ))}
+                          {(it.options_price_delta_inr || 0) > 0 && (
+                            <span className="inline-flex items-center text-[10px] bg-ink-950 border border-white/10 text-cream/70 px-2 py-0.5">
+                              add-ons: <span className="text-gold ml-1 font-mono">+₹{(it.options_price_delta_inr).toLocaleString("en-IN")}</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       <div className="text-cream/70 font-mono">₹{(it.price_inr || 0).toLocaleString("en-IN")}</div>
@@ -1976,5 +2237,149 @@ function Pager({ page, pages, onChange, testid = "pager" }) {
         className="px-3 py-1.5 text-[10px] uppercase tracking-luxury border border-white/10 text-cream/70 hover:text-gold disabled:opacity-30"
       >Next</button>
     </div>
+  );
+}
+
+
+/* --------------------------------------------------------------------------
+ * Task 8 — GST invoice download helpers.
+ * `InvoiceButton` is used inline on each OrderRow.
+ * `BulkInvoiceDownloader` sits in the Orders tab header.
+ * Both hit /api/admin/orders/... endpoints with the admin token and stream
+ * the PDF / ZIP straight to the browser via a temporary blob URL.
+ * -------------------------------------------------------------------------- */
+function _fetchAndDownload(url, filename, adminToken) {
+  return fetch(url, { headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {} })
+    .then(async (r) => {
+      if (!r.ok) {
+        let msg = "Download failed";
+        try { const j = await r.json(); if (j && j.detail) msg = j.detail; } catch (_) { /* ignore */ }
+        throw new Error(msg);
+      }
+      const blob = await r.blob();
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 60_000);
+    });
+}
+
+function InvoiceButton({ orderNumber }) {
+  const [busy, setBusy] = useState(false);
+  const download = async () => {
+    setBusy(true);
+    try {
+      const token = localStorage.getItem("artyfex_admin_token") || "";
+      const backend = process.env.REACT_APP_BACKEND_URL || "";
+      const url = `${backend}/api/admin/orders/${encodeURIComponent(orderNumber)}/invoice.pdf`;
+      await _fetchAndDownload(url, `invoice-${orderNumber}.pdf`, token);
+      toast.success("Invoice downloaded");
+    } catch (e) {
+      toast.error(e.message || "Invoice download failed");
+    } finally { setBusy(false); }
+  };
+  return (
+    <button
+      type="button"
+      onClick={download}
+      disabled={busy}
+      data-testid={`admin-order-invoice-${orderNumber}`}
+      className="text-[10px] uppercase tracking-luxury text-gold hover:text-cream border border-gold/40 px-3 py-1 flex items-center gap-1 disabled:opacity-50"
+      title="Download GST invoice (PDF)"
+    >
+      {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+      Invoice
+    </button>
+  );
+}
+
+function BulkInvoiceDownloader({ authed }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [status, setStatus] = useState("");
+  const download = async () => {
+    setBusy(true);
+    try {
+      const token = localStorage.getItem("artyfex_admin_token") || "";
+      const backend = process.env.REACT_APP_BACKEND_URL || "";
+      const params = new URLSearchParams();
+      if (dateFrom) params.set("date_from", dateFrom);
+      if (dateTo) params.set("date_to", dateTo);
+      if (status) params.set("status", status);
+      const url = `${backend}/api/admin/orders/invoices.zip${params.toString() ? "?" + params.toString() : ""}`;
+      const label = dateFrom || dateTo ? `invoices_${dateFrom || "all"}_to_${dateTo || "all"}.zip` : "invoices_all.zip";
+      await _fetchAndDownload(url, label, token);
+      toast.success("Invoices ZIP downloaded");
+      setOpen(false);
+    } catch (e) {
+      toast.error(e.message || "Bulk download failed");
+    } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        data-testid="admin-orders-bulk-invoice"
+        className="inline-flex items-center gap-2 border border-gold/50 text-gold text-xs uppercase tracking-luxury px-4 py-2.5 hover:bg-gold hover:text-ink-950 transition-colors"
+        title="Bulk-download all GST invoices as ZIP (for CA / GST filing)"
+      >
+        <Download className="w-3.5 h-3.5" /> Download all invoices
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-[110] bg-black/70 flex items-center justify-center p-4" onClick={() => !busy && setOpen(false)}>
+          <div className="bg-ink-950 border border-gold/30 w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-serif text-xl text-cream">Bulk Invoice Download</h3>
+              <button onClick={() => setOpen(false)} className="text-cream/40 hover:text-red-400 text-xl leading-none">×</button>
+            </div>
+            <p className="text-xs text-cream/60 mb-4">Downloads every order&apos;s GST invoice as a single ZIP — for GST filing / ITR / CA hand-off. Leave filters empty to grab every order in the system.</p>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-luxury text-cream/60">From</span>
+                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} data-testid="admin-bulk-inv-from" className="mt-1 w-full bg-ink-900 border border-white/10 text-cream text-xs px-2 py-2 focus:border-gold outline-none" />
+              </label>
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-luxury text-cream/60">To</span>
+                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} data-testid="admin-bulk-inv-to" className="mt-1 w-full bg-ink-900 border border-white/10 text-cream text-xs px-2 py-2 focus:border-gold outline-none" />
+              </label>
+            </div>
+            <label className="block mb-4">
+              <span className="text-[10px] uppercase tracking-luxury text-cream/60">Status (optional)</span>
+              <select value={status} onChange={(e) => setStatus(e.target.value)} data-testid="admin-bulk-inv-status" className="mt-1 w-full bg-ink-900 border border-white/10 text-cream text-xs px-2 py-2 focus:border-gold outline-none">
+                <option value="">All statuses</option>
+                {["pending_payment", "confirmed", "packed", "shipped", "delivered", "cancelled", "payment_failed"].map((s) => (
+                  <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+                ))}
+              </select>
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                disabled={busy}
+                className="text-xs uppercase tracking-luxury text-cream/60 px-4 py-2 hover:text-cream"
+              >Cancel</button>
+              <button
+                type="button"
+                onClick={download}
+                disabled={busy}
+                data-testid="admin-bulk-inv-go"
+                className="text-xs uppercase tracking-luxury bg-gold text-ink-950 px-5 py-2.5 hover:bg-cream disabled:opacity-50 flex items-center gap-2"
+              >
+                {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                {busy ? "Building ZIP…" : "Download ZIP"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

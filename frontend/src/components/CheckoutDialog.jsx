@@ -242,7 +242,12 @@ export const CheckoutDialog = ({ open, onClose }) => {
     }
     const payload = {
       customer: buildCustomer(),
-      items: items.map((i) => ({ product_id: i.product_id, variant_key: i.variant_key, quantity: i.quantity })),
+      items: items.map((i) => ({
+        product_id: i.product_id,
+        variant_key: i.variant_key,
+        quantity: i.quantity,
+        selected_options: i.selected_options || {},
+      })),
       payment_method: "razorpay",
       subtotal_inr: subtotal,
       shipping_inr: activeShipping,
