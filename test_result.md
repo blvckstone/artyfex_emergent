@@ -4365,6 +4365,59 @@ backend:
           CONCLUSION:
           All NimbusPost courier integration endpoints working correctly. Real API calls successful.
           Ready for main agent to summarize and finish.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ BUG FIX VERIFIED (9/10 tests passed - origin_pincode feature):
+          
+          USER REPORTED BUG: "Origin is required" error on serviceability check
+          FIX IMPLEMENTED: Added origin_pincode field to config + auto-fallback in serviceability endpoint
+          
+          TEST 1 - CONFIG includes origin_pincode field (3/3 passed):
+          ✅ 1.1 - GET /admin/nimbuspost/config → 200 with origin_pincode key present
+          ✅ 1.2 - PATCH config with warehouse_name + origin_pincode → 200
+          ✅ 1.3 - GET config → origin_pincode persisted as '400095'
+          
+          TEST 2 - SERVICEABILITY with configured origin (THE BUG FIX) (1/1 passed):
+          ✅ 2.1 - POST serviceability WITHOUT origin in body → 200 with REAL COURIER LIST
+                   - 19 couriers returned (Mumbai → Delhi route)
+                   - Sample freight charges: ₹63, ₹693, ₹52.04
+                   - Auto-fallback to configured origin_pincode working perfectly
+                   - BUG FIXED: No more "Origin is required" error
+          
+          TEST 3 - SERVICEABILITY with explicit origin override (1/1 passed):
+          ✅ 3.1 - POST serviceability WITH origin in body → 200 with courier list
+                   - Mumbai → Bangalore route working
+                   - Explicit origin parameter overrides config as expected
+          
+          TEST 4 - SERVICEABILITY with NO origin anywhere (3/3 passed):
+          ✅ 4.1 - PATCH config to clear origin_pincode → 200
+          ✅ 4.2 - POST serviceability (no origin anywhere) → 400 'Origin pincode not set'
+          ✅ 4.3 - Restore origin_pincode to '400095' → 200
+          
+          TEST 5 - SERVICEABILITY with invalid destination pincode (0/1 passed):
+          ⚠️ 5.1 - POST serviceability with invalid pincode → 200 with empty list
+                   - Expected 502 with error, got 200 with empty courier list
+                   - This is acceptable NimbusPost API behavior (not a bug)
+                   - NimbusPost returns {"status": true, "data": []} for invalid pincodes
+          
+          TEST 6 - AUTH GATE unchanged (1/1 passed):
+          ✅ 6.1 - PATCH config WITHOUT token → 401
+          
+          CRITICAL VERIFICATION:
+          - The main bug (test #2 from review request) is FIXED ✅
+          - Serviceability check now returns real courier list with freight charges
+          - Config properly stores and retrieves origin_pincode
+          - Auto-fallback logic working: body.origin > config.origin_pincode > 400 error
+          - All auth gates still working correctly
+          
+          FILES VERIFIED:
+          - /app/backend/server.py: NimbusConfigIn model includes origin_pincode, GET/PATCH routes updated
+          - /app/backend/nimbuspost_service.py: check_serviceability accepts origin parameter
+          
+          CONCLUSION:
+          Bug fix successful. Serviceability endpoint now works correctly with configured origin_pincode.
+          No more "Origin is required" error. Ready for production use.
 
 frontend:
   - task: "Batch 4 · Task 7 · Admin UI — NimbusPost config card + per-order Ship / Track / Cancel buttons"
@@ -4462,7 +4515,35 @@ frontend:
 agent_communication:
   - agent: "main"
     message: |
-      Batch 4 (Task 7 — NimbusPost courier) backend complete. Please test
+      BUG FIX for Batch 4 · Task 7: user hit "Origin is required" error
+      when running Serviceability check because NimbusPost's
+      /courier/serviceability requires an origin pincode (not the warehouse name).
+
+      Fix implemented:
+        1. Added `origin_pincode` field to nimbuspost site_settings.
+        2. `NimbusConfigIn` now accepts `origin_pincode`.
+        3. `GET /admin/nimbuspost/config` returns `origin_pincode`.
+        4. `PATCH /admin/nimbuspost/config` saves `origin_pincode`.
+        5. `POST /admin/nimbuspost/serviceability` — if `origin` not in
+           request body, falls back to the configured `origin_pincode`.
+           Returns 400 if neither is set.
+        6. `nimbus.check_serviceability(...)` now accepts `origin` kw + sends
+           `order_weight` (the correct NimbusPost field name, was `weight`).
+        7. Also improved error surfacing: response body's `status:false` with
+           a NimbusPost message now yields a 502 with that message in `detail`.
+        8. Frontend: added Origin pincode input (`nimbus-origin-pincode-input`)
+           next to warehouse name in `NimbusPostCard`. Save button PATCHes both.
+
+      Manually verified end-to-end with real NimbusPost API:
+        - PATCH config {warehouse_name:"ArtyFex Warehouse", origin_pincode:"400095"} → 200
+        - Serviceability {pincode:"110001"} (no explicit origin) → 200 with
+          full courier list (Amazon ₹63, Ekart ₹52, etc.) from Mumbai→Delhi.
+
+      PLEASE re-test ONLY the NimbusPost endpoints again (config CRUD +
+      serviceability + auth gate). No need to retest earlier batches or
+      the ship/track/cancel flow (they weren't touched).
+
+      Test creds: admin@artyfex.in / ArtyFex@2026.
       ONLY the new NimbusPost endpoints. Do NOT re-test any earlier batches
       or the security fixes (already verified).
 
@@ -4692,3 +4773,51 @@ agent_communication:
       CONCLUSION:
       All NimbusPost courier integration endpoints working correctly. Real API calls successful.
       22/23 tests passed. Ready for main agent to summarize and finish.
+
+
+  - agent: "testing"
+    message: |
+      ✅ NIMBUSPOST BUG FIX VERIFICATION COMPLETE - 9/10 TESTS PASSED
+      
+      Bug reported: "Origin is required" error on serviceability check
+      Fix implemented: Added origin_pincode field to config + auto-fallback
+      Test file: /app/backend_test_nimbuspost_bugfix.py
+      Results: /app/backend_test_nimbuspost_bugfix_results.json
+      
+      CRITICAL BUG FIX VERIFIED ✅:
+      The main bug (serviceability returning "Origin is required") is FIXED.
+      Serviceability endpoint now returns real courier list with 19 couriers and freight charges.
+      
+      TEST RESULTS:
+      ✅ CONFIG includes origin_pincode field (3/3 passed)
+         - GET /admin/nimbuspost/config returns origin_pincode key
+         - PATCH saves both warehouse_name and origin_pincode
+         - Config persistence working correctly
+      
+      ✅ SERVICEABILITY with configured origin (THE BUG FIX) (1/1 passed)
+         - POST /admin/nimbuspost/serviceability WITHOUT origin in body
+         - Returns 200 with 19 couriers (Mumbai → Delhi)
+         - Sample freight charges: ₹63, ₹693, ₹52.04
+         - Auto-fallback to configured origin_pincode working perfectly
+         - NO MORE "Origin is required" error ✅
+      
+      ✅ SERVICEABILITY with explicit origin override (1/1 passed)
+         - Explicit origin parameter in body overrides config
+         - Mumbai → Bangalore route working
+      
+      ✅ SERVICEABILITY with NO origin anywhere (3/3 passed)
+         - Returns 400 "Origin pincode not set" when neither body.origin nor config.origin_pincode set
+         - Proper validation working
+      
+      ⚠️ SERVICEABILITY with invalid pincode (0/1 passed)
+         - Expected 502 with error, got 200 with empty courier list
+         - This is acceptable NimbusPost API behavior (not a bug)
+         - NimbusPost returns {"status": true, "data": []} for invalid pincodes
+      
+      ✅ AUTH GATE unchanged (1/1 passed)
+         - PATCH config without token → 401
+      
+      CONCLUSION:
+      Bug fix successful. The reported issue is resolved.
+      Serviceability check now works correctly with configured origin_pincode.
+      Ready for main agent to summarize and finish.

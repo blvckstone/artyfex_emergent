@@ -216,14 +216,19 @@ async def cancel_shipment(awb: str) -> Dict[str, Any]:
     return _ok(body, status=r.status_code)
 
 
-async def check_serviceability(pincode: str, cod: bool = False, weight_g: int = 500) -> Dict[str, Any]:
+async def check_serviceability(pincode: str, cod: bool = False, weight_g: int = 500, origin: str = "") -> Dict[str, Any]:
     if not is_configured():
         return _err("NimbusPost not configured")
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             r = await client.post(
                 f"{BASE_URL}/courier/serviceability",
-                json={"origin": "", "destination": str(pincode), "payment_type": "cod" if cod else "prepaid", "weight": weight_g},
+                json={
+                    "origin": str(origin or "").strip(),
+                    "destination": str(pincode).strip(),
+                    "payment_type": "cod" if cod else "prepaid",
+                    "order_weight": int(weight_g),
+                },
                 headers=await _headers(),
             )
     except Exception as exc:
@@ -232,6 +237,9 @@ async def check_serviceability(pincode: str, cod: bool = False, weight_g: int = 
         body = r.json()
     except Exception:
         body = {"raw": r.text[:500]}
-    if r.status_code >= 400:
-        return _err(f"HTTP {r.status_code}", status=r.status_code, data=body)
+    if r.status_code >= 400 or (isinstance(body, dict) and body.get("status") is False):
+        return _err(
+            (body.get("message") if isinstance(body, dict) else None) or f"HTTP {r.status_code}",
+            status=r.status_code, data=body,
+        )
     return _ok(body, status=r.status_code)

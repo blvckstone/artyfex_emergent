@@ -1,0 +1,57 @@
+{
+  "total": 10,
+  "passed": 9,
+  "failed": 1,
+  "tests": [
+    {
+      "name": "1.1 - GET /admin/nimbuspost/config \u2192 200 with origin_pincode key",
+      "passed": true,
+      "details": "Status: 200, Keys: ['configured', 'warehouse_name', 'origin_pincode', 'auth_mode']"
+    },
+    {
+      "name": "1.2 - PATCH config with warehouse_name + origin_pincode \u2192 200",
+      "passed": true,
+      "details": "Status: 200, Response: {'warehouse_name': 'ArtyFex Warehouse', 'origin_pincode': '400095', 'configured': True}"
+    },
+    {
+      "name": "1.3 - GET config \u2192 origin_pincode persisted as '400095'",
+      "passed": true,
+      "details": "origin_pincode: 400095"
+    },
+    {
+      "name": "2.1 - POST serviceability (no origin in body) \u2192 200 with courier list",
+      "passed": true,
+      "details": "Couriers found: 19, Examples: ['Unknown', 'Unknown', 'Unknown']"
+    },
+    {
+      "name": "3.1 - POST serviceability with explicit origin \u2192 200 with courier list",
+      "passed": true,
+      "details": "Mumbai \u2192 Bangalore route working"
+    },
+    {
+      "name": "4.1 - PATCH config to clear origin_pincode \u2192 200",
+      "passed": true,
+      "details": "Status: 200"
+    },
+    {
+      "name": "4.2 - POST serviceability (no origin anywhere) \u2192 400 'Origin pincode not set'",
+      "passed": true,
+      "details": "Status: 400, Detail: Origin pincode not set \u2014 add it in Admin \u2192 Shipping \u2192 NimbusPost"
+    },
+    {
+      "name": "4.3 - Restore origin_pincode to '400095' \u2192 200",
+      "passed": true,
+      "details": "Status: 200"
+    },
+    {
+      "name": "5.1 - POST serviceability with invalid pincode \u2192 502 with NimbusPost error",
+      "passed": false,
+      "details": "Status: 200, Detail: "
+    },
+    {
+      "name": "6.1 - PATCH config WITHOUT token \u2192 401",
+      "passed": true,
+      "details": "Status: 401"
+    }
+  ]
+}

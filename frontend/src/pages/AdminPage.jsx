@@ -2460,6 +2460,7 @@ function BulkInvoiceDownloader({ authed }) {
 function NimbusPostCard({ authed }) {
   const [cfg, setCfg] = useState(null);
   const [warehouse, setWarehouse] = useState("");
+  const [originPin, setOriginPin] = useState("");
   const [saving, setSaving] = useState(false);
   const [pin, setPin] = useState("110001");
   const [svc, setSvc] = useState(null);
@@ -2470,6 +2471,7 @@ function NimbusPostCard({ authed }) {
       const r = await authed.get("/admin/nimbuspost/config");
       setCfg(r.data);
       setWarehouse(r.data?.warehouse_name || "");
+      setOriginPin(r.data?.origin_pincode || "");
     } catch (err) {
       toast.error("Failed to load NimbusPost config");
     }
@@ -2479,8 +2481,8 @@ function NimbusPostCard({ authed }) {
   const save = async () => {
     setSaving(true);
     try {
-      await authed.patch("/admin/nimbuspost/config", { warehouse_name: warehouse });
-      toast.success("NimbusPost warehouse saved");
+      await authed.patch("/admin/nimbuspost/config", { warehouse_name: warehouse, origin_pincode: originPin });
+      toast.success("NimbusPost settings saved");
       load();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Save failed");
@@ -2512,19 +2514,32 @@ function NimbusPostCard({ authed }) {
         )}
       </div>
       <p className="mt-2 text-sm text-cream/60 max-w-2xl">
-        Set the exact warehouse / pickup name registered on your NimbusPost dashboard.
+        Set the exact warehouse / pickup name registered on your NimbusPost dashboard,
+        and the pickup pincode (used as the origin for rate + serviceability calls).
         Once saved, every admin order card will show a <b>Ship via NimbusPost</b> button that creates an AWB and pushes tracking back to the customer.
       </p>
 
-      <div className="mt-5 grid sm:grid-cols-[1fr_auto] gap-3 items-end">
+      <div className="mt-5 grid sm:grid-cols-[1.4fr_1fr_auto] gap-3 items-end">
         <label className="block">
           <span className="text-[10px] uppercase tracking-luxury text-cream/50">Warehouse / Pickup name (must match dashboard exactly)</span>
           <input
             data-testid="nimbus-warehouse-input"
             value={warehouse}
             onChange={(e) => setWarehouse(e.target.value)}
-            placeholder="e.g. ArtyFex Mumbai Warehouse"
+            placeholder="e.g. ArtyFex Warehouse"
             className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Origin pincode (pickup)</span>
+          <input
+            data-testid="nimbus-origin-pincode-input"
+            value={originPin}
+            onChange={(e) => setOriginPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+            placeholder="e.g. 400095"
+            inputMode="numeric"
+            maxLength={6}
+            className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none font-mono"
           />
         </label>
         <button

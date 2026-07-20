@@ -70,6 +70,7 @@ NIMBUSPOST_EMAIL          = artyfex.in+xxxx@gmail.com   # created in NimbusPost 
 NIMBUSPOST_PASSWORD       = xxxxxxxxxxxx                # ditto
 NIMBUSPOST_LEGACY_KEY     = xxx                         # fallback old API key
 NIMBUSPOST_WAREHOUSE_NAME =                             # OPTIONAL — leave blank and set in Admin → Shipping
+NIMBUSPOST_ORIGIN_PINCODE =                             # OPTIONAL — pickup pincode, also settable in Admin UI
 ```
 
 After changing any secret in Northflank, click **Restart** on the service. Environment variables are only re-read on process boot.

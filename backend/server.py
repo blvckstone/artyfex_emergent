@@ -3241,14 +3241,23 @@ import nimbuspost_service as nimbus  # noqa: E402  (kept close to route defs)
 
 class NimbusConfigIn(BaseModel):
     warehouse_name: str = ""
+    origin_pincode: str = ""
 
 
-DEFAULT_NIMBUS_CFG = {"warehouse_name": os.getenv("NIMBUSPOST_WAREHOUSE_NAME", "").strip()}
+DEFAULT_NIMBUS_CFG = {
+    "warehouse_name": os.getenv("NIMBUSPOST_WAREHOUSE_NAME", "").strip(),
+    "origin_pincode": os.getenv("NIMBUSPOST_ORIGIN_PINCODE", "").strip(),
+}
 
 
 async def _nimbus_warehouse() -> str:
     cfg = await load_site_setting("nimbuspost", DEFAULT_NIMBUS_CFG)
     return (cfg.get("warehouse_name") or "").strip()
+
+
+async def _nimbus_origin_pincode() -> str:
+    cfg = await load_site_setting("nimbuspost", DEFAULT_NIMBUS_CFG)
+    return (cfg.get("origin_pincode") or "").strip()
 
 
 @api_router.get("/admin/nimbuspost/config")
@@ -3257,13 +3266,17 @@ async def admin_get_nimbus_config(admin=Depends(get_current_admin)):
     return {
         "configured": nimbus.is_configured(),
         "warehouse_name": cfg.get("warehouse_name") or "",
+        "origin_pincode": cfg.get("origin_pincode") or "",
         "auth_mode": "jwt" if (os.getenv("NIMBUSPOST_EMAIL") and os.getenv("NIMBUSPOST_PASSWORD")) else ("legacy" if os.getenv("NIMBUSPOST_LEGACY_KEY") else "none"),
     }
 
 
 @api_router.patch("/admin/nimbuspost/config")
 async def admin_patch_nimbus_config(payload: NimbusConfigIn, admin=Depends(require_permission("manage_shipping"))):
-    data = {"warehouse_name": (payload.warehouse_name or "").strip()}
+    data = {
+        "warehouse_name": (payload.warehouse_name or "").strip(),
+        "origin_pincode": (payload.origin_pincode or "").strip(),
+    }
     await save_site_setting("nimbuspost", data)
     return {**data, "configured": nimbus.is_configured()}
 
@@ -3338,11 +3351,15 @@ class NimbusServiceCheckIn(BaseModel):
     pincode: str
     cod: bool = False
     weight_g: int = 500
+    origin: str = ""  # optional — falls back to configured origin_pincode
 
 
 @api_router.post("/admin/nimbuspost/serviceability")
 async def admin_nimbus_serviceability(payload: NimbusServiceCheckIn, admin=Depends(require_permission("manage_shipping"))):
-    result = await nimbus.check_serviceability(payload.pincode, payload.cod, payload.weight_g)
+    origin = (payload.origin or "").strip() or await _nimbus_origin_pincode()
+    if not origin:
+        raise HTTPException(status_code=400, detail="Origin pincode not set — add it in Admin → Shipping → NimbusPost")
+    result = await nimbus.check_serviceability(payload.pincode, payload.cod, payload.weight_g, origin=origin)
     if not result["ok"]:
         raise HTTPException(status_code=502, detail=result["error"] or "NimbusPost serviceability failed")
     return result["data"]
