@@ -16,13 +16,24 @@ export default function AuthDialog() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (loading) return; // guard against double-submit which used to leave the modal blank
     setLoading(true);
     try {
       if (mode === "login") await login(form.email, form.password);
       else await signup(form.name, form.email, form.password, form.phone);
       toast.success(`Welcome${mode === "signup" ? `, ${form.name}` : ""}`);
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Please check your credentials.");
+      // Surface every possible shape of failure so the user never sees a "blackout" spinner forever.
+      const detail = err?.response?.data?.detail;
+      const status = err?.response?.status;
+      const msg = (typeof detail === "string" && detail)
+        || (Array.isArray(detail) && detail[0]?.msg)
+        || (status === 429 ? "Too many attempts — please wait a minute and try again." : null)
+        || err?.message
+        || "Please check your details and try again.";
+      // eslint-disable-next-line no-console
+      console.error("[auth] submit failed", { status, detail, err });
+      toast.error(msg);
     } finally { setLoading(false); }
   };
 

@@ -125,7 +125,7 @@ function useAuthedApi(token) {
   }, [token]);
 }
 
-const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: [{ key: "default", label: "Default", hex: "#333333", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null }], has_variations: false, stock: 5, is_hero: false, category: "", hsn_code: "", sku: "", weight_grams: "", length_cm: "", width_cm: "", height_cm: "", tags: "", variation_options: [] };
+const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: [{ key: "default", label: "Default", hex: "#333333", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null, sku: "", weight_grams: null, length_cm: null, width_cm: null, height_cm: null }], has_variations: false, stock: 5, is_hero: false, category: "", hsn_code: "", sku: "", weight_grams: "", length_cm: "", width_cm: "", height_cm: "", tags: "", variation_options: [] };
 
 export default function AdminPage() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
@@ -1299,7 +1299,7 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
   };
   const addVariant = () => setF((prev) => ({
     ...prev,
-    variants: [...(prev.variants || []), { key: "", label: "", hex: "#D4AF37", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null }],
+    variants: [...(prev.variants || []), { key: "", label: "", hex: "#D4AF37", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null, sku: "", weight_grams: null, length_cm: null, width_cm: null, height_cm: null }],
   }));
   const removeVariant = (idx) => setF((prev) => ({ ...prev, variants: (prev.variants || []).filter((_, i) => i !== idx) }));
 
@@ -1449,16 +1449,18 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
                 <option value="6913">Ceramic ornaments</option>
               </datalist>
             </Fld>
-            <Fld label="SKU (Stock Keeping Unit)" hint="Internal reference — e.g. ARF-OBS-2X3.">
+            <Fld label="SKU (Stock Keeping Unit)" hint="Internal reference — e.g. ARF-OBS-2X3. Overridden per-variation below if set.">
               <input value={f.sku || ""} onChange={upd("sku")} className={`${inp} font-mono`} placeholder="ARF-XXX-0001" data-testid="pe-sku" />
             </Fld>
-            <Fld label="Weight (grams)" hint="Used by the shipping engine.">
+            <Fld label={`Weight (grams)${f.has_variations ? " · default" : ""}`} hint={f.has_variations ? "Fallback only — each variation below can set its own weight." : "Used by the shipping engine."}>
               <input type="number" min="0" value={f.weight_grams ?? ""} onChange={upd("weight_grams")} className={inp} placeholder="e.g. 8500" data-testid="pe-weight" />
             </Fld>
           </div>
 
           <div className="mt-4">
-            <div className="text-[10px] uppercase tracking-luxury text-cream/50 mb-2">Package dimensions (cm)</div>
+            <div className="text-[10px] uppercase tracking-luxury text-cream/50 mb-2">
+              Package dimensions (cm){f.has_variations && <span className="ml-2 text-gold-soft normal-case tracking-normal">· fallback — per-variation dims below take priority</span>}
+            </div>
             <div className="grid grid-cols-3 gap-3">
               <Fld label="Length"><input type="number" min="0" step="0.1" value={f.length_cm ?? ""} onChange={upd("length_cm")} className={inp} data-testid="pe-length" /></Fld>
               <Fld label="Width"><input type="number" min="0" step="0.1" value={f.width_cm ?? ""} onChange={upd("width_cm")} className={inp} data-testid="pe-width" /></Fld>
@@ -1479,21 +1481,21 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
             <input
               type="checkbox"
               checked={!!f.has_variations}
-              onChange={(e) => setF({ ...f, has_variations: e.target.checked, variants: e.target.checked ? (variants.length > 0 && !(variants[0]?.key === "default") ? variants : [{ key: "", label: "", hex: "#D4AF37", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null }]) : [] })}
+              onChange={(e) => setF({ ...f, has_variations: e.target.checked, variants: e.target.checked ? (variants.length > 0 && !(variants[0]?.key === "default") ? variants : [{ key: "", label: "", hex: "#D4AF37", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null, sku: "", weight_grams: null, length_cm: null, width_cm: null, height_cm: null }]) : [] })}
               className="accent-gold w-4 h-4"
               data-testid="pe-has-variations"
             />
             <div>
-              <div className="text-sm text-cream">Product has colour swatches?</div>
-              <div className="text-xs text-cream/50">Tick only if the buyer must pick a colour (e.g. gold / silver / rose). Leave unticked for one-of-one pieces or if colour doesn&apos;t apply — the colour picker will be hidden on the product page.</div>
+              <div className="text-sm text-cream">Product has variations (size · colour · finish · etc.)?</div>
+              <div className="text-xs text-cream/50">Tick if the buyer must pick a variation — each row below can override size, colour, price, stock, image AND its own weight + package dims (so shipping cost is right for that size). Untick for one-of-one pieces to hide the picker.</div>
             </div>
           </label>
 
           {f.has_variations && (
             <div className="mt-6 space-y-4" data-testid="pe-variations-editor">
-              <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Colour swatches · {variants.length}</div>
+              <div className="text-[10px] uppercase tracking-luxury text-gold-soft">Variations · {variants.length}</div>
               {variants.length === 0 && (
-                <div className="text-xs text-cream/50">No colour swatches yet. Click &quot;+ Add colour&quot; to add one.</div>
+                <div className="text-xs text-cream/50">No variations yet. Click &quot;+ Add variation&quot; to add one.</div>
               )}
               {variants.map((v, idx) => (
                 <div key={idx} className="border border-white/10 p-4 bg-ink-900" data-testid={`pe-variant-row-${idx}`}>
@@ -1510,8 +1512,8 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
                     <Fld label="Internal key (auto = slug of label)">
                       <input value={v.key || ""} onChange={updVariant(idx, "key")} onBlur={(e)=>{ if (!e.target.value && v.label) updVariant(idx,"key")({ target:{ value: v.label.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9\-]/g,"") }}); }} className={inp} placeholder="e.g. signature-gold-2ft" />
                     </Fld>
-                    <Fld label="Size (optional, e.g. 24 in / 2 ft)">
-                      <input value={v.size || ""} onChange={updVariant(idx, "size")} className={inp} />
+                    <Fld label="Size (e.g. 24 in, 2 ft, Small)" hint="Free-form; use whatever makes sense to your buyers.">
+                      <input value={v.size || ""} onChange={updVariant(idx, "size")} className={inp} placeholder="2 ft" data-testid={`pe-variant-size-${idx}`} />
                     </Fld>
                     <Fld label="Colour" hint="Pick a colour — the swatch is shown to buyers.">
                       <div className="flex items-center gap-2">
@@ -1522,13 +1524,31 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
                     <Fld label="Stock available">
                       <input type="number" min="0" value={v.stock ?? 0} onChange={updVariant(idx, "stock")} className={inp} data-testid={`pe-variant-stock-${idx}`} />
                     </Fld>
+                    <Fld label="SKU (this variation)" hint="Optional — falls back to product SKU.">
+                      <input value={v.sku || ""} onChange={updVariant(idx, "sku")} className={`${inp} font-mono`} placeholder="ARF-OBS-2FT" data-testid={`pe-variant-sku-${idx}`} />
+                    </Fld>
                     <Fld label="Price override (₹) — blank = use base price">
                       <input type="number" min="0" value={v.price_inr ?? ""} onChange={updVariant(idx, "price_inr")} className={inp} placeholder="Same as base" />
                     </Fld>
-                    <div className="sm:col-span-2">
-                      <Fld label="MRP override (₹) — blank = use base MRP">
-                        <input type="number" min="0" value={v.mrp_inr ?? ""} onChange={updVariant(idx, "mrp_inr")} className={inp} placeholder="Same as base MRP" />
-                      </Fld>
+                    <Fld label="MRP override (₹) — blank = use base MRP">
+                      <input type="number" min="0" value={v.mrp_inr ?? ""} onChange={updVariant(idx, "mrp_inr")} className={inp} placeholder="Same as base MRP" />
+                    </Fld>
+                    <div className="sm:col-span-2 border-t border-white/5 pt-3">
+                      <div className="text-[10px] uppercase tracking-luxury text-gold-soft mb-2">Shipping for this variation (blank = fall back to product-level)</div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <Fld label="Weight (g)">
+                          <input type="number" min="0" value={v.weight_grams ?? ""} onChange={updVariant(idx, "weight_grams")} className={inp} placeholder="e.g. 8500" data-testid={`pe-variant-weight-${idx}`} />
+                        </Fld>
+                        <Fld label="Length (cm)">
+                          <input type="number" min="0" step="0.1" value={v.length_cm ?? ""} onChange={updVariant(idx, "length_cm")} className={inp} placeholder="e.g. 92" data-testid={`pe-variant-length-${idx}`} />
+                        </Fld>
+                        <Fld label="Width (cm)">
+                          <input type="number" min="0" step="0.1" value={v.width_cm ?? ""} onChange={updVariant(idx, "width_cm")} className={inp} placeholder="e.g. 62" data-testid={`pe-variant-width-${idx}`} />
+                        </Fld>
+                        <Fld label="Height (cm)">
+                          <input type="number" min="0" step="0.1" value={v.height_cm ?? ""} onChange={updVariant(idx, "height_cm")} className={inp} placeholder="e.g. 8" data-testid={`pe-variant-height-${idx}`} />
+                        </Fld>
+                      </div>
                     </div>
                     <div className="sm:col-span-2">
                       <Fld label="Image for this variation" hint="Shown when the buyer picks this variation.">
@@ -1546,7 +1566,7 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
                 </div>
               ))}
               <button type="button" onClick={addVariant} className="inline-flex items-center gap-2 text-xs uppercase tracking-luxury border border-gold/40 text-gold px-4 py-2.5 hover:bg-gold/10" data-testid="pe-add-variation">
-                <Plus className="w-3.5 h-3.5" /> Add colour
+                <Plus className="w-3.5 h-3.5" /> Add variation
               </button>
             </div>
           )}

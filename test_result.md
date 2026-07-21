@@ -4821,3 +4821,262 @@ agent_communication:
       Bug fix successful. The reported issue is resolved.
       Serviceability check now works correctly with configured origin_pincode.
       Ready for main agent to summarize and finish.
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BATCH 5 · Product variations rework + Cloudinary orphan cleanup + Auth polish
+# ═══════════════════════════════════════════════════════════════════════════
+
+metadata:
+  version: "3.7"
+  test_sequence: 18
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Batch 5 · Variant model + OrderItem snapshot (per-variation size/weight/dims/SKU)"
+    - "Batch 5 · Cloudinary orphan cleanup on product PUT/DELETE + homepage PATCH"
+    - "Batch 5 · Backward-compat regression on POST /admin/products"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+backend:
+  - task: "Batch 5 · Variant model + OrderItem snapshot — per-variation SKU / weight_grams / length_cm / width_cm / height_cm"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Extended `Variant` model (server.py ~line 448) with 5 optional fields:
+          sku, weight_grams, length_cm, width_cm, height_cm. All backward-compat.
+
+          Extended `OrderItem` (~line 516) with the same 4 shipping fields.
+
+          The order-create snapshot loop (~line 1416-1478) now prefers
+          variant-level values, falling back to product-level:
+            it.product_sku      = variant.sku       || product.sku
+            it.weight_grams     = variant.weight_grams || product.weight_grams
+            it.length_cm        = variant.length_cm    || product.length_cm
+            it.width_cm         = variant.width_cm     || product.width_cm
+            it.height_cm        = variant.height_cm    || product.height_cm
+
+          nimbuspost_service._build_ship_payload already reads
+          it.weight_grams / length_cm — so shipping cost is now variant-aware.
+
+          TEST TARGETS:
+            1) POST /admin/products with a variant containing all 5 new fields → 200.
+            2) GET the created product → variant has all 5 fields.
+            3) POST /orders/create with an item pointing to that variant →
+               order.items[0] has weight_grams/length_cm/width_cm/height_cm
+               matching the VARIANT's values (not product-level).
+            4) Legacy product (no variant weight) → order item falls back to
+               product.weight_grams.
+            5) Backward compat: existing products with no variant-level weight
+               continue to work (no schema errors, no crashes).
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (5/5 tests passed):
+          
+          Test 1.1 - Create product with variant new fields:
+          - POST /admin/products with variant containing all 5 new fields (sku, weight_grams, length_cm, width_cm, height_cm) → 200 OK
+          - Product created successfully with variant having all 5 fields
+          
+          Test 1.2 - GET product shows variant fields:
+          - GET /api/products → variant fields persisted correctly
+          - All 5 new fields present: sku=VAR-LARGE, weight_grams=8500, length_cm=90, width_cm=60, height_cm=5
+          
+          Test 1.3 - Order snapshot uses variant-level values:
+          - POST /api/orders with variant "large" → Order ARF-7B128479 created
+          - OrderItem snapshot correctly uses VARIANT-LEVEL values (NOT product-level):
+            * product_sku = "VAR-LARGE" (NOT "PROD-BASE")
+            * weight_grams = 8500g (NOT 5000g)
+            * length_cm = 90cm (NOT 50cm)
+            * width_cm = 60cm (NOT 40cm)
+            * height_cm = 5cm (same as product, but from variant)
+          - ✅ PRIMARY SUCCESS SIGNAL: Variant-level shipping snapshot DOES override product-level values
+          
+          Test 1.4 - Backward-compat fallback to product-level:
+          - Created legacy product with variant WITHOUT new shipping fields
+          - POST /api/orders with legacy variant → Order ARF-EE76B544 created
+          - OrderItem correctly falls back to PRODUCT-LEVEL values:
+            * product_sku = "LEGACY-PROD"
+            * weight_grams = 3000g (from product, not variant)
+            * length_cm = 30cm (from product)
+            * width_cm = 25cm (from product)
+            * height_cm = 10cm (from product)
+          - Backward compatibility working perfectly
+          
+          Test 1.5 - Legacy products load without errors:
+          - GET /api/products → 5 products loaded successfully
+          - No schema errors or crashes with existing products
+          
+          CONCLUSION: Variant-level shipping snapshot working correctly. The primary success signal is confirmed: 
+          variant-level values DO override product-level values on the created OrderItem.
+
+  - task: "Batch 5 · Cloudinary orphan cleanup on product PUT/DELETE + homepage PATCH"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          New helpers (server.py ~line 3835):
+            · _extract_cloudinary_urls(node): recursively walks any nested dict/list/str
+              and returns every URL containing "res.cloudinary.com".
+            · _destroy_cloudinary_url(url): best-effort SDK destroy. Never raises.
+            · _destroy_url_diff(old, new): deletes URLs in (old - new). Called from
+              FastAPI BackgroundTasks so callers stay fast.
+
+          Hooked into:
+            · PUT  /admin/products/{id} → diff old/new URLs, background-destroy.
+            · DELETE /admin/products/{id} → destroy every Cloudinary URL on the product.
+            · PATCH /admin/homepage → diff old/new homepage settings.
+
+          IMPORTANT: `background_tasks: BackgroundTasks` was added as a parameter to
+          the 3 route handlers. FastAPI injects it automatically — clients send
+          NOTHING for it. Primary regression risk: signature mismatch. Verify:
+            1) PUT /admin/products/{id} returns 200 with the same shape as before.
+            2) DELETE /admin/products/{id} returns {"deleted":true}.
+            3) PATCH /admin/homepage returns the saved payload.
+          Testing agent may NOT have real Cloudinary access — that's fine, the
+          destroy() call is inside a try/except and never blocks the response.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (4/4 tests passed):
+          
+          Test 2.1 - PUT /admin/products/{id} returns 200:
+          - Created test product, then updated it with PUT
+          - Response has all required fields: id, name, slug, price_inr, variants
+          - Response shape unchanged from before (BackgroundTasks parameter working correctly)
+          
+          Test 2.2 - DELETE /admin/products/{id} returns {deleted:true}:
+          - DELETE /admin/products/{id} → 200 OK
+          - Response: {"deleted": true} (correct format)
+          
+          Test 2.3 - PATCH /admin/homepage returns saved payload:
+          - GET /admin/homepage → current homepage content
+          - PATCH /admin/homepage with current payload → 200 OK
+          - Response has correct structure: announcement, hero, sale_banner
+          
+          Test 2.4 - No crashes with mixed/null URLs:
+          - Created product with mixed URLs (Cloudinary and non-Cloudinary)
+          - PUT /admin/products/{id} → 200 OK (no crashes)
+          - _extract_cloudinary_urls() handles non-Cloudinary URLs gracefully
+          - isinstance() guards and try/except working correctly
+          
+          CONCLUSION: All three routes with BackgroundTasks parameter working correctly. 
+          No signature mismatches, no crashes. Cloudinary cleanup is fire-and-forget (non-blocking).
+
+  - task: "Batch 5 · Backward-compat regression — public + admin endpoints not broken"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Please smoke-test these:
+            1) GET /api/products (no auth) → 200 with list.
+            2) GET /api/products/{slug} → 200.
+            3) POST /admin/products with LEGACY payload (no new variant fields) → 200.
+            4) POST /admin/products with new payload containing all 5 new variant
+               fields per variation → 200.
+            5) GET /api/admin/nimbuspost/config (auth) → still 200 (Batch 4 sanity).
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (5/5 tests passed):
+          
+          Test 3.1 - GET /api/products (public, no auth):
+          - 200 OK with list of 4 products
+          - No schema errors, no crashes
+          
+          Test 3.2 - GET /api/products/{slug}:
+          - 200 OK for slug "obsidian-geode-2x3"
+          - Product detail endpoint working correctly
+          
+          Test 3.3 - POST /admin/products with LEGACY payload:
+          - Created product with variant WITHOUT new fields (no sku, weight_grams, etc.)
+          - 200 OK, product created successfully
+          - Backward compatibility confirmed: old payloads still work
+          
+          Test 3.4 - POST /admin/products with NEW payload (all 5 fields):
+          - Created product with variant containing all 5 new fields
+          - 200 OK, product created successfully
+          - New payloads work correctly
+          
+          Test 3.5 - GET /api/admin/nimbuspost/config (Batch 4 sanity):
+          - 200 OK with configured=True, auth_mode=jwt
+          - NimbusPost integration not broken by Batch 5 changes
+          
+          CONCLUSION: All backward-compat regression tests passed. 
+          No breaking changes to existing endpoints.
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Batch 5 backend changes only. Please test the 3 backend tasks above.
+      DO NOT re-test any earlier batches or NimbusPost (Task 7) unless it
+      shows up as a regression above.
+
+      Admin creds: admin@artyfex.in / ArtyFex@2026 (also
+      /app/memory/test_credentials.md).
+
+      Key files changed:
+        · backend/server.py (Variant + OrderItem models, snapshot loop,
+          product PUT/DELETE + homepage PATCH signatures, _extract_cloudinary_urls,
+          _destroy_url_diff)
+        · frontend/src/pages/AdminPage.jsx (UI only, not requesting frontend test)
+        · frontend/src/components/AuthDialog.jsx (UI only)
+
+      Please update this test_result.md with the results.
+
+  - agent: "testing"
+    message: |
+      ✅ BATCH 5 BACKEND TESTING COMPLETE - ALL TESTS PASSED (14/14)
+      
+      Comprehensive testing completed for all 3 Batch 5 backend tasks per review request specifications.
+      Test file: /app/backend_test_batch5.py
+      Results: /app/backend_test_batch5_results.json
+      
+      TASK 1 - VARIANT MODEL + ORDERITEM SNAPSHOT (5/5 passed):
+      ✅ Create product with variant new fields → 200 with all 5 fields (sku, weight_grams, length_cm, width_cm, height_cm)
+      ✅ GET product shows variant fields → all 5 fields persisted correctly
+      ✅ Order snapshot uses variant-level values → OrderItem has variant's SKU=VAR-LARGE, weight=8500g, dims=90×60×5cm (NOT product-level values)
+      ✅ Backward-compat fallback to product-level → OrderItem correctly falls back to product-level when variant fields absent
+      ✅ Legacy products load without errors → 5 products loaded, no schema errors
+      
+      PRIMARY SUCCESS SIGNAL CONFIRMED: Variant-level shipping snapshot DOES override product-level values on the created OrderItem.
+      
+      TASK 2 - CLOUDINARY ORPHAN CLEANUP (4/4 passed):
+      ✅ PUT /admin/products/{id} → 200 with correct response shape (BackgroundTasks parameter working)
+      ✅ DELETE /admin/products/{id} → {"deleted": true}
+      ✅ PATCH /admin/homepage → saved payload returned
+      ✅ No crashes with mixed/null URLs → isinstance() guards and try/except working correctly
+      
+      TASK 3 - BACKWARD-COMPAT REGRESSION (5/5 passed):
+      ✅ GET /api/products (public) → 200 with 4 products
+      ✅ GET /api/products/{slug} → 200 for "obsidian-geode-2x3"
+      ✅ POST /admin/products with LEGACY payload (no new fields) → 200
+      ✅ POST /admin/products with NEW payload (all 5 fields) → 200
+      ✅ GET /api/admin/nimbuspost/config → 200 with configured=true, auth_mode=jwt (Batch 4 not broken)
+      
+      CONCLUSION:
+      All Batch 5 backend features working correctly. No issues found.
+      Ready for main agent to summarize and finish.
+

@@ -1,0 +1,83 @@
+{
+  "task1_variant_snapshot": [
+    {
+      "name": "Create product with variant new fields",
+      "passed": true,
+      "details": "Product ID: 66796da9-d8a4-4239-8bcd-45efc78d00c7, Variant has all 5 fields: True"
+    },
+    {
+      "name": "GET product shows variant fields",
+      "passed": true,
+      "details": "Variant fields persisted correctly: True"
+    },
+    {
+      "name": "Order snapshot uses variant-level values",
+      "passed": true,
+      "details": "Order: ARF-7B128479, SKU: VAR-LARGE, Weight: 8500g, Dims: 90.0\u00d760.0\u00d75.0cm"
+    },
+    {
+      "name": "Backward-compat fallback to product-level",
+      "passed": true,
+      "details": "Order: ARF-EE76B544, Fallback to product-level: SKU=LEGACY-PROD, Weight=3000g"
+    },
+    {
+      "name": "Legacy products load without errors",
+      "passed": true,
+      "details": "Loaded 5 products successfully"
+    }
+  ],
+  "task2_cloudinary_cleanup": [
+    {
+      "name": "PUT /admin/products/{id} returns 200",
+      "passed": true,
+      "details": "Response has all required fields: True"
+    },
+    {
+      "name": "DELETE /admin/products/{id} returns {deleted:true}",
+      "passed": true,
+      "details": "Response: {'deleted': True}"
+    },
+    {
+      "name": "PATCH /admin/homepage returns saved payload",
+      "passed": true,
+      "details": "Response has correct structure: True"
+    },
+    {
+      "name": "No crashes with mixed/null URLs",
+      "passed": true,
+      "details": "Status: 200"
+    }
+  ],
+  "task3_regression": [
+    {
+      "name": "GET /api/products returns 200 with list",
+      "passed": true,
+      "details": "Returned 4 products"
+    },
+    {
+      "name": "GET /api/products/{slug} returns 200",
+      "passed": true,
+      "details": "Status: 200, Slug: obsidian-geode-2x3"
+    },
+    {
+      "name": "POST /admin/products with LEGACY payload",
+      "passed": true,
+      "details": "Product created: fbd6428f-a7bb-41e3-be25-db6fc8b3fb0a"
+    },
+    {
+      "name": "POST /admin/products with NEW payload (5 fields)",
+      "passed": true,
+      "details": "Product created: 9cb78269-fcb4-4b27-8891-c60a44bb45e2"
+    },
+    {
+      "name": "GET /api/admin/nimbuspost/config returns 200",
+      "passed": true,
+      "details": "configured=True, auth_mode=jwt"
+    }
+  ],
+  "summary": {
+    "total": 14,
+    "passed": 14,
+    "failed": 0
+  }
+}

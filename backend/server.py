@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request, BackgroundTasks
 from fastapi.responses import RedirectResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
@@ -453,6 +453,15 @@ class Variant(BaseModel):
     stock: Optional[int] = None
     price_inr: Optional[int] = None
     mrp_inr: Optional[int] = None
+    # Batch 5 (Jul 2026) — per-variation SKU, weight & dims so shipping cost
+    # (NimbusPost / manual) is calculated per selected size/variant rather than
+    # off a single product-level number. All fields optional → fallback to
+    # product-level values on the parent Product.
+    sku: Optional[str] = None
+    weight_grams: Optional[int] = None
+    length_cm: Optional[float] = None
+    width_cm: Optional[float] = None
+    height_cm: Optional[float] = None
 
 class Product(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -521,10 +530,14 @@ class OrderItem(BaseModel):
     price_inr: Optional[int] = None
     mrp_inr: Optional[int] = None
     line_total_inr: Optional[int] = None
+    # Batch 5 (Jul 2026) — per-line shipping snapshot so couriers get the
+    # RIGHT weight/dims of the actual size the customer picked, not the
+    # generic product-level default.
+    weight_grams: Optional[int] = None
+    length_cm: Optional[float] = None
+    width_cm: Optional[float] = None
+    height_cm: Optional[float] = None
     # Task 3 (Jul 2025) — free-form option selections beyond legacy colour swatches.
-    # selected_options   : {"shape":"round","frame":"bordered","gift_wrap":"yes"}
-    # selected_options_labels: {"Shape":"Round","Frame":"With Border","Gift Wrap":"Yes"}
-    # options_price_delta_inr: cumulative ₹ delta added to base price for chosen options
     selected_options: Dict[str, str] = Field(default_factory=dict)
     selected_options_labels: Dict[str, str] = Field(default_factory=dict)
     options_price_delta_inr: int = 0
@@ -1448,7 +1461,12 @@ async def create_order(payload: OrderIn):
         it.product_image = v_image or (prod or {}).get("hero_image")
         it.product_category = (prod or {}).get("category")
         it.product_hsn_code = (prod or {}).get("hsn_code")
-        it.product_sku = (prod or {}).get("sku")
+        # Batch 5 — prefer variant-level SKU / weight / dims when set, else fall back to product-level
+        it.product_sku = (variant or {}).get("sku") or (prod or {}).get("sku")
+        it.weight_grams = (variant or {}).get("weight_grams") if (variant or {}).get("weight_grams") is not None else (prod or {}).get("weight_grams")
+        it.length_cm = (variant or {}).get("length_cm") if (variant or {}).get("length_cm") is not None else (prod or {}).get("length_cm")
+        it.width_cm = (variant or {}).get("width_cm") if (variant or {}).get("width_cm") is not None else (prod or {}).get("width_cm")
+        it.height_cm = (variant or {}).get("height_cm") if (variant or {}).get("height_cm") is not None else (prod or {}).get("height_cm")
         it.variant_label = v_label
         it.variant_hex = v_hex
         it.variant_image = v_image
@@ -1710,20 +1728,27 @@ async def create_product(payload: ProductIn, admin=Depends(get_current_admin)):
 
 
 @api_router.put("/admin/products/{product_id}", response_model=Product)
-async def update_product(product_id: str, payload: ProductIn, admin=Depends(get_current_admin)):
+async def update_product(product_id: str, payload: ProductIn, background_tasks: BackgroundTasks, admin=Depends(get_current_admin)):
     existing = await db.products.find_one({"id": product_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Product not found")
     updated = {**existing, **payload.model_dump()}
     await db.products.update_one({"id": product_id}, {"$set": updated})
+    # Batch 5 — clean up any Cloudinary assets the admin removed
+    old_urls = _extract_cloudinary_urls(existing)
+    new_urls = _extract_cloudinary_urls(updated)
+    background_tasks.add_task(_destroy_url_diff, old_urls, new_urls)
     return updated
 
 
 @api_router.delete("/admin/products/{product_id}")
-async def delete_product(product_id: str, admin=Depends(get_current_admin)):
-    res = await db.products.delete_one({"id": product_id})
-    if res.deleted_count == 0:
+async def delete_product(product_id: str, background_tasks: BackgroundTasks, admin=Depends(get_current_admin)):
+    existing = await db.products.find_one({"id": product_id}, {"_id": 0})
+    if not existing:
         raise HTTPException(status_code=404, detail="Not found")
+    await db.products.delete_one({"id": product_id})
+    # Batch 5 — nuke every Cloudinary asset attached to this product
+    background_tasks.add_task(_destroy_url_diff, _extract_cloudinary_urls(existing), set())
     return {"deleted": True}
 
 
@@ -3189,9 +3214,12 @@ async def admin_get_homepage(admin=Depends(get_current_admin)):
 
 
 @api_router.patch("/admin/homepage")
-async def admin_patch_homepage(payload: HomepageContent, admin=Depends(require_permission("manage_homepage"))):
+async def admin_patch_homepage(payload: HomepageContent, background_tasks: BackgroundTasks, admin=Depends(require_permission("manage_homepage"))):
+    old = await load_site_setting("homepage", DEFAULT_HOMEPAGE)
     data = payload.model_dump()
     await save_site_setting("homepage", data)
+    # Batch 5 — clean up orphaned Cloudinary assets
+    background_tasks.add_task(_destroy_url_diff, _extract_cloudinary_urls(old), _extract_cloudinary_urls(data))
     return data
 
 
@@ -3855,6 +3883,52 @@ def _cloudinary_public_id_from_url(url: str) -> Optional[str]:
         return tail or None
     except Exception:
         return None
+
+
+# ------------ Batch 5 (Jul 2026) — Orphan Cloudinary cleanup ---------------
+# When a product / homepage / any document with image URLs is UPDATED or
+# DELETED, we compute the set of Cloudinary URLs present BEFORE vs AFTER and
+# fire-and-forget destroy() the ones removed. Runs off the request path via
+# BackgroundTasks so callers stay fast.
+
+def _extract_cloudinary_urls(node) -> set[str]:
+    """Recursively walk a dict/list and return every Cloudinary secure_url found."""
+    out: set[str] = set()
+    if node is None:
+        return out
+    if isinstance(node, str):
+        if "res.cloudinary.com" in node:
+            out.add(node)
+        return out
+    if isinstance(node, dict):
+        for v in node.values():
+            out |= _extract_cloudinary_urls(v)
+        return out
+    if isinstance(node, (list, tuple, set)):
+        for v in node:
+            out |= _extract_cloudinary_urls(v)
+        return out
+    return out
+
+
+def _destroy_cloudinary_url(url: str) -> None:
+    """Best-effort Cloudinary destroy — never raises. Called from BackgroundTasks."""
+    if not (CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET):
+        return
+    pid = _cloudinary_public_id_from_url(url)
+    if not pid:
+        return
+    try:
+        cloudinary.uploader.destroy(pid, invalidate=True)
+    except Exception as e:  # pragma: no cover
+        _log_boot.warning("cloudinary destroy failed for %s: %s", pid, e)
+
+
+def _destroy_url_diff(old_urls: set[str], new_urls: set[str]) -> None:
+    """Delete the URLs that were in `old_urls` but not in `new_urls`."""
+    for url in (old_urls - new_urls):
+        _destroy_cloudinary_url(url)
+# ---------------------------------------------------------------------------
 
 
 @api_router.delete("/cloudinary/asset")
