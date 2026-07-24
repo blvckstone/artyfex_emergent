@@ -1,0 +1,62 @@
+{
+  "total": 11,
+  "passed": 11,
+  "failed": 0,
+  "tests": [
+    {
+      "name": "POST /admin/products with layout+features",
+      "passed": true,
+      "details": "Response preserves layout=feature_grid, features with newlines intact"
+    },
+    {
+      "name": "GET /api/products/{slug} - layout+features persist",
+      "passed": true,
+      "details": "layout=feature_grid, features contains newline separators"
+    },
+    {
+      "name": "Backward-compat: POST with only heading/body/image",
+      "passed": true,
+      "details": "Old-style blocks round-trip without crash, no forced layout key"
+    },
+    {
+      "name": "GET golden-geode-mirror - basic fields",
+      "passed": true,
+      "details": "name contains 'Golden Geode': True, price=4899: True, mrp=7599: True, hsn=7009: True, has_variations: False"
+    },
+    {
+      "name": "Variants: 3 variants with complete shipping fields",
+      "passed": true,
+      "details": "All variants have sku, weight_grams, length_cm, width_cm, height_cm. Colors: golden=True, black=True, silver=True"
+    },
+    {
+      "name": "variation_options: 6 options with values",
+      "passed": true,
+      "details": "Found 6 options, first has 3 values. Includes shape=False, frame=False, thickness=False"
+    },
+    {
+      "name": "a_plus_content: 6 blocks with layouts and features",
+      "passed": true,
+      "details": "All blocks have layout field. 6 distinct layouts: {'image_left', 'centered', 'image_right', 'feature_grid', 'quote', 'full_bleed'}. feature_grid block has non-empty features field."
+    },
+    {
+      "name": "Golden Geode appears in public product list",
+      "passed": true,
+      "details": "Found in list of 5 products"
+    },
+    {
+      "name": "GET /api/health",
+      "passed": true,
+      "details": "mongo=ok"
+    },
+    {
+      "name": "GET /api/products (non-empty)",
+      "passed": true,
+      "details": "Found 5 products"
+    },
+    {
+      "name": "GET /api/admin/nimbuspost/config",
+      "passed": true,
+      "details": "configured=True, auth_mode=jwt"
+    }
+  ]
+}

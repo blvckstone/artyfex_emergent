@@ -5440,3 +5440,202 @@ agent_communication:
       - No regressions detected in earlier batches
       
       Ready for main agent to summarize and finish.
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BATCH 7 · A+ Content layout variants + Reference product seed
+# ═══════════════════════════════════════════════════════════════════════════
+
+metadata:
+  version: "3.9"
+  test_sequence: 20
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Batch 7 · Product.a_plus_content dict-value type now Any (accepts layout+features fields)"
+    - "Batch 7 · Reference product (Golden Geode Mirror) uploaded via seed script — verify all fields round-trip"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+backend:
+  - task: "Batch 7 · a_plus_content schema: List[Dict[str, Any]] (was Dict[str, str])"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Changed `a_plus_content` field type on both Product and ProductIn from
+          List[Dict[str, str]] → List[Dict[str, Any]] so the new keys
+          (layout, features) plus arbitrary future keys can round-trip without
+          Pydantic coercion warnings. Also added `Any` to typing imports.
+
+          TEST:
+            1) POST /admin/products with a_plus_content containing blocks that have
+               {layout: "feature_grid", heading, body, image, features: "line1\\nline2"}
+               → 200, response.a_plus_content preserves ALL keys.
+            2) GET the product back → still all keys present.
+            3) Backward-compat: POST with a_plus_content blocks that only have
+               {heading, body, image} → 200 (no crash).
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (3/3 tests passed):
+          Test 1.1 - POST /admin/products with layout+features:
+          - Created product with a_plus_content containing 3 blocks with layout and features fields
+          - Response preserves ALL keys including layout="feature_grid" and features with newline separators
+          - features field contains "5mm glass\\nAnti-fade coating\\nHinge mount included" intact
+          
+          Test 1.2 - GET /api/products/{slug} round-trip:
+          - Retrieved product via public API
+          - layout="feature_grid" persisted correctly
+          - features field contains newline separators (\\n) intact
+          
+          Test 1.3 - Backward compatibility:
+          - POST product with a_plus_content blocks containing ONLY {heading, body, image}
+          - No crash, old-style blocks round-trip successfully
+          - No forced layout key added (backward-compat working)
+          
+          Dict[str, Any] type change working perfectly. All keys round-trip without Pydantic coercion.
+
+  - task: "Batch 7 · Reference product 'Golden Geode Mirror' (slug=golden-geode-mirror-2x2-premium) round-trip via seed"
+    implemented: true
+    working: true
+    file: "backend/seed_reference_product.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          New standalone script at /app/backend/seed_reference_product.py. Idempotent:
+          deletes any pre-existing product with the same slug then re-creates.
+
+          Currently local seed already ran and reported:
+            id=c8324ed0-2700-4fcf-9e4c-e9401a845101
+            variants: 3, variation_options: 6, a_plus_content: 6
+
+          The uploaded product uses EVERY feature the admin editor supports:
+            · base commerce (slug, name, tagline, description, price, mrp, size, craft, materials, hsn, sku, weight, dims, tags)
+            · 3 colour swatches (Golden/Black/Silver) — each with its own weight/dims/SKU
+            · 6 extra option groups: shape (round/square/arch), frame (frameless/gold/black), thickness (5/6mm), gift_wrap (no/yes), care_kit (none/basic/premium), mount (hinge/hook-kit)
+            · 6 A+ content blocks — one per layout: full_bleed, image_left, feature_grid, image_right, quote, centered
+
+          TEST (verify via API — do NOT re-run the seed script; just check current state):
+            1) GET /api/products/golden-geode-mirror-2x2-premium → 200 with the full document.
+            2) response.variants length == 3.
+            3) response.variants[0].sku, weight_grams, length_cm, width_cm, height_cm all present + non-null.
+            4) response.variation_options length == 6.
+            5) response.variation_options[0].values is a non-empty list.
+            6) response.a_plus_content length == 6.
+            7) response.a_plus_content[0].layout == "full_bleed" (or the first block's layout string is preserved).
+            8) A block with layout="feature_grid" has non-empty features field.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (5/5 tests passed):
+          Test 2.1 - Basic fields verification:
+          - name contains "Golden Geode" ✓
+          - price_inr = 4899 ✓
+          - mrp_inr = 7599 ✓
+          - hsn_code = "7009" ✓
+          
+          Test 2.2 - Variants (3 variants with complete shipping fields):
+          - All 3 variants have sku, weight_grams, length_cm, width_cm, height_cm (all non-null) ✓
+          - Hex colors verified: golden (#D4AF37), black (#111111), silver (#C0C0C0) ✓
+          
+          Test 2.3 - variation_options (6 options):
+          - Found 6 variation_options ✓
+          - First option has 3 values (non-empty list) ✓
+          
+          Test 2.4 - a_plus_content (6 blocks with layouts):
+          - All 6 blocks have layout field ✓
+          - 6 DISTINCT layouts found: full_bleed, image_left, image_right, centered, feature_grid, quote ✓
+          - feature_grid block has non-empty features field with newline-separated bullets ✓
+          
+          Test 2.5 - Public product list:
+          - Golden Geode Mirror appears in GET /api/products (found in list of 5 products) ✓
+          
+          Reference product fully persisted and accessible via public API. All fields round-trip correctly.
+
+  - task: "Batch 7 · Regression smoke"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Please verify:
+            1) GET /api/health → 200, mongo=ok
+            2) GET /api/products → 200 non-empty (should include the newly seeded product)
+            3) GET /api/admin/nimbuspost/config (admin) → 200 configured=true (Batch 4 sanity)
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ VERIFIED (3/3 tests passed):
+          - GET /api/health → 200, mongo=ok ✓
+          - GET /api/products → 200, found 5 products (non-empty) ✓
+          - GET /api/admin/nimbuspost/config → 200, configured=true, auth_mode=jwt ✓
+          
+          No regressions detected. All earlier batch features still working correctly.
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Batch 7 — small schema tweak + reference product seed. Please verify the
+      round-trip of the a_plus_content layout / features fields end-to-end via
+      GET /api/products/golden-geode-mirror-2x2-premium.
+
+      Frontend changes (A+ layout rendering, admin editor layout dropdown,
+      bug-1/4/5 fixes from earlier batches) are NOT scheduled for automated
+      frontend testing this round — pure UI additions/removals, low risk, and
+      the user asked for credit efficiency.
+
+      Admin creds: admin@artyfex.in / ArtyFex@2026.
+  
+  - agent: "testing"
+    message: |
+      ✅ BATCH 7 BACKEND TESTING COMPLETE - ALL TESTS PASSED (11/11)
+      
+      Comprehensive testing completed for all Batch 7 backend features per review request specifications.
+      Test file: /app/backend_test_batch7.py
+      Results: /app/backend_test_batch7_results.json
+      
+      TASK 1 - a_plus_content Dict[str, Any] (3/3 passed):
+      ✅ POST /admin/products with layout+features → Response preserves ALL keys (layout, features with \\n)
+      ✅ GET /api/products/{slug} → layout+features persist correctly through round-trip
+      ✅ Backward-compat: POST with only {heading, body, image} → No crash, no forced layout key
+      
+      TASK 2 - Reference Product "Golden Geode Mirror" (5/5 passed):
+      ✅ Basic fields: name="Golden Geode...", price=4899, mrp=7599, hsn=7009
+      ✅ 3 variants with complete shipping fields (sku, weight_grams, length_cm, width_cm, height_cm)
+      ✅ Hex colors verified: golden #D4AF37, black #111111, silver #C0C0C0
+      ✅ 6 variation_options with non-empty values
+      ✅ 6 a_plus_content blocks with 6 DISTINCT layouts (full_bleed, image_left, image_right, centered, feature_grid, quote)
+      ✅ feature_grid block has non-empty features field with newline-separated bullets
+      ✅ Product appears in public GET /api/products list
+      
+      TASK 3 - Regression Smoke (3/3 passed):
+      ✅ GET /api/health → mongo=ok
+      ✅ GET /api/products → 5 products (non-empty)
+      ✅ GET /api/admin/nimbuspost/config → configured=true, auth_mode=jwt
+      
+      CONCLUSION:
+      All Batch 7 backend features working correctly. No issues found.
+      - a_plus_content schema change (Dict[str, Any]) working perfectly with layout+features fields
+      - Reference product fully persisted with all 6 layout types and complete shipping data
+      - No regressions detected in earlier batches (NimbusPost still configured)
+      
+      Ready for main agent to summarize and finish.
+

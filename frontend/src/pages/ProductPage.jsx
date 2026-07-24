@@ -606,7 +606,7 @@ export default function ProductPage() {
           </div>
         </div>
 
-        {/* Batch 6 — A+ content: Amazon-style trust-building story panels */}
+        {/* Batch 6 — A+ content: Amazon-style trust-building story panels with layout variants */}
         {Array.isArray(product.a_plus_content) && product.a_plus_content.length > 0 && (
           <section className="mt-16 md:mt-24 border-t border-white/5 pt-16" data-testid="product-a-plus">
             <div className="text-center max-w-2xl mx-auto">
@@ -614,28 +614,88 @@ export default function ProductPage() {
               <h2 className="mt-2 font-serif text-3xl md:text-4xl text-cream">A closer look at this piece</h2>
             </div>
             <div className="mt-12 space-y-16 md:space-y-24">
-              {product.a_plus_content.map((blk, i) => (
-                <div
-                  key={i}
-                  data-testid={`product-a-plus-block-${i}`}
-                  className={`grid gap-8 md:gap-14 items-center ${blk.image ? (i % 2 === 0 ? "md:grid-cols-[1.15fr_1fr]" : "md:grid-cols-[1fr_1.15fr]") : "md:grid-cols-1 max-w-3xl mx-auto text-center"}`}
-                >
-                  {blk.image && i % 2 === 0 && (
-                    <img src={blk.image} alt={blk.heading || `Story block ${i + 1}`} loading="lazy" className="w-full h-64 md:h-[400px] object-cover" />
-                  )}
-                  <div className={blk.image ? "" : ""}>
-                    {blk.heading && (
-                      <h3 className="font-serif text-2xl md:text-3xl text-cream">{blk.heading}</h3>
+              {product.a_plus_content.map((blk, i) => {
+                const layout = blk.layout || "image_left";
+                const key = `aplus-${i}`;
+                // FULL BLEED — huge banner with overlay title
+                if (layout === "full_bleed") {
+                  return (
+                    <div key={key} data-testid={`product-a-plus-block-${i}`} className="relative w-full h-72 md:h-[420px] overflow-hidden group">
+                      {blk.image && <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />}
+                      <div className="absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/60 to-ink-950/20" />
+                      <div className="absolute inset-0 flex items-end p-6 md:p-12">
+                        <div className="max-w-2xl">
+                          {blk.heading && <h3 className="font-serif text-3xl md:text-5xl text-cream">{blk.heading}</h3>}
+                          {blk.body && <p className="mt-3 text-cream/80 max-w-xl leading-relaxed">{blk.body}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                // CENTERED — headline over a paragraph, no image row
+                if (layout === "centered") {
+                  return (
+                    <div key={key} data-testid={`product-a-plus-block-${i}`} className="max-w-3xl mx-auto text-center">
+                      {blk.heading && <h3 className="font-serif text-3xl md:text-4xl text-cream">{blk.heading}</h3>}
+                      {blk.image && <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="mt-6 mx-auto max-h-64 object-contain" />}
+                      {blk.body && <p className="mt-6 text-cream/70 leading-relaxed font-light whitespace-pre-line">{blk.body}</p>}
+                    </div>
+                  );
+                }
+                // FEATURE GRID — 4 tile cards from newline-separated bullets
+                if (layout === "feature_grid") {
+                  const bullets = (blk.features || "").split("\n").map((s) => s.trim()).filter(Boolean).slice(0, 8);
+                  return (
+                    <div key={key} data-testid={`product-a-plus-block-${i}`} className="max-w-5xl mx-auto">
+                      {blk.image && <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="w-full h-48 md:h-64 object-cover" />}
+                      <div className="text-center mt-8">
+                        {blk.heading && <h3 className="font-serif text-2xl md:text-3xl text-cream">{blk.heading}</h3>}
+                        {blk.body && <p className="mt-3 text-cream/70 max-w-2xl mx-auto">{blk.body}</p>}
+                      </div>
+                      {bullets.length > 0 && (
+                        <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {bullets.map((b, bi) => (
+                            <div key={bi} className="border border-white/10 bg-ink-950/60 p-5 flex flex-col items-center text-center hover:border-gold/40 transition">
+                              <div className="w-10 h-10 rounded-full border border-gold/40 flex items-center justify-center text-gold font-serif">{bi + 1}</div>
+                              <div className="mt-3 text-sm text-cream leading-snug">{b}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                // QUOTE — large italic pull-quote
+                if (layout === "quote") {
+                  return (
+                    <div key={key} data-testid={`product-a-plus-block-${i}`} className="max-w-3xl mx-auto text-center border-y border-gold/20 py-10 md:py-14">
+                      <div className="text-gold font-serif text-4xl leading-none">&ldquo;</div>
+                      {blk.body && <blockquote className="mt-2 font-serif text-2xl md:text-3xl italic text-cream/90 leading-snug">{blk.body}</blockquote>}
+                      {blk.heading && <div className="mt-4 text-[10px] uppercase tracking-luxury text-gold-soft">— {blk.heading}</div>}
+                    </div>
+                  );
+                }
+                // IMAGE_LEFT (default) / IMAGE_RIGHT
+                const imageRight = layout === "image_right";
+                return (
+                  <div
+                    key={key}
+                    data-testid={`product-a-plus-block-${i}`}
+                    className={`grid gap-8 md:gap-14 items-center ${blk.image ? (imageRight ? "md:grid-cols-[1fr_1.15fr]" : "md:grid-cols-[1.15fr_1fr]") : "md:grid-cols-1 max-w-3xl mx-auto text-center"}`}
+                  >
+                    {blk.image && !imageRight && (
+                      <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="w-full h-64 md:h-[400px] object-cover" />
                     )}
-                    {blk.body && (
-                      <p className="mt-4 text-cream/70 leading-relaxed font-light whitespace-pre-line">{blk.body}</p>
+                    <div>
+                      {blk.heading && <h3 className="font-serif text-2xl md:text-3xl text-cream">{blk.heading}</h3>}
+                      {blk.body && <p className="mt-4 text-cream/70 leading-relaxed font-light whitespace-pre-line">{blk.body}</p>}
+                    </div>
+                    {blk.image && imageRight && (
+                      <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="w-full h-64 md:h-[400px] object-cover" />
                     )}
                   </div>
-                  {blk.image && i % 2 !== 0 && (
-                    <img src={blk.image} alt={blk.heading || `Story block ${i + 1}`} loading="lazy" className="w-full h-64 md:h-[400px] object-cover" />
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}

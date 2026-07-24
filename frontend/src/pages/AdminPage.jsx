@@ -310,11 +310,13 @@ export default function AdminPage() {
           })),
         // Batch 6 — A+ content (Amazon-style story panels) — strip empty blocks
         a_plus_content: (Array.isArray(form.a_plus_content) ? form.a_plus_content : [])
-          .filter((b) => (b.heading || b.body || b.image))
+          .filter((b) => (b.heading || b.body || b.image || b.features))
           .map((b) => ({
+            layout: (b.layout || "image_left").toString().trim(),
             heading: (b.heading || "").toString().trim(),
             body: (b.body || "").toString().trim(),
             image: (b.image || "").toString().trim(),
+            features: (b.features || "").toString().trim(),
           })),
       };
       if (form.id) await authed.put(`/admin/products/${form.id}`, payload);
@@ -1763,7 +1765,7 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
             </div>
             <button
               type="button"
-              onClick={() => setF((prev) => ({ ...prev, a_plus_content: [...(prev.a_plus_content || []), { heading: "", body: "", image: "" }] }))}
+              onClick={() => setF((prev) => ({ ...prev, a_plus_content: [...(prev.a_plus_content || []), { layout: "image_left", heading: "", body: "", image: "", features: "" }] }))}
               className="inline-flex items-center gap-2 text-xs uppercase tracking-luxury border border-gold/40 text-gold px-3 py-2 hover:bg-gold/10"
               data-testid="pe-aplus-add"
             >
@@ -1778,7 +1780,7 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
             {(f.a_plus_content || []).map((blk, i) => (
               <div key={i} className="border border-white/10 p-4 bg-ink-950" data-testid={`pe-aplus-block-${i}`}>
                 <div className="flex items-center justify-between mb-3">
-                  <div className="text-xs text-cream/60">Block {i + 1}</div>
+                  <div className="text-xs text-cream/60">Block {i + 1} · <span className="text-gold-soft">{(blk.layout || "image_left").replace(/_/g, " ")}</span></div>
                   <button
                     type="button"
                     onClick={() => setF((prev) => ({ ...prev, a_plus_content: (prev.a_plus_content || []).filter((_, j) => j !== i) }))}
@@ -1789,6 +1791,21 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
                   </button>
                 </div>
                 <div className="grid gap-3">
+                  <Fld label="Layout" hint="Each layout renders differently so blocks don't all look the same.">
+                    <select
+                      value={blk.layout || "image_left"}
+                      onChange={(e) => setF((prev) => { const a = [...(prev.a_plus_content || [])]; a[i] = { ...a[i], layout: e.target.value }; return { ...prev, a_plus_content: a }; })}
+                      className={inp}
+                      data-testid={`pe-aplus-layout-${i}`}
+                    >
+                      <option value="image_left" className="bg-ink-900">Image left · text right</option>
+                      <option value="image_right" className="bg-ink-900">Text left · image right</option>
+                      <option value="centered" className="bg-ink-900">Centered · headline + paragraph</option>
+                      <option value="full_bleed" className="bg-ink-900">Full-bleed banner · overlay text</option>
+                      <option value="feature_grid" className="bg-ink-900">Feature grid · 4 bullet cards</option>
+                      <option value="quote" className="bg-ink-900">Pull-quote · large italic line</option>
+                    </select>
+                  </Fld>
                   <Fld label="Heading">
                     <input
                       value={blk.heading || ""}
@@ -1808,22 +1825,36 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
                       data-testid={`pe-aplus-body-${i}`}
                     />
                   </Fld>
-                  <Fld label="Banner image (wide, optional)" hint="Ideal aspect ratio: 3:1 or 4:1. Uploaded to Cloudinary.">
-                    <CloudinaryUpload
-                      value={blk.image || ""}
-                      onChange={(url) => setF((prev) => { const a = [...(prev.a_plus_content || [])]; a[i] = { ...a[i], image: url }; return { ...prev, a_plus_content: a }; })}
-                      folder="artyfex/products/a-plus"
-                      label="Drop wide banner or click to upload"
-                      testid={`pe-aplus-image-${i}`}
-                    />
-                    <input
-                      value={blk.image || ""}
-                      onChange={(e) => setF((prev) => { const a = [...(prev.a_plus_content || [])]; a[i] = { ...a[i], image: e.target.value }; return { ...prev, a_plus_content: a }; })}
-                      className={`${inp} mt-2 font-mono text-xs`}
-                      placeholder="or paste URL"
-                      data-testid={`pe-aplus-image-url-${i}`}
-                    />
-                  </Fld>
+                  {(blk.layout === "feature_grid") && (
+                    <Fld label="Features (one per line)" hint="For 'Feature grid' layout — 4 short bullets render as tile cards.">
+                      <textarea
+                        rows={4}
+                        value={blk.features || ""}
+                        onChange={(e) => setF((prev) => { const a = [...(prev.a_plus_content || [])]; a[i] = { ...a[i], features: e.target.value }; return { ...prev, a_plus_content: a }; })}
+                        className={`${inp} resize-none`}
+                        placeholder={"Anti-fade resin\n5 mm thick glass\nWall-mount hinge\nLifetime warranty"}
+                        data-testid={`pe-aplus-features-${i}`}
+                      />
+                    </Fld>
+                  )}
+                  {(blk.layout !== "quote") && (
+                    <Fld label={blk.layout === "full_bleed" ? "Full-bleed banner image (required)" : blk.layout === "feature_grid" ? "Grid header image (optional)" : "Block image (optional)"} hint="Ideal aspect ratio: 3:1 (banners) or 1:1 (side images). Uploaded to Cloudinary.">
+                      <CloudinaryUpload
+                        value={blk.image || ""}
+                        onChange={(url) => setF((prev) => { const a = [...(prev.a_plus_content || [])]; a[i] = { ...a[i], image: url }; return { ...prev, a_plus_content: a }; })}
+                        folder="artyfex/products/a-plus"
+                        label="Drop banner or click to upload"
+                        testid={`pe-aplus-image-${i}`}
+                      />
+                      <input
+                        value={blk.image || ""}
+                        onChange={(e) => setF((prev) => { const a = [...(prev.a_plus_content || [])]; a[i] = { ...a[i], image: e.target.value }; return { ...prev, a_plus_content: a }; })}
+                        className={`${inp} mt-2 font-mono text-xs`}
+                        placeholder="or paste URL"
+                        data-testid={`pe-aplus-image-url-${i}`}
+                      />
+                    </Fld>
+                  )}
                 </div>
               </div>
             ))}
