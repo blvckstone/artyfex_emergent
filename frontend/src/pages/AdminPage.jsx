@@ -355,7 +355,22 @@ export default function AdminPage() {
       toast.success(`Shipment created · AWB ${res?.data?.awb || "—"}`);
       reload();
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "NimbusPost shipment failed");
+      const detail = err?.response?.data?.detail || "NimbusPost shipment failed";
+      // Batch 8 — detect the "OTP-verified support email" wall NimbusPost puts
+      // in front of every new seller and show a clearer setup toast instead
+      // of the raw courier error which sounds like it's the customer's fault.
+      if (/support email|otp[- ]?verified|otp verify|verify.*email/i.test(detail)) {
+        toast.error(
+          "NimbusPost dashboard setup required: add + OTP-verify your support email & phone at https://ship.nimbuspost.com/ → Settings → Profile. This is a one-time setup on their side, not a website issue.",
+          { duration: 12000 },
+        );
+      } else if (/warehouse/i.test(detail)) {
+        toast.error(`${detail} · Fix in Admin → Shipping → NimbusPost card.`, { duration: 10000 });
+      } else if (/balance|wallet|insufficient/i.test(detail)) {
+        toast.error(`${detail} · Add funds at https://ship.nimbuspost.com/ → Wallet.`, { duration: 10000 });
+      } else {
+        toast.error(detail);
+      }
     }
   };
   const nimbusTrack = async (num) => {
@@ -2750,11 +2765,69 @@ function NimbusPostCard({ authed }) {
         )}
       </div>
 
+      <div className="mt-6 border-t border-white/5 pt-5">
+        <div className="text-[10px] uppercase tracking-luxury text-cream/40">One-time NimbusPost dashboard setup (required by NimbusPost, not us)</div>
+        <ol className="mt-3 space-y-2 text-[12px] text-cream/70 list-decimal list-inside">
+          <li>Log into <a href="https://ship.nimbuspost.com/" target="_blank" rel="noreferrer" className="text-gold underline">ship.nimbuspost.com</a> → <b>Settings → Profile</b> → add + <b>OTP-verify</b> a support <b>email</b> and support <b>phone</b>. Without this, every Ship click fails with &quot;Support email and phone must be OTP-verified&quot;.</li>
+          <li>Go to <b>Warehouses</b> → add your pickup address. Copy the exact warehouse name into the field above.</li>
+          <li>Go to <b>Wallet</b> → add funds. NimbusPost deducts freight per AWB.</li>
+          <li>Done. Every admin order card now shows a <b>Ship via NimbusPost</b> button that pushes tracking back to the customer.</li>
+        </ol>
+      </div>
+
+      <div className="mt-5 border-t border-white/5 pt-5">
+        <div className="text-[10px] uppercase tracking-luxury text-cream/40">Quick action · Load template product</div>
+        <p className="mt-1 text-[12px] text-cream/60 max-w-2xl">
+          Loads a fully-filled reference product (Golden Geode Mirror 2×2) into your catalog — 3 colour variations, 6 extra option groups, 6 A+ content blocks in every layout style, real HSN/SKU/weight/dims. Use it as a copy-paste template for new products.
+        </p>
+        <NimbusSeedButton authed={authed} />
+      </div>
+
       <div className="mt-5 text-[11px] text-cream/40 leading-relaxed">
         <b className="text-cream/60">Tips:</b> NimbusPost deducts wallet ₹ the instant an AWB is created — cancel before manifest to refund.
         Add funds at <span className="text-cream/60">nimbuspost.com → Wallet</span>.
         Auth mode is JWT (auto-refreshed every ~23h) with the legacy API key as fallback.
       </div>
+    </div>
+  );
+}
+
+function NimbusSeedButton({ authed }) {
+  const [busy, setBusy] = useState(false);
+  const [last, setLast] = useState(null);
+  const run = async () => {
+    if (!window.confirm("Load / refresh the 'Golden Geode Mirror 2×2 (Reference)' product? This will overwrite any existing product with slug 'golden-geode-mirror-2x2-premium'.")) return;
+    setBusy(true);
+    try {
+      const r = await authed.post("/admin/products/seed-reference");
+      setLast(r.data);
+      toast.success(`Reference product ${r.data?.action || "ready"} · view /product/${r.data?.slug}`);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Seed failed");
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="mt-3 flex items-center gap-3 flex-wrap">
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy}
+        data-testid="nimbus-load-template"
+        className="px-4 py-2 border border-gold/40 text-gold hover:bg-gold/10 text-xs uppercase tracking-luxury disabled:opacity-60"
+      >
+        {busy ? "Loading…" : "Load template product"}
+      </button>
+      {last?.slug && (
+        <a
+          href={`/product/${last.slug}`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[11px] uppercase tracking-luxury text-cream/60 hover:text-gold underline"
+          data-testid="nimbus-template-link"
+        >
+          View → /product/{last.slug}
+        </a>
+      )}
     </div>
   );
 }

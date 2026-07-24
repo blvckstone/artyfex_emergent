@@ -1738,6 +1738,28 @@ async def create_product(payload: ProductIn, admin=Depends(get_current_admin)):
     return prod
 
 
+# ------------- Batch 8 · Reference-product seed (idempotent) -----------------
+# One-click "load me a fully-filled template product" for the owner. Uses the
+# same PRODUCT payload as backend/seed_reference_product.py so the CLI seed
+# and the in-app button stay in sync — but runs against the CURRENT DB so it
+# works on prod Atlas without any shell access.
+@api_router.post("/admin/products/seed-reference")
+async def admin_seed_reference_product(admin=Depends(get_current_admin)):
+    try:
+        from seed_reference_product import PRODUCT as REF_PRODUCT  # noqa: E402
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"reference template unavailable: {e}")
+    existing = await db.products.find_one({"slug": REF_PRODUCT["slug"]}, {"_id": 0})
+    if existing:
+        merged = {**existing, **REF_PRODUCT, "id": existing["id"]}
+        await db.products.update_one({"id": existing["id"]}, {"$set": merged})
+        return {"ok": True, "action": "updated", "id": existing["id"], "slug": REF_PRODUCT["slug"]}
+    prod = Product(**ProductIn(**REF_PRODUCT).model_dump())
+    await db.products.insert_one(prod.model_dump())
+    return {"ok": True, "action": "created", "id": prod.id, "slug": prod.slug}
+
+
+
 @api_router.put("/admin/products/{product_id}", response_model=Product)
 async def update_product(product_id: str, payload: ProductIn, background_tasks: BackgroundTasks, admin=Depends(get_current_admin)):
     existing = await db.products.find_one({"id": product_id}, {"_id": 0})
