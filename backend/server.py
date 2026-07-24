@@ -484,6 +484,10 @@ class Product(BaseModel):
     # thickness, gift-wrap, care-kit, mount…). The legacy `variants` array
     # continues to work for colour-only products; both can coexist.
     variation_options: List[VariationOption] = Field(default_factory=list)
+    # Batch 6 (Jul 2026) — Amazon-style "A+ content" story blocks that render
+    # BELOW the fold on the product page. Each block is a heading + rich
+    # description + optional wide banner image. Fully optional.
+    a_plus_content: List[Dict[str, str]] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)
 
 class ProductIn(BaseModel):
@@ -501,6 +505,7 @@ class ProductIn(BaseModel):
     height_cm: Optional[float] = None
     tags: List[str] = Field(default_factory=list)
     variation_options: List[VariationOption] = Field(default_factory=list)
+    a_plus_content: List[Dict[str, str]] = Field(default_factory=list)
 
 class OrderCustomer(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -541,6 +546,10 @@ class OrderItem(BaseModel):
     selected_options: Dict[str, str] = Field(default_factory=dict)
     selected_options_labels: Dict[str, str] = Field(default_factory=dict)
     options_price_delta_inr: int = 0
+    # Batch 6 — free-form per-line customer notes (e.g. gift-wrap recipient
+    # name & message, engraving text, etc.). Kept as a flat string dict so
+    # everything stays JSON-round-trippable and easy to display.
+    notes: Dict[str, str] = Field(default_factory=dict)
 
 class OrderIn(BaseModel):
     customer: OrderCustomer; items: List[OrderItem]

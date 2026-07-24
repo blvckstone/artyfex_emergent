@@ -247,6 +247,7 @@ export const CheckoutDialog = ({ open, onClose }) => {
         variant_key: i.variant_key,
         quantity: i.quantity,
         selected_options: i.selected_options || {},
+        notes: i.notes || {},
       })),
       payment_method: "razorpay",
       subtotal_inr: subtotal,

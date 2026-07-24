@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { IDS } from "@/constants/testIds";
+import { displayableVariants } from "@/lib/utils";
 
 const formatINR = (n) => `₹${n.toLocaleString("en-IN")}`;
 
@@ -97,7 +98,7 @@ export const Collection = ({ products = [], content }) => {
                   </button>
                 </div>
                 <div className="mt-3 md:mt-4 flex gap-1.5 md:gap-2">
-                  {p.variants.map((v) => (
+                  {displayableVariants(p.variants).map((v) => (
                     <span
                       key={v.key}
                       title={v.label}

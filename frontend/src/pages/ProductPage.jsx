@@ -108,6 +108,12 @@ export default function ProductPage() {
   // Task 3 — user's chosen values for extra variation options (Shape / Frame / …).
   // Initialise from is_default flags when the product loads.
   const [selectedOptions, setSelectedOptions] = useState({});
+  // Batch 6 — gift-wrap recipient + message fields (only visible when the
+  // gift_wrap option value is set to "yes"). Empty strings are stripped
+  // before we hand them off to addItem.
+  const [giftRecipient, setGiftRecipient] = useState("");
+  const [giftMessage, setGiftMessage] = useState("");
+  const giftWrapChosen = (selectedOptions?.gift_wrap || "").toLowerCase() === "yes";
   useEffect(() => {
     if (!product) return;
     const init = {};
@@ -168,7 +174,14 @@ export default function ProductPage() {
         return;
       }
     }
-    addItem(product, variantKey, qty, selectedOptions);
+    // Batch 6 — if gift wrap is Yes, encourage (but do not force) a recipient name
+    let notes = null;
+    if (giftWrapChosen) {
+      const r = (giftRecipient || "").trim();
+      const m = (giftMessage || "").trim();
+      if (r || m) notes = { gift_recipient: r, gift_message: m };
+    }
+    addItem(product, variantKey, qty, selectedOptions, notes);
     setAdded(true);
     setTimeout(() => setAdded(false), 1600);
   };
@@ -430,6 +443,41 @@ export default function ProductPage() {
                     <span className="text-cream/50 ml-2">·  new unit price {formatINR(effectivePrice + optionsPriceDelta)}</span>
                   </div>
                 )}
+
+                {/* Batch 6 — Gift-wrap recipient name + message.
+                    Rendered only when the customer picks Gift Wrap = Yes. */}
+                {giftWrapChosen && (
+                  <div className="mt-2 border border-gold/25 bg-gold/5 p-4 space-y-3" data-testid="product-gift-wrap-fields">
+                    <div className="text-[10px] uppercase tracking-luxury text-gold-soft">
+                      Gift details · we&apos;ll handwrite this on the card
+                    </div>
+                    <label className="block">
+                      <span className="text-[10px] uppercase tracking-luxury text-cream/50">Recipient&apos;s name</span>
+                      <input
+                        type="text"
+                        maxLength={80}
+                        value={giftRecipient}
+                        onChange={(e) => setGiftRecipient(e.target.value)}
+                        placeholder="e.g. Aarav"
+                        data-testid="product-gift-recipient"
+                        className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[10px] uppercase tracking-luxury text-cream/50">Handwritten message (optional)</span>
+                      <textarea
+                        rows={3}
+                        maxLength={240}
+                        value={giftMessage}
+                        onChange={(e) => setGiftMessage(e.target.value)}
+                        placeholder="e.g. Happy anniversary — with all my love."
+                        data-testid="product-gift-message"
+                        className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none resize-none"
+                      />
+                      <span className="text-[10px] text-cream/40 mt-1 block text-right">{giftMessage.length}/240</span>
+                    </label>
+                  </div>
+                )}
               </div>
             )}
 
@@ -557,6 +605,40 @@ export default function ProductPage() {
             </div>
           </div>
         </div>
+
+        {/* Batch 6 — A+ content: Amazon-style trust-building story panels */}
+        {Array.isArray(product.a_plus_content) && product.a_plus_content.length > 0 && (
+          <section className="mt-16 md:mt-24 border-t border-white/5 pt-16" data-testid="product-a-plus">
+            <div className="text-center max-w-2xl mx-auto">
+              <div className="text-[10px] uppercase tracking-luxury text-gold-soft">From the atelier</div>
+              <h2 className="mt-2 font-serif text-3xl md:text-4xl text-cream">A closer look at this piece</h2>
+            </div>
+            <div className="mt-12 space-y-16 md:space-y-24">
+              {product.a_plus_content.map((blk, i) => (
+                <div
+                  key={i}
+                  data-testid={`product-a-plus-block-${i}`}
+                  className={`grid gap-8 md:gap-14 items-center ${blk.image ? (i % 2 === 0 ? "md:grid-cols-[1.15fr_1fr]" : "md:grid-cols-[1fr_1.15fr]") : "md:grid-cols-1 max-w-3xl mx-auto text-center"}`}
+                >
+                  {blk.image && i % 2 === 0 && (
+                    <img src={blk.image} alt={blk.heading || `Story block ${i + 1}`} loading="lazy" className="w-full h-64 md:h-[400px] object-cover" />
+                  )}
+                  <div className={blk.image ? "" : ""}>
+                    {blk.heading && (
+                      <h3 className="font-serif text-2xl md:text-3xl text-cream">{blk.heading}</h3>
+                    )}
+                    {blk.body && (
+                      <p className="mt-4 text-cream/70 leading-relaxed font-light whitespace-pre-line">{blk.body}</p>
+                    )}
+                  </div>
+                  {blk.image && i % 2 !== 0 && (
+                    <img src={blk.image} alt={blk.heading || `Story block ${i + 1}`} loading="lazy" className="w-full h-64 md:h-[400px] object-cover" />
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* CUSTOMER REVIEWS (Amazon/Flipkart-style) */}
         <ProductReviewsSection

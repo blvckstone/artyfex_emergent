@@ -46,7 +46,7 @@ export const CartProvider = ({ children }) => {
     else localStorage.removeItem(COUPON_KEY);
   }, [coupon]);
 
-  const addItem = (product, variantKey, quantity = 1, selectedOptions = null) => {
+  const addItem = (product, variantKey, quantity = 1, selectedOptions = null, notes = null) => {
     const variant = product.variants.find((v) => v.key === variantKey) || product.variants[0];
     // Resolve per-variant overrides with fallback to product-level
     const basePrice = variant?.price_inr ?? product.price_inr;
@@ -66,13 +66,16 @@ export const CartProvider = ({ children }) => {
       }
     });
     const finalPrice = basePrice + optionsDelta;
-    // Same product + variant + option-set → treat as same cart line (merge qty)
+    // Same product + variant + option-set + notes → treat as same cart line (merge qty)
+    const cleanNotes = notes && typeof notes === "object" ? Object.fromEntries(Object.entries(notes).filter(([, v]) => (v || "").toString().trim())) : {};
     const optionsKey = JSON.stringify(options || {});
+    const notesKey = JSON.stringify(cleanNotes);
     setItems((prev) => {
       const idx = prev.findIndex(
         (i) => i.product_id === product.id
           && i.variant_key === variant.key
-          && JSON.stringify(i.selected_options || {}) === optionsKey,
+          && JSON.stringify(i.selected_options || {}) === optionsKey
+          && JSON.stringify(i.notes || {}) === notesKey,
       );
       if (idx >= 0) {
         const clone = [...prev];
@@ -94,6 +97,7 @@ export const CartProvider = ({ children }) => {
           selected_options: options,
           selected_options_labels: optionLabels,
           options_price_delta_inr: optionsDelta,
+          notes: cleanNotes,
         },
       ];
     });

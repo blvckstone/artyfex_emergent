@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import SEO from "@/components/SEO";
 import { fetchProducts } from "@/lib/api";
 import { useCart } from "@/context/CartContext";
+import { displayableVariants } from "@/lib/utils";
 import { useWishlist } from "@/context/WishlistContext";
 import { useAuth } from "@/context/AuthContext";
 
@@ -437,7 +438,7 @@ export default function ShopPage() {
                           </button>
                         </div>
                         <div className="mt-4 flex gap-2">
-                          {p.variants.map((v) => (
+                          {displayableVariants(p.variants).map((v) => (
                             <span key={v.key} title={v.label} className="w-4 h-4 rounded-full ring-1 ring-white/20"
                               style={{ background: `radial-gradient(circle at 30% 30%, ${v.hex}, #0a0a0a 80%)` }} />
                           ))}

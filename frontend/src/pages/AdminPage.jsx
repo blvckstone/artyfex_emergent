@@ -125,7 +125,7 @@ function useAuthedApi(token) {
   }, [token]);
 }
 
-const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: [{ key: "default", label: "Default", hex: "#333333", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null, sku: "", weight_grams: null, length_cm: null, width_cm: null, height_cm: null }], has_variations: false, stock: 5, is_hero: false, category: "", hsn_code: "", sku: "", weight_grams: "", length_cm: "", width_cm: "", height_cm: "", tags: "", variation_options: [] };
+const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: [{ key: "default", label: "Default", hex: "#333333", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null, sku: "", weight_grams: null, length_cm: null, width_cm: null, height_cm: null }], has_variations: false, stock: 5, is_hero: false, category: "", hsn_code: "", sku: "", weight_grams: "", length_cm: "", width_cm: "", height_cm: "", tags: "", variation_options: [], a_plus_content: [] };
 
 export default function AdminPage() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
@@ -260,8 +260,14 @@ export default function AdminPage() {
             stock: Number(v.stock ?? 0),
             price_inr: v.price_inr === "" || v.price_inr == null ? null : Number(v.price_inr),
             mrp_inr: v.mrp_inr === "" || v.mrp_inr == null ? null : Number(v.mrp_inr),
+            // Batch 5 — persist per-variation shipping snapshot (was being dropped)
+            sku: (v.sku || "").toString().trim() || null,
+            weight_grams: v.weight_grams === "" || v.weight_grams == null ? null : Number(v.weight_grams),
+            length_cm: v.length_cm === "" || v.length_cm == null ? null : Number(v.length_cm),
+            width_cm: v.width_cm === "" || v.width_cm == null ? null : Number(v.width_cm),
+            height_cm: v.height_cm === "" || v.height_cm == null ? null : Number(v.height_cm),
           }))
-        : [{ key: "default", label: "Default", hex: "#333333", image: form.hero_image || "", size: form.size || "", stock: Number(form.stock || 0), price_inr: null, mrp_inr: null }];
+        : [{ key: "default", label: "Default", hex: "#333333", image: form.hero_image || "", size: form.size || "", stock: Number(form.stock || 0), price_inr: null, mrp_inr: null, sku: null, weight_grams: null, length_cm: null, width_cm: null, height_cm: null }];
 
       const { has_variations, ...rest } = form;
       const parseTags = (t) => Array.isArray(t) ? t : (typeof t === "string" ? t.split(",").map((s) => s.trim()).filter(Boolean) : []);
@@ -301,6 +307,14 @@ export default function AdminPage() {
                 price_delta_inr: Number(v.price_delta_inr || 0),
                 is_default: !!v.is_default,
               })),
+          })),
+        // Batch 6 — A+ content (Amazon-style story panels) — strip empty blocks
+        a_plus_content: (Array.isArray(form.a_plus_content) ? form.a_plus_content : [])
+          .filter((b) => (b.heading || b.body || b.image))
+          .map((b) => ({
+            heading: (b.heading || "").toString().trim(),
+            body: (b.body || "").toString().trim(),
+            image: (b.image || "").toString().trim(),
           })),
       };
       if (form.id) await authed.put(`/admin/products/${form.id}`, payload);
@@ -600,6 +614,7 @@ export default function AdminPage() {
                             height_cm: p.height_cm ?? "",
                             tags: Array.isArray(p.tags) ? p.tags.join(", ") : (p.tags || ""),
                             variation_options: Array.isArray(p.variation_options) ? p.variation_options : [],
+                            a_plus_content: Array.isArray(p.a_plus_content) ? p.a_plus_content : [],
                           });
                         }} className="text-xs text-gold hover:text-cream border border-gold/30 px-3 py-1.5">Edit</button>
                         <button onClick={()=>deleteProduct(p.id)} className="text-red-400 hover:text-red-300 p-2"><Trash2 className="w-4 h-4" /></button>
@@ -1359,15 +1374,16 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
         { key: "standard", label: "Standard (12 mm)", price_delta_inr: 0 },
         { key: "premium",  label: "Premium (18 mm)",  price_delta_inr: 1200 },
       ] },
-    { key: "gift_wrap", label: "Gift Wrap", type: "toggle", help_text: "Adds premium gift packaging + handwritten note.",
+    { key: "gift_wrap", label: "Gift Wrap", type: "toggle", help_text: "Adds premium gift packaging. When enabled, the customer can enter the recipient's name and a handwritten note on the product page.",
       values: [
         { key: "no",  label: "No",  price_delta_inr: 0, is_default: true },
         { key: "yes", label: "Yes · Premium wrap", price_delta_inr: 500 },
       ] },
-    { key: "care_kit",  label: "Care Kit",  type: "toggle", help_text: "Add resin care + microfibre cleaning cloth set.",
+    { key: "care_kit",  label: "Care Kit",  type: "select", help_text: "Optional care items shipped with the piece. Edit / add / remove values below — anything you actually stock (microfibre cloth, tissue paper, cleaning gel, shining cream, dust brush …).",
       values: [
-        { key: "no",  label: "No",  price_delta_inr: 0, is_default: true },
-        { key: "yes", label: "Yes · Add care kit", price_delta_inr: 750 },
+        { key: "none",              label: "No care kit",                     price_delta_inr: 0, is_default: true },
+        { key: "basic",             label: "Basic · Cloth + Tissue",          price_delta_inr: 150 },
+        { key: "premium",           label: "Premium · Cloth + Gel + Shine",   price_delta_inr: 500 },
       ] },
     { key: "mount",     label: "Mounting",  type: "select", help_text: "Pre-installed wall hardware or tabletop stand.",
       values: [
@@ -1376,9 +1392,26 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
       ] },
   ];
 
+  // Batch 6 — bug fix: previously any click that BUBBLED up to the backdrop
+  // (including a text-selection drag that started inside the modal and released
+  // outside) closed the editor and threw away the whole draft. We now only
+  // close when the pointer BOTH pressed down AND released on the backdrop.
+  const backdropMouseDownRef = React.useRef(false);
+  const handleBackdropMouseDown = (e) => {
+    backdropMouseDownRef.current = e.target === e.currentTarget;
+  };
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget && backdropMouseDownRef.current) onCancel();
+    backdropMouseDownRef.current = false;
+  };
+
   return (
-    <div className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onCancel}>
-      <div className="bg-ink-900 border border-white/10 w-[min(880px,95vw)] max-h-[90vh] overflow-y-auto p-8" onClick={(e)=>e.stopPropagation()} data-testid="product-editor-modal">
+    <div
+      className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
+    >
+      <div className="bg-ink-900 border border-white/10 w-[min(880px,95vw)] max-h-[90vh] overflow-y-auto p-8" onClick={(e)=>e.stopPropagation()} onMouseDown={(e)=>e.stopPropagation()} data-testid="product-editor-modal">
         <div className="flex justify-between items-center">
           <h3 className="font-serif text-2xl">{initial.id ? "Edit product" : "New product"}</h3>
           <button onClick={onCancel} className="text-cream/50 hover:text-cream text-sm">Cancel</button>
@@ -1718,6 +1751,85 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
           <input type="checkbox" checked={!!f.is_hero} onChange={upd("is_hero")} /> Mark as hero product (appears in the main hero showcase)
         </label>
 
+        {/* Batch 6 — A+ content (Amazon-style story blocks below the product) */}
+        <div className="mt-10 border-t border-white/10 pt-8" data-testid="pe-aplus-section">
+          <div className="flex items-start justify-between">
+            <div>
+              <h4 className="font-serif text-xl">A+ content · Trust builders</h4>
+              <p className="text-xs text-cream/50 mt-1 max-w-xl">
+                Rich story panels that render <b>below</b> the buy box on the product page — like Amazon A+ content.
+                Each block has a heading, a description, and an optional wide banner image. Tell the material story, show close-ups, or list what&apos;s in the box.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setF((prev) => ({ ...prev, a_plus_content: [...(prev.a_plus_content || []), { heading: "", body: "", image: "" }] }))}
+              className="inline-flex items-center gap-2 text-xs uppercase tracking-luxury border border-gold/40 text-gold px-3 py-2 hover:bg-gold/10"
+              data-testid="pe-aplus-add"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add block
+            </button>
+          </div>
+
+          <div className="mt-5 space-y-4">
+            {(f.a_plus_content || []).length === 0 && (
+              <div className="text-xs text-cream/40 italic">No A+ blocks yet. Add one to boost buyer trust and conversion.</div>
+            )}
+            {(f.a_plus_content || []).map((blk, i) => (
+              <div key={i} className="border border-white/10 p-4 bg-ink-950" data-testid={`pe-aplus-block-${i}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs text-cream/60">Block {i + 1}</div>
+                  <button
+                    type="button"
+                    onClick={() => setF((prev) => ({ ...prev, a_plus_content: (prev.a_plus_content || []).filter((_, j) => j !== i) }))}
+                    className="text-red-400 hover:text-red-300 p-1"
+                    data-testid={`pe-aplus-remove-${i}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="grid gap-3">
+                  <Fld label="Heading">
+                    <input
+                      value={blk.heading || ""}
+                      onChange={(e) => setF((prev) => { const a = [...(prev.a_plus_content || [])]; a[i] = { ...a[i], heading: e.target.value }; return { ...prev, a_plus_content: a }; })}
+                      className={inp}
+                      placeholder="e.g. Hand-poured resin, one mirror at a time"
+                      data-testid={`pe-aplus-heading-${i}`}
+                    />
+                  </Fld>
+                  <Fld label="Body (short paragraph)">
+                    <textarea
+                      rows={3}
+                      value={blk.body || ""}
+                      onChange={(e) => setF((prev) => { const a = [...(prev.a_plus_content || [])]; a[i] = { ...a[i], body: e.target.value }; return { ...prev, a_plus_content: a }; })}
+                      className={`${inp} resize-none`}
+                      placeholder="Every ArtyFex piece is cured for 72 hours, hand-polished, and shipped in double-walled crates so it arrives flawless."
+                      data-testid={`pe-aplus-body-${i}`}
+                    />
+                  </Fld>
+                  <Fld label="Banner image (wide, optional)" hint="Ideal aspect ratio: 3:1 or 4:1. Uploaded to Cloudinary.">
+                    <CloudinaryUpload
+                      value={blk.image || ""}
+                      onChange={(url) => setF((prev) => { const a = [...(prev.a_plus_content || [])]; a[i] = { ...a[i], image: url }; return { ...prev, a_plus_content: a }; })}
+                      folder="artyfex/products/a-plus"
+                      label="Drop wide banner or click to upload"
+                      testid={`pe-aplus-image-${i}`}
+                    />
+                    <input
+                      value={blk.image || ""}
+                      onChange={(e) => setF((prev) => { const a = [...(prev.a_plus_content || [])]; a[i] = { ...a[i], image: e.target.value }; return { ...prev, a_plus_content: a }; })}
+                      className={`${inp} mt-2 font-mono text-xs`}
+                      placeholder="or paste URL"
+                      data-testid={`pe-aplus-image-url-${i}`}
+                    />
+                  </Fld>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <button disabled={saving} onClick={()=>onSave(f)} className="mt-8 w-full bg-gold text-ink-950 py-4 text-xs uppercase tracking-luxury hover:bg-cream disabled:opacity-60" data-testid="pe-save">
           {saving ? <Loader2 className="w-4 h-4 animate-spin inline" /> : "Save product"}
         </button>
@@ -1919,6 +2031,17 @@ function OrderRow({ o, onStatus, onTracking, onNotify, onNimbusShip, onNimbusTra
                             <span className="inline-flex items-center text-[10px] bg-ink-950 border border-white/10 text-cream/70 px-2 py-0.5">
                               add-ons: <span className="text-gold ml-1 font-mono">+₹{(it.options_price_delta_inr).toLocaleString("en-IN")}</span>
                             </span>
+                          )}
+                        </div>
+                      )}
+                      {/* Batch 6 — Gift-wrap / customer notes (recipient name + handwritten message) */}
+                      {it.notes && (it.notes.gift_recipient || it.notes.gift_message) && (
+                        <div className="mt-2 border-l-2 border-gold/50 bg-gold/5 pl-3 py-1.5 text-[11px] text-cream/80" data-testid={`order-item-notes-${idx}`}>
+                          {it.notes.gift_recipient && (
+                            <div><span className="uppercase tracking-luxury text-[9px] text-gold-soft mr-1.5">Gift to:</span>{it.notes.gift_recipient}</div>
+                          )}
+                          {it.notes.gift_message && (
+                            <div className="italic mt-0.5">&ldquo;{it.notes.gift_message}&rdquo;</div>
                           )}
                         </div>
                       )}
