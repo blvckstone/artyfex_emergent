@@ -2645,11 +2645,14 @@ function BulkInvoiceDownloader({ authed }) {
   );
 }
 
-// -------------- NimbusPost config card (Task 7 / Batch 4) --------------
+// -------------- NimbusPost config card (Task 7 / Batch 4 · Batch 9 pickup + webhook) --------------
 function NimbusPostCard({ authed }) {
   const [cfg, setCfg] = useState(null);
-  const [warehouse, setWarehouse] = useState("");
-  const [originPin, setOriginPin] = useState("");
+  const [form, setForm] = useState({
+    warehouse_name: "", origin_pincode: "",
+    contact_name: "", address: "", city: "", state: "", pincode: "", phone: "",
+    webhook_secret: "",
+  });
   const [saving, setSaving] = useState(false);
   const [pin, setPin] = useState("110001");
   const [svc, setSvc] = useState(null);
@@ -2659,18 +2662,30 @@ function NimbusPostCard({ authed }) {
     try {
       const r = await authed.get("/admin/nimbuspost/config");
       setCfg(r.data);
-      setWarehouse(r.data?.warehouse_name || "");
-      setOriginPin(r.data?.origin_pincode || "");
+      setForm((f) => ({
+        ...f,
+        warehouse_name: r.data?.warehouse_name || "",
+        origin_pincode: r.data?.origin_pincode || "",
+        contact_name: r.data?.contact_name || "",
+        address: r.data?.address || "",
+        city: r.data?.city || "",
+        state: r.data?.state || "",
+        pincode: r.data?.pincode || "",
+        phone: r.data?.phone || "",
+        webhook_secret: "", // never populated back — only saved-if-non-empty
+      }));
     } catch (err) {
       toast.error("Failed to load NimbusPost config");
     }
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
+  const upd = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
   const save = async () => {
     setSaving(true);
     try {
-      await authed.patch("/admin/nimbuspost/config", { warehouse_name: warehouse, origin_pincode: originPin });
+      await authed.patch("/admin/nimbuspost/config", form);
       toast.success("NimbusPost settings saved");
       load();
     } catch (err) {
@@ -2692,6 +2707,16 @@ function NimbusPostCard({ authed }) {
     }
   };
 
+  const genSecret = () => {
+    const bytes = new Uint8Array(24);
+    (window.crypto || window.msCrypto).getRandomValues(bytes);
+    const b64 = btoa(String.fromCharCode(...bytes)).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+    setForm((f) => ({ ...f, webhook_secret: b64 }));
+    toast.success("Fresh webhook secret generated — click Save to store it.");
+  };
+
+  const copy = (txt, label) => { navigator.clipboard.writeText(txt || ""); toast.success(`${label} copied`); };
+
   return (
     <div className="mt-8 hairline p-6" data-testid="nimbuspost-card">
       <div className="flex items-center gap-3">
@@ -2703,94 +2728,108 @@ function NimbusPostCard({ authed }) {
         )}
       </div>
       <p className="mt-2 text-sm text-cream/60 max-w-2xl">
-        Set the exact warehouse / pickup name registered on your NimbusPost dashboard,
-        and the pickup pincode (used as the origin for rate + serviceability calls).
-        Once saved, every admin order card will show a <b>Ship via NimbusPost</b> button that creates an AWB and pushes tracking back to the customer.
+        Complete the pickup contact block below — NimbusPost validates <b>every field</b> on every shipment call.
+        Missing pickup contact = the &quot;Pickup Address / City / Phone required&quot; error.
       </p>
 
-      <div className="mt-5 grid sm:grid-cols-[1.4fr_1fr_auto] gap-3 items-end">
-        <label className="block">
-          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Warehouse / Pickup name (must match dashboard exactly)</span>
-          <input
-            data-testid="nimbus-warehouse-input"
-            value={warehouse}
-            onChange={(e) => setWarehouse(e.target.value)}
-            placeholder="e.g. ArtyFex Warehouse"
-            className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none"
-          />
+      {/* Pickup + warehouse */}
+      <div className="mt-5 grid sm:grid-cols-2 gap-3">
+        <label className="block sm:col-span-2">
+          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Warehouse name (exactly as on NimbusPost dashboard)</span>
+          <input data-testid="nimbus-warehouse-input" value={form.warehouse_name} onChange={upd("warehouse_name")} placeholder="e.g. ArtyFex Warehouse" className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none" />
         </label>
         <label className="block">
-          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Origin pincode (pickup)</span>
-          <input
-            data-testid="nimbus-origin-pincode-input"
-            value={originPin}
-            onChange={(e) => setOriginPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
-            placeholder="e.g. 400095"
-            inputMode="numeric"
-            maxLength={6}
-            className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none font-mono"
-          />
+          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Pickup contact name</span>
+          <input data-testid="nimbus-contact-name" value={form.contact_name} onChange={upd("contact_name")} placeholder="e.g. Aamna Khan" className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none" />
         </label>
-        <button
-          data-testid="nimbus-warehouse-save"
-          onClick={save}
-          disabled={saving}
-          className="px-5 py-2 bg-gold text-ink-950 hover:bg-cream text-xs uppercase tracking-luxury disabled:opacity-60"
-        >
-          {saving ? "Saving…" : "Save"}
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Pickup phone (10 digits, no +91)</span>
+          <input data-testid="nimbus-pickup-phone" value={form.phone} onChange={(e)=>setForm((f)=>({...f, phone: e.target.value.replace(/\D/g,"").slice(-10) }))} placeholder="9012345678" inputMode="numeric" maxLength={10} className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none font-mono" />
+        </label>
+        <label className="block sm:col-span-2">
+          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Pickup address (street, building)</span>
+          <input data-testid="nimbus-pickup-address" value={form.address} onChange={upd("address")} placeholder="61, A-8, Plot 61, Asthaganda Society, Malwani" className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none" />
+        </label>
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Pickup city</span>
+          <input data-testid="nimbus-pickup-city" value={form.city} onChange={upd("city")} placeholder="Mumbai" className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none" />
+        </label>
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Pickup state</span>
+          <input data-testid="nimbus-pickup-state" value={form.state} onChange={upd("state")} placeholder="Maharashtra" className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none" />
+        </label>
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-luxury text-cream/50">Pickup pincode</span>
+          <input data-testid="nimbus-origin-pincode-input" value={form.pincode} onChange={(e)=>setForm((f)=>({...f, pincode: e.target.value.replace(/\D/g,"").slice(0,6), origin_pincode: e.target.value.replace(/\D/g,"").slice(0,6) }))} placeholder="400095" inputMode="numeric" maxLength={6} className="mt-1 w-full bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none font-mono" />
+        </label>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button data-testid="nimbus-warehouse-save" onClick={save} disabled={saving} className="px-5 py-2 bg-gold text-ink-950 hover:bg-cream text-xs uppercase tracking-luxury disabled:opacity-60">
+          {saving ? "Saving…" : "Save NimbusPost settings"}
         </button>
       </div>
 
+      {/* Webhook block */}
+      <div className="mt-6 border-t border-white/5 pt-5" data-testid="nimbus-webhook-block">
+        <div className="text-[10px] uppercase tracking-luxury text-cream/40">Live-tracking webhook · paste these into NimbusPost → Webhooks → Add</div>
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="text-[11px] text-cream/50 uppercase tracking-luxury min-w-[110px]">Delivery URL</div>
+            <code className="flex-1 bg-ink-950 border border-white/10 px-3 py-2 text-xs text-cream font-mono break-all" data-testid="nimbus-webhook-url">{cfg?.webhook_url || "—"}</code>
+            <button onClick={()=>copy(cfg?.webhook_url, "URL")} className="text-[10px] uppercase tracking-luxury border border-gold/40 text-gold px-3 py-2 hover:bg-gold/10" type="button">Copy</button>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="text-[11px] text-cream/50 uppercase tracking-luxury min-w-[110px]">Secret</div>
+            <input value={form.webhook_secret} onChange={upd("webhook_secret")} placeholder={cfg?.webhook_secret_set ? "•••••• (stored — leave blank to keep)" : "Click 'Generate' or paste your own"} className="flex-1 bg-ink-950 border border-white/10 px-3 py-2 text-xs text-cream font-mono" data-testid="nimbus-webhook-secret" />
+            <button onClick={genSecret} type="button" className="text-[10px] uppercase tracking-luxury border border-gold/40 text-gold px-3 py-2 hover:bg-gold/10">Generate</button>
+            {form.webhook_secret && (
+              <button onClick={()=>copy(form.webhook_secret, "Secret")} type="button" className="text-[10px] uppercase tracking-luxury border border-gold/40 text-gold px-3 py-2 hover:bg-gold/10">Copy</button>
+            )}
+          </div>
+          <div className="text-[11px] text-cream/50 leading-relaxed">
+            <b>Name:</b> anything (e.g. ArtyFex). <b>Status:</b> Active. When NimbusPost pushes a status update to that URL, we auto-update the order to shipped / delivered / returned.
+          </div>
+        </div>
+      </div>
+
+      {/* Serviceability */}
       <div className="mt-6 border-t border-white/5 pt-5">
         <div className="text-[10px] uppercase tracking-luxury text-cream/40">Serviceability check</div>
         <div className="mt-2 flex flex-wrap gap-2 items-center">
-          <input
-            data-testid="nimbus-svc-pin"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            placeholder="Pincode"
-            className="bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none font-mono w-40"
-          />
-          <button
-            data-testid="nimbus-svc-check"
-            onClick={check}
-            disabled={checking}
-            className="px-4 py-2 border border-gold/40 text-gold hover:bg-gold/10 text-xs uppercase tracking-luxury disabled:opacity-60"
-          >
+          <input data-testid="nimbus-svc-pin" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Pincode" className="bg-ink-950 border border-white/15 focus:border-gold px-3 py-2 text-sm text-cream outline-none font-mono w-40" />
+          <button data-testid="nimbus-svc-check" onClick={check} disabled={checking} className="px-4 py-2 border border-gold/40 text-gold hover:bg-gold/10 text-xs uppercase tracking-luxury disabled:opacity-60">
             {checking ? "Checking…" : "Check"}
           </button>
         </div>
-        {svc && (
-          <pre className="mt-3 text-[11px] text-cream/60 bg-ink-950/60 border border-white/5 p-3 overflow-auto max-h-56">{JSON.stringify(svc, null, 2)}</pre>
-        )}
+        {svc && (<pre className="mt-3 text-[11px] text-cream/60 bg-ink-950/60 border border-white/5 p-3 overflow-auto max-h-56">{JSON.stringify(svc, null, 2)}</pre>)}
       </div>
 
       <div className="mt-6 border-t border-white/5 pt-5">
         <div className="text-[10px] uppercase tracking-luxury text-cream/40">One-time NimbusPost dashboard setup (required by NimbusPost, not us)</div>
         <ol className="mt-3 space-y-2 text-[12px] text-cream/70 list-decimal list-inside">
-          <li>Log into <a href="https://ship.nimbuspost.com/" target="_blank" rel="noreferrer" className="text-gold underline">ship.nimbuspost.com</a> → <b>Settings → Profile</b> → add + <b>OTP-verify</b> a support <b>email</b> and support <b>phone</b>. Without this, every Ship click fails with &quot;Support email and phone must be OTP-verified&quot;.</li>
-          <li>Go to <b>Warehouses</b> → add your pickup address. Copy the exact warehouse name into the field above.</li>
+          <li>Log into <a href="https://ship.nimbuspost.com/" target="_blank" rel="noreferrer" className="text-gold underline">ship.nimbuspost.com</a> → <b>Settings → Profile</b> → add + <b>OTP-verify</b> a support <b>email</b> and support <b>phone</b>.</li>
+          <li>Go to <b>Warehouses</b> → add your pickup address. Copy the exact warehouse name above.</li>
+          <li>Go to <b>Webhooks → Add</b> → paste the Delivery URL and Secret from this card, set Status = <b>Active</b>, Submit.</li>
           <li>Go to <b>Wallet</b> → add funds. NimbusPost deducts freight per AWB.</li>
-          <li>Done. Every admin order card now shows a <b>Ship via NimbusPost</b> button that pushes tracking back to the customer.</li>
         </ol>
       </div>
 
       <div className="mt-5 border-t border-white/5 pt-5">
         <div className="text-[10px] uppercase tracking-luxury text-cream/40">Quick action · Load template product</div>
         <p className="mt-1 text-[12px] text-cream/60 max-w-2xl">
-          Loads a fully-filled reference product (Golden Geode Mirror 2×2) into your catalog — 3 colour variations, 6 extra option groups, 6 A+ content blocks in every layout style, real HSN/SKU/weight/dims. Use it as a copy-paste template for new products.
+          Loads a fully-filled reference product (Golden Geode Mirror 2×2) — 3 colour variations, 6 extra option groups, 6 A+ layout blocks. Copy-paste template for new products.
         </p>
         <NimbusSeedButton authed={authed} />
       </div>
 
       <div className="mt-5 text-[11px] text-cream/40 leading-relaxed">
-        <b className="text-cream/60">Tips:</b> NimbusPost deducts wallet ₹ the instant an AWB is created — cancel before manifest to refund.
-        Add funds at <span className="text-cream/60">nimbuspost.com → Wallet</span>.
-        Auth mode is JWT (auto-refreshed every ~23h) with the legacy API key as fallback.
+        <b className="text-cream/60">Tips:</b> NimbusPost deducts wallet ₹ the instant an AWB is created — cancel before manifest to refund. Auth is JWT (auto-refreshed ~23h) with the legacy key as fallback.
       </div>
     </div>
   );
 }
+
 
 function NimbusSeedButton({ authed }) {
   const [busy, setBusy] = useState(false);

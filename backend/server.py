@@ -8,6 +8,7 @@ import os
 import logging
 import hmac
 import hashlib
+import base64
 import json
 from urllib.parse import urlencode
 from pathlib import Path
@@ -3303,11 +3304,27 @@ import nimbuspost_service as nimbus  # noqa: E402  (kept close to route defs)
 class NimbusConfigIn(BaseModel):
     warehouse_name: str = ""
     origin_pincode: str = ""
+    # Batch 9 — full pickup contact block (NimbusPost validates on every shipment)
+    contact_name: str = ""
+    address: str = ""
+    city: str = ""
+    state: str = ""
+    pincode: str = ""
+    phone: str = ""
+    # Optional webhook secret so the shipment-status webhook signature can be verified
+    webhook_secret: str = ""
 
 
 DEFAULT_NIMBUS_CFG = {
     "warehouse_name": os.getenv("NIMBUSPOST_WAREHOUSE_NAME", "").strip(),
     "origin_pincode": os.getenv("NIMBUSPOST_ORIGIN_PINCODE", "").strip(),
+    "contact_name": os.getenv("NIMBUSPOST_CONTACT_NAME", "").strip(),
+    "address": os.getenv("NIMBUSPOST_PICKUP_ADDRESS", "").strip(),
+    "city": os.getenv("NIMBUSPOST_PICKUP_CITY", "").strip(),
+    "state": os.getenv("NIMBUSPOST_PICKUP_STATE", "").strip(),
+    "pincode": os.getenv("NIMBUSPOST_PICKUP_PINCODE", "").strip(),
+    "phone": os.getenv("NIMBUSPOST_PICKUP_PHONE", "").strip(),
+    "webhook_secret": os.getenv("NIMBUSPOST_WEBHOOK_SECRET", "").strip(),
 }
 
 
@@ -3318,28 +3335,57 @@ async def _nimbus_warehouse() -> str:
 
 async def _nimbus_origin_pincode() -> str:
     cfg = await load_site_setting("nimbuspost", DEFAULT_NIMBUS_CFG)
-    return (cfg.get("origin_pincode") or "").strip()
+    return (cfg.get("origin_pincode") or cfg.get("pincode") or "").strip()
+
+
+async def _nimbus_pickup() -> dict:
+    cfg = await load_site_setting("nimbuspost", DEFAULT_NIMBUS_CFG)
+    return {
+        "warehouse_name": (cfg.get("warehouse_name") or "").strip(),
+        "contact_name": (cfg.get("contact_name") or "").strip(),
+        "address": (cfg.get("address") or "").strip(),
+        "city": (cfg.get("city") or "").strip(),
+        "state": (cfg.get("state") or "").strip(),
+        "pincode": (cfg.get("pincode") or "").strip(),
+        "phone": (cfg.get("phone") or "").strip(),
+    }
 
 
 @api_router.get("/admin/nimbuspost/config")
 async def admin_get_nimbus_config(admin=Depends(get_current_admin)):
     cfg = await load_site_setting("nimbuspost", DEFAULT_NIMBUS_CFG)
+    # Compute webhook URL from BACKEND_PUBLIC_URL (fallback to relative /api path)
+    base = os.getenv("BACKEND_PUBLIC_URL", "").strip().rstrip("/")
+    webhook_url = f"{base}/api/nimbuspost/webhook" if base else "/api/nimbuspost/webhook"
     return {
         "configured": nimbus.is_configured(),
         "warehouse_name": cfg.get("warehouse_name") or "",
         "origin_pincode": cfg.get("origin_pincode") or "",
+        "contact_name": cfg.get("contact_name") or "",
+        "address": cfg.get("address") or "",
+        "city": cfg.get("city") or "",
+        "state": cfg.get("state") or "",
+        "pincode": cfg.get("pincode") or "",
+        "phone": cfg.get("phone") or "",
+        "webhook_secret_set": bool(cfg.get("webhook_secret")),
+        "webhook_url": webhook_url,
         "auth_mode": "jwt" if (os.getenv("NIMBUSPOST_EMAIL") and os.getenv("NIMBUSPOST_PASSWORD")) else ("legacy" if os.getenv("NIMBUSPOST_LEGACY_KEY") else "none"),
     }
 
 
 @api_router.patch("/admin/nimbuspost/config")
 async def admin_patch_nimbus_config(payload: NimbusConfigIn, admin=Depends(require_permission("manage_shipping"))):
-    data = {
-        "warehouse_name": (payload.warehouse_name or "").strip(),
-        "origin_pincode": (payload.origin_pincode or "").strip(),
-    }
+    # Load existing so blank fields don't wipe out previously-saved secrets
+    old = await load_site_setting("nimbuspost", DEFAULT_NIMBUS_CFG)
+    new = payload.model_dump()
+    # Only overwrite webhook_secret if a non-empty new value provided
+    if not (new.get("webhook_secret") or "").strip():
+        new["webhook_secret"] = old.get("webhook_secret", "")
+    data = {k: (v or "").strip() if isinstance(v, str) else v for k, v in new.items()}
     await save_site_setting("nimbuspost", data)
-    return {**data, "configured": nimbus.is_configured()}
+    return {**{k: v for k, v in data.items() if k != "webhook_secret"},
+            "webhook_secret_set": bool(data.get("webhook_secret")),
+            "configured": nimbus.is_configured()}
 
 
 @api_router.post("/admin/orders/{order_number}/nimbuspost/ship")
@@ -3349,8 +3395,8 @@ async def admin_nimbus_ship(order_number: str, admin=Depends(require_permission(
         raise HTTPException(status_code=404, detail="Order not found")
     if order.get("tracking_id"):
         raise HTTPException(status_code=400, detail=f"Shipment already exists (AWB {order['tracking_id']}). Cancel it first if you want to re-ship.")
-    warehouse = await _nimbus_warehouse()
-    result = await nimbus.create_shipment(order, warehouse)
+    pickup = await _nimbus_pickup()
+    result = await nimbus.create_shipment(order, pickup)
     if not result["ok"]:
         raise HTTPException(status_code=502 if result.get("status") in (None, 502) else 400, detail=result["error"] or "NimbusPost error")
 
@@ -3424,6 +3470,68 @@ async def admin_nimbus_serviceability(payload: NimbusServiceCheckIn, admin=Depen
     if not result["ok"]:
         raise HTTPException(status_code=502, detail=result["error"] or "NimbusPost serviceability failed")
     return result["data"]
+
+
+# ------------ Batch 9 · NimbusPost webhook receiver (public, HMAC-verified) --
+# Docs: https://ship.nimbuspost.com/webhook/add  →  X-Hmac-SHA256 header is
+# base64(hmac_sha256(secret, raw_body)). Any 2xx response ACKs the delivery;
+# non-2xx makes NimbusPost retry (up to 50 failures → auto-paused).
+@api_router.post("/nimbuspost/webhook")
+async def nimbuspost_webhook(request: Request):
+    raw = await request.body()
+    cfg = await load_site_setting("nimbuspost", DEFAULT_NIMBUS_CFG)
+    secret = (cfg.get("webhook_secret") or os.getenv("NIMBUSPOST_WEBHOOK_SECRET") or "").strip()
+
+    if secret:
+        provided = request.headers.get("x-hmac-sha256") or request.headers.get("X-Hmac-SHA256") or ""
+        digest = hmac.new(secret.encode(), raw, hashlib.sha256).digest()
+        expected = base64.b64encode(digest).decode()
+        if not hmac.compare_digest(provided.strip(), expected.strip()):
+            _log_boot.warning("nimbuspost webhook: signature mismatch")
+            raise HTTPException(status_code=401, detail="invalid signature")
+
+    try:
+        body = json.loads(raw.decode() or "{}")
+    except Exception:
+        body = {}
+
+    awb = str(body.get("awb_number") or body.get("awb") or "").strip()
+    status = str(body.get("status") or "").strip().lower()
+    message = str(body.get("message") or "").strip()
+    location = str(body.get("location") or "").strip()
+    event_time = str(body.get("event_time") or "").strip() or now_iso()
+
+    if not awb:
+        return {"ok": True, "ignored": "no_awb"}
+
+    order = await db.orders.find_one({"tracking_id": awb}, {"_id": 0, "id": 1, "order_number": 1, "status": 1})
+    if not order:
+        _log_boot.info("nimbuspost webhook: no order for AWB %s", awb)
+        return {"ok": True, "ignored": "no_order"}
+
+    # Map NimbusPost status → our internal order.status. Free-form so we don't
+    # accidentally overwrite manual admin changes for statuses NimbusPost
+    # doesn't own (e.g. "confirmed" pre-ship, "refunded" post-ship).
+    status_map = {
+        "manifested": "shipped",
+        "in transit": "shipped",
+        "in_transit": "shipped",
+        "out for delivery": "shipped",
+        "delivered": "delivered",
+        "returned": "returned",
+        "rto delivered": "returned",
+        "rto in transit": "returned",
+        "cancelled": "cancelled",
+    }
+    update: dict = {
+        "tracking_updated_at": event_time,
+        "nimbuspost_last_event": {"status": status, "message": message, "location": location, "at": event_time},
+    }
+    new_status = status_map.get(status)
+    if new_status and order.get("status") not in ("delivered", "cancelled", "refunded"):
+        update["status"] = new_status
+    await db.orders.update_one({"tracking_id": awb}, {"$set": update})
+    return {"ok": True, "order_number": order.get("order_number"), "applied_status": update.get("status")}
 
 
 

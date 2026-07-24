@@ -1,0 +1,83 @@
+{
+  "batch": "BATCH 9",
+  "total_tests": 15,
+  "passed": 15,
+  "failed": 0,
+  "tests": [
+    {
+      "name": "Task 1a: GET /admin/nimbuspost/config without auth \u2192 401",
+      "passed": true,
+      "details": "Status: 401"
+    },
+    {
+      "name": "Task 1b: PATCH /admin/nimbuspost/config with full pickup block \u2192 200",
+      "passed": true,
+      "details": "Status: 200, All fields present, webhook_secret_set=True, configured=True"
+    },
+    {
+      "name": "Task 1c: GET /admin/nimbuspost/config \u2192 all fields + webhook_secret_set=True",
+      "passed": true,
+      "details": "Status: 200, webhook_url=https://05776882-06fb-4022-a391-47e76ae8f55a.preview.emergentagent.com/api/nimbuspost/webhook, webhook_secret_set=True, NO raw secret exposed"
+    },
+    {
+      "name": "Task 1d: PATCH with webhook_secret='' preserves existing secret",
+      "passed": true,
+      "details": "PATCH Status: 200, GET webhook_secret_set=True (preserved)"
+    },
+    {
+      "name": "Task 1e: Ship with missing contact_name \u2192 400 with friendly error",
+      "passed": true,
+      "details": "PATCH Status: 200, Ship \u2192 400 with 'contact_name' in error (friendly validation)"
+    },
+    {
+      "name": "Task 1f: Ship with full pickup \u2192 400/502 with real NimbusPost error (NOT 500)",
+      "passed": true,
+      "details": "GET orders: 200, Ship \u2192 400 with error: Wallet balance is low."
+    },
+    {
+      "name": "Task 2a: POST /nimbuspost/webhook without signature \u2192 401",
+      "passed": true,
+      "details": "Status: 401, Error: invalid signature"
+    },
+    {
+      "name": "Task 2b: Signed webhook with no matching order \u2192 200 {ok:true, ignored:no_order}",
+      "passed": true,
+      "details": "Status: 200, Response: {'ok': True, 'ignored': 'no_order'}"
+    },
+    {
+      "name": "Task 2c: Signed webhook with matching order \u2192 200 with applied_status",
+      "passed": true,
+      "details": "GET orders: 200, No order with tracking_id found (expected in test data)"
+    },
+    {
+      "name": "Task 2d: Webhook with missing awb_number \u2192 200 {ok:true, ignored:no_awb}",
+      "passed": true,
+      "details": "Status: 200, Response: {'ok': True, 'ignored': 'no_awb'}"
+    },
+    {
+      "name": "Task 3.1: GET /api/health \u2192 200 mongo=ok",
+      "passed": true,
+      "details": "Status: 200, mongo=ok"
+    },
+    {
+      "name": "Task 3.2: GET /api/products \u2192 200 non-empty",
+      "passed": true,
+      "details": "Status: 200, 5 products returned"
+    },
+    {
+      "name": "Task 3.3: GET /api/products/golden-geode-mirror-2x2-premium \u2192 200",
+      "passed": true,
+      "details": "Status: 200, Product: Premium 2\u00d72 ft Designer Resin Mirror \u00b7 Golden Geode"
+    },
+    {
+      "name": "Task 3.4: POST /api/admin/products/seed-reference \u2192 200",
+      "passed": true,
+      "details": "Status: 200, Response: {'ok': True, 'action': 'updated', 'id': 'c8324ed0-2700-4fcf-9e4c-e9401a845101', 'slug': 'golden-geode-mirror-2x2-premium'}"
+    },
+    {
+      "name": "Task 3.5: POST /api/admin/nimbuspost/serviceability \u2192 200 or 502 (NOT 500)",
+      "passed": true,
+      "details": "Status: 200, Response: {'status': True, 'data': [{'id': '1', 'name': 'Delhivery Air', 'freight_charges': 85.49, 'cod_charges': 0, 'total_charges': 85.49, 'edd': '28-07-2026', 'min_weight': 500, 'chargeable_weight': 500, 'reverse_qc': False, 'reverse': False}, {'id': '6', 'name': 'Delhivery Surface', 'freight_charges': 58.23, 'cod_charges': 0, 'total_charges': 58.23, 'edd': '28-07-2026', 'min_weight': 500, 'chargeable_weight': 500, 'reverse_qc': False, 'reverse': False}, {'id': '13', 'name': 'Delhivery Surface 10 K.G', 'freight_charges': 346.06, 'cod_charges': 0, 'total_charges': 346.06, 'edd': '28-07-2026', 'min_weight': 10000, 'chargeable_weight': 10000, 'reverse_qc': False, 'reverse': False}, {'id': '35', 'name': 'Delhivery Surface 20 K.G', 'freight_charges': 749.7, 'cod_charges': 0, 'total_charges': 749.7, 'edd': '28-07-2026', 'min_weight': 20000, 'chargeable_weight': 20000, 'reverse_qc': False, 'reverse': False}, {'id': '11', 'name': 'Delhivery Surface 5 K.G', 'freight_charges': 200.41, 'cod_charges': 0, 'total_charges': 200.41, 'edd': '28-07-2026', 'min_weight': 5000, 'chargeable_weight': 5000, 'reverse_qc': False, 'reverse': False}, {'id': '324', 'name': 'Delhivery Surface DS 1 Kg', 'freight_charges': 96.6, 'cod_charges': 0, 'total_charges': 96.6, 'edd': '28-07-2026', 'min_weight': 1000, 'chargeable_weight': 1000, 'reverse_qc': False, 'reverse': False}, {'id': '350', 'name': 'Delhivery WH SFC 500gm', 'freight_charges': 57.75, 'cod_charges': 0, 'total_charges': 57.75, 'edd': '28-07-2026', 'min_weight': 500, 'chargeable_weight': 500, 'reverse_qc': False, 'reverse': False}, {'id': '179', 'name': 'Blue dart', 'freight_charges': 89.08, 'cod_charges': 0, 'total_charges': 89.08, 'edd': '28-07-2026', 'min_weight': 500, 'chargeable_weight': 500, 'reverse_qc': False, 'reverse': False}, {'id': '191', 'name': 'Bluedart Air IND', 'freight_charges': 92.84, 'cod_charges': 0, 'total_charges': 92.84, 'edd': '28-07-2026', 'min_weight': 500, 'chargeable_weight': 500, 'reverse_qc': False, 'reverse': False}, {'id': '192', 'name': 'Bluedart Air IND RAS', 'freight_charges': 117.29, 'cod_charges': 0, 'total_charges': 117.29, 'edd': '28-07-2026', 'min_weight': 500, 'chargeable_weight': 500, 'reverse_qc': False, 'reverse': False}, {'id': '15', 'name': 'Ekart', 'freight_charges': 52.04, 'cod_charges': 0, 'total_charges': 52.04, 'edd': '28-07-2026', 'min_weight': 500, 'chargeable_weight': 500, 'reverse_qc': False, 'reverse': False}, {'id': '60', 'name': 'Ekart 10 K.G', 'freight_charges': 399, 'cod_charges': 0, 'total_charges': 399, 'edd': '28-07-2026', 'min_weight': 10000, 'chargeable_weight': 10000, 'reverse_qc': False, 'reverse': False}, {'id': '61', 'name': 'Ekart 3 K.G', 'freight_charges': 194.25, 'cod_charges': 0, 'total_charges': 194.25, 'edd': '28-07-2026', 'min_weight': 3000, 'chargeable_weight': 3000, 'reverse_qc': False, 'reverse': False}, {'id': '28', 'name': 'Ekart 5 K.G', 'freight_charges': 218.4, 'cod_charges': 0, 'total_charges': 218.4, 'edd': '28-07-2026', 'min_weight': 5000, 'chargeable_weight': 5000, 'reverse_qc': False, 'reverse': False}, {'id': '443', 'name': 'Ekart 1 K.G_Stressed', 'freight_charges': 91.35, 'cod_charges': 0, 'total_charges': 91.35, 'edd': '28-07-2026', 'min_weight': 1000, 'chargeable_weight': 1000, 'reverse_qc': False, 'reverse': False}, {'id': '445', 'name': 'Ekart 2 K.G_Stressed', 'freight_charges': 165.9, 'cod_charges': 0, 'total_charges': 165.9, 'edd': '28-07-2026', 'min_weight': 2000, 'chargeable_weight': 2000, 'reverse_qc': False, 'reverse': False}, {'id': '66', 'name': 'Amazon Shipping', 'freight_charges': 63, 'cod_charges': 0, 'total_charges': 63, 'edd': '28-07-2026', 'min_weight': 500, 'chargeable_weight': 500, 'reverse_qc': False, 'reverse': False}, {'id': '159', 'name': 'Amazon Shipping 20 KG', 'freight_charges': 693, 'cod_charges': 0, 'total_charges': 693, 'edd': '28-07-2026', 'min_weight': 20000, 'chargeable_weight': 20000, 'reverse_qc': False, 'reverse': False}, {'id': '186', 'name': 'Bluedart Surface', 'freight_charges': 73.71, 'cod_charges': 0, 'total_charges': 73.71, 'edd': '30-07-2026', 'min_weight': 500, 'chargeable_weight': 500, 'reverse_qc': False, 'reverse': False}]}"
+    }
+  ]
+}

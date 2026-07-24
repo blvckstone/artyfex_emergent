@@ -24,6 +24,7 @@ warehouse_name at runtime so the owner can set it from Admin UI.
 
 from __future__ import annotations
 import os
+import re
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
@@ -101,8 +102,25 @@ def _pick(*vals: Any) -> str:
     return ""
 
 
-def _build_ship_payload(order: dict, warehouse_name: str) -> dict:
-    """Map an ArtyFex order document to NimbusPost's create-shipment schema."""
+def _to_10digit_phone(raw: Any) -> str:
+    """NimbusPost expects a 10-digit Indian phone. Strip +91 / 0091 / 91 prefix
+    and any non-digit characters (spaces, dashes, brackets, dots)."""
+    s = re.sub(r"\D", "", str(raw or ""))
+    # Common Indian prefixes → drop
+    if s.startswith("0091") and len(s) == 14:
+        s = s[4:]
+    elif s.startswith("91") and len(s) == 12:
+        s = s[2:]
+    elif s.startswith("0") and len(s) == 11:
+        s = s[1:]
+    return s[-10:] if len(s) >= 10 else s
+
+
+def _build_ship_payload(order: dict, pickup: dict) -> dict:
+    """Map an ArtyFex order document to NimbusPost's create-shipment schema.
+    `pickup` is a dict with keys: warehouse_name, contact_name, address,
+    city, state, pincode, phone (all optional but NimbusPost may reject if
+    contact_name/address/city/state/pincode/phone are blank)."""
     cust = order.get("customer", {}) or {}
     items = order.get("items", []) or []
 
@@ -134,6 +152,8 @@ def _build_ship_payload(order: dict, warehouse_name: str) -> dict:
     if cust.get("landmark"):
         address_line = f"{address_line}, Near {cust.get('landmark')}"
 
+    consignee_phone = _to_10digit_phone(cust.get("phone"))
+
     return {
         "order_number": order.get("order_number") or order.get("id"),
         "payment_type": "cod" if is_cod else "prepaid",
@@ -148,19 +168,43 @@ def _build_ship_payload(order: dict, warehouse_name: str) -> dict:
             "city": cust.get("city") or "-",
             "state": cust.get("state") or "-",
             "pincode": str(cust.get("pincode") or "").strip(),
-            "phone": str(cust.get("phone") or "").strip(),
+            "phone": consignee_phone,
         },
-        "pickup": {"warehouse_name": warehouse_name},
+        # Batch 9 — NimbusPost validation demands the FULL pickup block, not just
+        # the warehouse_name. Warehouse name still sent so their dashboard can
+        # link the shipment to your pre-registered warehouse for wallet accounting.
+        "pickup": {
+            "warehouse_name": (pickup.get("warehouse_name") or "").strip(),
+            "name": (pickup.get("contact_name") or "").strip(),
+            "address": (pickup.get("address") or "").strip(),
+            "city": (pickup.get("city") or "").strip(),
+            "state": (pickup.get("state") or "").strip(),
+            "pincode": str(pickup.get("pincode") or "").strip(),
+            "phone": _to_10digit_phone(pickup.get("phone")),
+        },
         "order_items": ns_items or [{"name": "Artwork", "qty": 1, "price": int(order.get("total_inr") or 0), "sku": "ARF-DEFAULT"}],
     }
 
 
-async def create_shipment(order: dict, warehouse_name: str) -> Dict[str, Any]:
+async def create_shipment(order: dict, pickup: dict) -> Dict[str, Any]:
     if not is_configured():
         return _err("NimbusPost not configured — set NIMBUSPOST_EMAIL/PASSWORD in Northflank env")
-    if not (warehouse_name or "").strip():
+    warehouse_name = (pickup or {}).get("warehouse_name") or ""
+    if not warehouse_name.strip():
         return _err("NimbusPost warehouse not set — configure it in Admin → Shipping → NimbusPost")
-    payload = _build_ship_payload(order, warehouse_name.strip())
+    # Validate pickup contact block up-front so the operator gets a friendly
+    # error INSTEAD of a wall of NimbusPost validation messages.
+    missing = [k for k, v in {
+        "contact_name": pickup.get("contact_name"),
+        "address": pickup.get("address"),
+        "city": pickup.get("city"),
+        "state": pickup.get("state"),
+        "pincode": pickup.get("pincode"),
+        "phone": pickup.get("phone"),
+    }.items() if not (str(v or "").strip())]
+    if missing:
+        return _err(f"NimbusPost pickup contact incomplete — fill in {', '.join(missing)} in Admin → Shipping → NimbusPost", status=400)
+    payload = _build_ship_payload(order, pickup)
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             r = await client.post(f"{BASE_URL}/shipments", json=payload, headers=await _headers())
