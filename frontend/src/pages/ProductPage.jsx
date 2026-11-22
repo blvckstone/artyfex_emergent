@@ -3,12 +3,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { ShoppingBag, Check, Heart, Share2, Copy, Instagram, MessageCircle, ArrowLeft, Plus, Minus, Star } from "lucide-react";
+import { ShoppingBag, Check, Heart, Share2, Copy, Instagram, MessageCircle, ArrowLeft, Plus, Minus, Star, ArrowUpRight } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ProductGallery from "@/components/ProductGallery";
 import SEO from "@/components/SEO";
 import { api } from "@/lib/api";
+import { amazonUrlFor } from "@/lib/amazon";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useAuth } from "@/context/AuthContext";
@@ -63,6 +64,7 @@ export default function ProductPage() {
   const effectiveMrp = activeVariant?.mrp_inr ?? product?.mrp_inr ?? 0;
   const effectiveStock = activeVariant?.stock ?? product?.stock ?? 0;
   const effectiveSize = activeVariant?.size || product?.size || "";
+  const amazonHref = amazonUrlFor(product);
 
   // Group variants by "colour" (colour = variant.hex + base label prefix).
   // A variant with size means the product supports multi-size — we then split the picker into two axes.
@@ -543,6 +545,18 @@ export default function ProductPage() {
                 </AnimatePresence>
               </button>
             </div>
+
+            {amazonHref && (
+              <a
+                href={amazonHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="product-buy-amazon"
+                className="mt-4 w-full inline-flex items-center justify-center gap-3 border border-gold/50 text-gold px-7 py-4 text-xs uppercase tracking-luxury hover:bg-gold hover:text-ink-950 transition-colors"
+              >
+                Buy on Amazon <ArrowUpRight className="w-4 h-4" />
+              </a>
+            )}
 
             {/* Secondary actions */}
             <div className="mt-6 flex flex-wrap gap-3">

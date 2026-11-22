@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Shield, CheckCircle2, Loader2, XCircle, AlertTriangle, RefreshCw, Mail, Truck, ArrowUpRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { api } from "@/lib/api";
+import { amazonUrlFor } from "@/lib/amazon";
 import { IDS } from "@/constants/testIds";
 
 const formatINR = (n) => `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -348,9 +349,9 @@ export const CheckoutDialog = ({ open, onClose }) => {
                           <div className="text-[10px] uppercase tracking-luxury text-cream/40">
                             {it.variant_label}{it.variant_size ? ` · ${it.variant_size}` : ""} · × {it.quantity}
                           </div>
-                          {it.amazon_url && (
+                          {(it.amazon_url || amazonUrlFor({ slug: it.product_slug })) && (
                             <a
-                              href={it.amazon_url}
+                              href={it.amazon_url || amazonUrlFor({ slug: it.product_slug })}
                               target="_blank"
                               rel="noopener noreferrer"
                               data-testid={`checkout-buy-amazon-${it.product_slug}`}
