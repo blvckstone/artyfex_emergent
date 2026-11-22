@@ -5,6 +5,7 @@
   "installCommand": "yarn install --frozen-lockfile",
   "outputDirectory": "build",
   "rewrites": [
+    { "source": "/product/:slug", "destination": "/api/product-share?slug=:slug" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

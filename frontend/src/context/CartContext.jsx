@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useRef } from "react";
+import { amazonUrlFor } from "@/lib/amazon";
 import { api } from "@/lib/api";
 
 const CartContext = createContext(null);
@@ -88,6 +89,7 @@ export const CartProvider = ({ children }) => {
           product_id: product.id,
           product_slug: product.slug,
           product_name: product.name,
+          amazon_url: amazonUrlFor(product),
           variant_key: variant.key,
           variant_label: variant.label,
           variant_size: variantSize,

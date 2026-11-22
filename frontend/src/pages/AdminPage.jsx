@@ -125,7 +125,7 @@ function useAuthedApi(token) {
   }, [token]);
 }
 
-const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: [{ key: "default", label: "Default", hex: "#333333", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null, sku: "", weight_grams: null, length_cm: null, width_cm: null, height_cm: null }], has_variations: false, stock: 5, is_hero: false, category: "", hsn_code: "", sku: "", weight_grams: "", length_cm: "", width_cm: "", height_cm: "", tags: "", variation_options: [], a_plus_content: [] };
+const empty = { slug: "", name: "", tagline: "", description: "", price_inr: 0, mrp_inr: 0, size: "", craft_hours: 24, materials: "", hero_image: "", gallery: "", variants: [{ key: "default", label: "Default", hex: "#333333", image: "", size: "", stock: 5, price_inr: null, mrp_inr: null, sku: "", weight_grams: null, length_cm: null, width_cm: null, height_cm: null }], has_variations: false, stock: 5, is_hero: false, category: "", hsn_code: "", sku: "", weight_grams: "", length_cm: "", width_cm: "", height_cm: "", tags: "", variation_options: [], a_plus_content: [], amazon_url: "" };
 
 export default function AdminPage() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
@@ -288,6 +288,8 @@ export default function AdminPage() {
         width_cm: numOrNull(form.width_cm),
         height_cm: numOrNull(form.height_cm),
         tags: parseTags(form.tags),
+        // Nov 2026 — Amazon listing for this same piece (powers "Buy on Amazon")
+        amazon_url: (form.amazon_url || "").toString().trim() || null,
         // Task 3 — Extra variation options (Shape/Frame/Thickness/Gift Wrap/Care Kit/Mount)
         variation_options: (Array.isArray(form.variation_options) ? form.variation_options : [])
           .filter((o) => (o.key || o.label) && Array.isArray(o.values) && o.values.length > 0)
@@ -1455,6 +1457,15 @@ function ProductEditor({ initial, categories = [], onCancel, onSave, saving }) {
               testid="pe-hero-image"
             />
             <input value={f.hero_image} onChange={upd("hero_image")} className={`${inp} mt-2 font-mono text-xs`} required data-testid="pe-hero-image-url" placeholder="or paste Cloudinary/CDN URL" />
+          </Fld>
+          <Fld label="Amazon listing link" hint="If this same piece is on Amazon, paste the listing link (e.g. https://www.amazon.in/dp/B0XXXXXXXX). It adds a 'Buy on Amazon' button at checkout.">
+            <input
+              value={f.amazon_url || ""}
+              onChange={upd("amazon_url")}
+              className={`${inp} font-mono text-xs`}
+              placeholder="https://www.amazon.in/dp/..."
+              data-testid="pe-amazon-url"
+            />
           </Fld>
           <Fld label="Gallery images" hint="Extra photos shown in the gallery under the main image.">
             <CloudinaryUpload

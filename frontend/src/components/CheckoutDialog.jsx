@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Shield, CheckCircle2, Loader2, XCircle, AlertTriangle, RefreshCw, Mail, Truck } from "lucide-react";
+import { X, Shield, CheckCircle2, Loader2, XCircle, AlertTriangle, RefreshCw, Mail, Truck, ArrowUpRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { api } from "@/lib/api";
 import { IDS } from "@/constants/testIds";
@@ -348,6 +348,17 @@ export const CheckoutDialog = ({ open, onClose }) => {
                           <div className="text-[10px] uppercase tracking-luxury text-cream/40">
                             {it.variant_label}{it.variant_size ? ` · ${it.variant_size}` : ""} · × {it.quantity}
                           </div>
+                          {it.amazon_url && (
+                            <a
+                              href={it.amazon_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              data-testid={`checkout-buy-amazon-${it.product_slug}`}
+                              className="mt-1.5 inline-flex items-center gap-1 border border-gold/40 px-2 py-1 text-[9px] uppercase tracking-luxury text-gold hover:bg-gold hover:text-ink-950 transition-colors"
+                            >
+                              Buy on Amazon <ArrowUpRight className="w-2.5 h-2.5" />
+                            </a>
+                          )}
                         </div>
                         <div className="text-sm text-cream">{formatINR(it.price_inr * it.quantity)}</div>
                       </div>

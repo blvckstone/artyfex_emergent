@@ -491,6 +491,9 @@ class Product(BaseModel):
     # layout values: "image_left" | "image_right" | "centered" | "full_bleed"
     #              | "feature_grid" | "quote"  (default: "image_left")
     a_plus_content: List[Dict[str, Any]] = Field(default_factory=list)
+    # Nov 2026 — the Amazon listing for this same piece, so the storefront can
+    # send a buyer straight to Amazon when they prefer to buy there.
+    amazon_url: Optional[str] = None
     created_at: str = Field(default_factory=now_iso)
 
 class ProductIn(BaseModel):
@@ -509,6 +512,9 @@ class ProductIn(BaseModel):
     tags: List[str] = Field(default_factory=list)
     variation_options: List[VariationOption] = Field(default_factory=list)
     a_plus_content: List[Dict[str, Any]] = Field(default_factory=list)
+    # Nov 2026 — the Amazon listing for this same piece, so the storefront can
+    # send a buyer straight to Amazon when they prefer to buy there.
+    amazon_url: Optional[str] = None
 
 class OrderCustomer(BaseModel):
     model_config = ConfigDict(extra="ignore")
