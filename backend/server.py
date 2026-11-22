@@ -1489,7 +1489,7 @@ async def create_order(payload: OrderIn):
         it.line_total_inr = effective_unit_price * int(it.quantity or 1)
         snapshotted_items.append(it)
         # Track low-stock candidates for post-insert notification (Task 6)
-        remaining = int((prod or {}).get("stock_count") or 0) - int(it.quantity or 1)
+        remaining = int((prod or {}).get("stock") or 0) - int(it.quantity or 1)
         if remaining <= 3 and (prod or {}).get("name"):
             _low_stock_events.append(((prod or {}).get("name"), max(remaining, 0)))
     order.items = snapshotted_items
@@ -1510,23 +1510,54 @@ async def create_order(payload: OrderIn):
         order.gst_treatment = "exclusive"
     except Exception as e:
         logging.warning(f"GST computation failed on order create: {e}")
+    # --- Nov 2026: money is computed here, never taken from the browser ----------
+    # Until now the total came straight from the checkout page (subtotal, discount,
+    # shipping), so a tampered cart could buy a ₹24,999 mirror for ₹1. Line prices
+    # above are snapshotted from the database, so the invoice is rebuilt from those
+    # and we only ever charge what the catalogue says. Shipping is never allowed to
+    # come out higher than the figure the customer was shown.
+    server_subtotal = sum(int(i.line_total_inr or 0) for i in order.items)
+    if server_subtotal <= 0:
+        # Product row missing (deleted or stale cart) — keep the old behaviour
+        # rather than charging ₹0, and leave a trail for the owner.
+        server_subtotal = int(payload.subtotal_inr or 0)
+        logging.warning(f"Order {order.order_number}: no catalogue prices found, falling back to client subtotal")
+    server_discount = 0
+    if order.coupon_code:
+        coupon_doc = await db.coupons.find_one({"code": order.coupon_code}, {"_id": 0})
+        if coupon_doc:
+            server_discount = _coupon_discount_inr(coupon_doc, server_subtotal)
+    try:
+        ship_settings = await load_site_setting("shipping", DEFAULT_SHIPPING)
+        calc_shipping_inr = int(
+            calc_shipping(
+                ship_settings,
+                server_subtotal,
+                order.customer.state if getattr(order.customer, "state", None) else None,
+                getattr(order.customer, "pincode", None),
+            ).get("shipping_inr")
+            or 0
+        )
+        server_shipping = min(int(payload.shipping_inr or 0), calc_shipping_inr)
+    except Exception as _e:
+        logging.warning(f"Shipping recompute failed, using client value: {_e}")
+        server_shipping = int(payload.shipping_inr or 0)
+    order.subtotal_inr = server_subtotal
+    order.discount_inr = server_discount
+    order.shipping_inr = server_shipping
+    order.total_inr = max(
+        0,
+        server_subtotal - server_discount + server_shipping + int(order.gst_total_inr or 0),
+    )
+    if abs(order.total_inr - int(payload.total_inr or 0)) > 1:
+        logging.warning(
+            f"Order {order.order_number} total corrected: client sent ₹{payload.total_inr}, server says ₹{order.total_inr}"
+        )
+
     if payload.payment_method == "razorpay":
         if not rzp_client:
             raise HTTPException(status_code=500, detail="Razorpay not configured")
-        # --- Phase A (Jul 2025): recompute total server-side incl. GST (exclusive) ---
-        # total = subtotal - discount + shipping + gst_total (GST is added on top)
-        server_total = max(
-            0,
-            int(payload.subtotal_inr)
-            - int(payload.discount_inr or 0)
-            + int(payload.shipping_inr)
-            + int(order.gst_total_inr or 0),
-        )
-        if abs(server_total - int(payload.total_inr)) > 1:
-            logging.warning(
-                f"Order total mismatch (client={payload.total_inr}, server={server_total}). Trusting server."
-            )
-            order.total_inr = server_total
+        # Total was rebuilt from catalogue prices above — this is the amount charged.
         rzp_order = rzp_client.order.create({
             "amount": int(order.total_inr) * 100,
             "currency": "INR",
@@ -1536,15 +1567,7 @@ async def create_order(payload: OrderIn):
         order.razorpay_order_id = rzp_order["id"]
     else:
         order.status = "confirmed"
-        # For COD orders, also recompute total incl. GST
-        server_total = max(
-            0,
-            int(payload.subtotal_inr)
-            - int(payload.discount_inr or 0)
-            + int(payload.shipping_inr)
-            + int(order.gst_total_inr or 0),
-        )
-        order.total_inr = server_total
+        # COD: total is the server-computed figure above.
     await db.orders.insert_one(order.model_dump())
     # Fire "order placed" email (fire-and-forget)
     try:
@@ -1612,7 +1635,7 @@ async def verify_order(payload: RzpVerify):
             try:
                 await db.products.update_one(
                     {"id": it.get("product_id")},
-                    {"$inc": {"stock_count": -int(it.get("quantity", 1))}},
+                    {"$inc": {"stock": -int(it.get("quantity", 1))}},
                 )
             except Exception as _e:
                 logging.warning(f"Stock decrement failed for {it}: {_e}")
@@ -1667,7 +1690,7 @@ async def razorpay_webhook(request: Request):
                 try:
                     await db.products.update_one(
                         {"id": it.get("product_id")},
-                        {"$inc": {"stock_count": -int(it.get("quantity", 1))}},
+                        {"$inc": {"stock": -int(it.get("quantity", 1))}},
                     )
                 except Exception as _e:
                     logging.warning(f"Webhook stock decrement failed for {it}: {_e}")
@@ -3655,7 +3678,7 @@ async def analytics_overview(admin=Depends(require_permission("view_analytics"))
             "revenue_inr": product_revenue.get(pid, 0),
             "avg_rating": round(sum(r_list) / len(r_list), 2) if r_list else 0,
             "review_count": len(r_list),
-            "stock_count": p.get("stock_count", 0),
+            "stock_count": p.get("stock", 0),
         })
     top_products.sort(key=lambda x: (x["orders"], x["avg_rating"], x["review_count"]), reverse=True)
 
@@ -3716,12 +3739,12 @@ async def analytics_alerts(admin=Depends(require_permission("view_analytics"))):
     day_2_ago = now - timedelta(days=2)
 
     low_stock = []
-    async for p in db.products.find({"stock_count": {"$lte": 3}}, {"_id": 0, "id": 1, "name": 1, "slug": 1, "stock_count": 1, "images": 1}):
+    async for p in db.products.find({"stock": {"$lte": 3}}, {"_id": 0, "id": 1, "name": 1, "slug": 1, "stock": 1, "images": 1}):
         low_stock.append({
             "id": p.get("id"),
             "name": p.get("name"),
             "slug": p.get("slug"),
-            "stock_count": p.get("stock_count", 0),
+            "stock_count": p.get("stock", 0),
             "image": (p.get("images") or [None])[0],
         })
 
@@ -4031,6 +4054,16 @@ def _cloudinary_public_id_from_url(url: str) -> Optional[str]:
 # DELETED, we compute the set of Cloudinary URLs present BEFORE vs AFTER and
 # fire-and-forget destroy() the ones removed. Runs off the request path via
 # BackgroundTasks so callers stay fast.
+# ---------------------------------------------------------------------------
+# Nov 2026 — DELETING IS NOW OFF BY DEFAULT.
+# This cleanup compared the saved document with whatever the admin form
+# submitted. Any save with an incomplete payload (a variant photo the form did
+# not resend, a homepage PATCH from a stale tab, a product deleted by mistake)
+# permanently destroyed live photos at the image host, while the product kept
+# pointing at them — the store then showed blank images with nothing to restore
+# from. Photos are cheap; a blank shop is not. Set MEDIA_ALLOW_DESTROY=1 to
+# re-enable automatic deletion.
+MEDIA_ALLOW_DESTROY = (os.environ.get("MEDIA_ALLOW_DESTROY", "") or "").strip().lower() in ("1", "true", "yes")
 
 def _extract_cloudinary_urls(node) -> set[str]:
     """Recursively walk a dict/list and return every Cloudinary secure_url found."""
@@ -4066,7 +4099,15 @@ def _destroy_cloudinary_url(url: str) -> None:
 
 
 def _destroy_url_diff(old_urls: set[str], new_urls: set[str]) -> None:
-    """Delete the URLs that were in `old_urls` but not in `new_urls`."""
+    """Delete the URLs that were in `old_urls` but not in `new_urls`.
+
+    Disabled by default (see MEDIA_ALLOW_DESTROY) — deleting a still-referenced
+    photo is how products lost their images. Kept for manual cleanup only.
+    """
+    if not MEDIA_ALLOW_DESTROY:
+        if old_urls - new_urls:
+            logging.info(f"Media retention: kept {len(old_urls - new_urls)} photo(s) that a save removed")
+        return
     for url in (old_urls - new_urls):
         _destroy_cloudinary_url(url)
 # ---------------------------------------------------------------------------
@@ -4082,11 +4123,229 @@ async def cloudinary_destroy(url: str, admin=Depends(get_current_admin)):
     public_id = _cloudinary_public_id_from_url(url)
     if not public_id:
         raise HTTPException(status_code=400, detail="Not a Cloudinary URL")
+    if not MEDIA_ALLOW_DESTROY:
+        # Removing a photo from a form must not destroy it: the same file can be
+        # referenced by another product, a variant, or the homepage — and one
+        # accidental click used to make it unrecoverable.
+        return {"public_id": public_id, "result": "skipped", "reason": "media retention is on"}
     try:
         result = cloudinary.uploader.destroy(public_id, invalidate=True)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Cloudinary destroy failed: {e}")
     return {"public_id": public_id, "result": result.get("result", "unknown")}
+
+
+# ==== PHOTO ARCHIVE · permanent copy of every uploaded photo ====
+# Why this exists: the store used to point straight at image-host URLs. When a
+# file disappeared from the image host (Cloudinary), the product silently went
+# blank and there was nothing left to restore from. Every admin upload is now
+# copied here as well, so /api/media/<id> keeps working no matter what happens
+# to the original asset.
+MEDIA_MAX_BYTES = 12 * 1024 * 1024
+MEDIA_MAX_EDGE_PX = 1600
+
+
+class MediaArchiveIn(BaseModel):
+    url: str
+
+
+def _media_public_url(request: Request, media_id: str) -> str:
+    return f"{str(request.base_url).rstrip('/')}/api/media/{media_id}"
+
+
+def _compress_image(raw: bytes, content_type: str) -> tuple[bytes, str]:
+    """Downscale to 1600 px and re-encode as WebP so the archive stays small.
+    Falls back to the original bytes if Pillow is missing or decoding fails."""
+    try:
+        from PIL import Image, ImageOps  # lazy import: never break boot on a missing dep
+    except Exception:
+        return raw, content_type
+    try:
+        img = Image.open(io.BytesIO(raw))
+        img = ImageOps.exif_transpose(img)
+        if img.mode not in ("RGB", "RGBA"):
+            img = img.convert("RGBA" if "A" in img.mode else "RGB")
+        img.thumbnail((MEDIA_MAX_EDGE_PX, MEDIA_MAX_EDGE_PX))
+        buf = io.BytesIO()
+        img.save(buf, format="WEBP", quality=82, method=4)
+        out = buf.getvalue()
+        if not out:
+            return raw, content_type
+        return out, "image/webp"
+    except Exception as e:
+        logging.warning(f"Image compression failed, storing original bytes: {e}")
+        return raw, content_type
+
+
+@api_router.post("/admin/media/archive")
+async def media_archive(payload: MediaArchiveIn, request: Request, admin=Depends(get_current_admin)):
+    """Copy an already-uploaded image into our own storage and return a stable URL."""
+    url = (payload.url or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="Image URL must start with http:// or https://")
+    existing = await db.media.find_one({"source_url": url}, {"_id": 0})
+    if existing:
+        return {"url": _media_public_url(request, existing["id"]), "bytes": existing.get("size", 0), "cached": True}
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as http:
+            resp = await http.get(url)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not download image: {e}")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=400, detail=f"Could not download image (HTTP {resp.status_code})")
+    content_type = (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="That URL is not an image")
+    raw = resp.content
+    if len(raw) > MEDIA_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Image is larger than 12 MB")
+    data, stored_type = _compress_image(raw, content_type)
+    media_id = uuid.uuid4().hex
+    from bson.binary import Binary  # lazy: keeps boot independent of motor details
+    await db.media.insert_one({
+        "id": media_id,
+        "source_url": url,
+        "content_type": stored_type,
+        "size": len(data),
+        "bytes": Binary(data),
+        "created_at": now_iso(),
+    })
+    return {"url": _media_public_url(request, media_id), "bytes": len(data), "cached": False}
+
+
+@api_router.get("/media/{media_id}")
+async def media_serve(media_id: str):
+    """Serve an archived photo. Immutable + long cache, so browsers keep it."""
+    if not re.fullmatch(r"[0-9a-f]{32}", media_id):
+        raise HTTPException(status_code=404, detail="Not found")
+    doc = await db.media.find_one({"id": media_id})
+    if not doc or not doc.get("bytes"):
+        raise HTTPException(status_code=404, detail="Not found")
+    return Response(
+        content=bytes(doc["bytes"]),
+        media_type=doc.get("content_type") or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable", "ETag": f'"{media_id}"'},
+    )
+
+
+def _looks_like_photo(url) -> bool:
+    if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+        return False
+    low = url.lower()
+    return (
+        "res.cloudinary.com" in low
+        or "/api/media/" in low
+        or any(low.split("?")[0].endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"))
+    )
+
+
+def _collect_homepage_photos(node, where: str, out: list, path: str = "homepage") -> None:
+    """Walk the CMS homepage JSON and pick up every photo, whatever its layout."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            _collect_homepage_photos(v, where, out, f"{path}.{k}")
+    elif isinstance(node, (list, tuple)):
+        for i, v in enumerate(node):
+            _collect_homepage_photos(v, where, out, f"{path}[{i}]")
+    elif _looks_like_photo(node):
+        out.append({"where": where, "field": path.split(".")[-1].replace("_", " "), "url": node})
+
+
+async def _collect_image_urls() -> list:
+    """Every photo the storefront currently depends on, tagged with where it lives."""
+    out = []
+    async for p in db.products.find({}, {"_id": 0}):
+        label = f"product: {p.get('name') or p.get('slug')}"
+        if p.get("hero_image"):
+            out.append({"where": label, "field": "main photo", "url": p["hero_image"]})
+        for i, g in enumerate(p.get("gallery") or []):
+            if g:
+                out.append({"where": label, "field": f"gallery #{i + 1}", "url": g})
+        for v in p.get("variants") or []:
+            if v.get("image"):
+                out.append({"where": label, "field": f"variant '{v.get('label') or v.get('key')}'", "url": v["image"]})
+        for opt in p.get("variation_options") or []:
+            for val in opt.get("values") or []:
+                if val.get("image"):
+                    out.append({"where": label, "field": f"option '{val.get('label') or val.get('key')}'", "url": val["image"]})
+        for i, blk in enumerate(p.get("a_plus_content") or []):
+            for key in ("image", "secondary_image"):
+                if blk.get(key):
+                    out.append({"where": label, "field": f"A+ block #{i + 1} {key.replace('_', ' ')}", "url": blk[key]})
+    home = await load_site_setting("homepage", DEFAULT_HOMEPAGE)
+    _collect_homepage_photos(home, "homepage", out)
+    return out
+
+
+async def _probe_image_urls(entries: list) -> list:
+    """HEAD-probe each URL (ranged GET when HEAD is refused) so we know what is really alive."""
+    sem = asyncio.Semaphore(10)
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as http:
+        async def probe(entry: dict) -> dict:
+            async with sem:
+                status = 0
+                try:
+                    r = await http.head(entry["url"])
+                    status = r.status_code
+                    if status in (403, 405):
+                        r = await http.get(entry["url"], headers={"Range": "bytes=0-0"})
+                        status = r.status_code
+                except Exception:
+                    status = 0
+                return {**entry, "status": status, "ok": 200 <= status < 300}
+        return list(await asyncio.gather(*(probe(e) for e in entries)))
+
+
+@api_router.get("/admin/media/audit")
+async def media_audit(admin=Depends(get_current_admin)):
+    """List every storefront photo that no longer loads."""
+    probed = await _probe_image_urls(await _collect_image_urls())
+    broken = [p for p in probed if not p["ok"]]
+    return {"checked": len(probed), "ok": len(probed) - len(broken), "broken": broken}
+
+
+IMAGE_AUDIT_INTERVAL_HOURS = 20
+
+
+async def image_watchdog_loop():
+    """About once a day: check every storefront photo and email the owner if one dies."""
+    while True:
+        try:
+            doc = await db.app_settings.find_one({"key": "image_audit"}, {"_id": 0})
+            last_run = ((doc or {}).get("value") or {}).get("last_run")
+            due = True
+            if last_run:
+                try:
+                    age = (datetime.now(timezone.utc) - datetime.fromisoformat(last_run)).total_seconds()
+                    due = age >= IMAGE_AUDIT_INTERVAL_HOURS * 3600
+                except Exception:
+                    due = True
+            if due:
+                probed = await _probe_image_urls(await _collect_image_urls())
+                broken = [p for p in probed if not p["ok"]]
+                await db.app_settings.update_one(
+                    {"key": "image_audit"},
+                    {"$set": {"key": "image_audit", "value": {"last_run": now_iso(), "broken": len(broken)}}},
+                    upsert=True,
+                )
+                if broken and RESEND_API_KEY and ADMIN_EMAIL:
+                    rows = "".join(
+                        f"<li><b>{b['where']}</b> — {b['field']}<br>"
+                        f"<span style='color:#888;font-size:12px'>{b['url']}</span></li>"
+                        for b in broken[:20]
+                    )
+                    await send_email(
+                        ADMIN_EMAIL,
+                        f"[ArtyFex] {len(broken)} storefront photo(s) are missing",
+                        "<div style='font-family:sans-serif;line-height:1.6'>"
+                        f"<p>{len(broken)} of {len(probed)} photos on the store could not be loaded.</p>"
+                        f"<ul>{rows}</ul>"
+                        "<p>Open Admin &rarr; Products (or Homepage) and re-upload the affected photos.</p></div>",
+                    )
+                logging.info(f"Image watchdog: {len(broken)} broken of {len(probed)} photos")
+        except Exception as e:
+            logging.warning(f"Image watchdog failed: {e}")
+        await asyncio.sleep(6 * 3600)
 
 
 # --- Admin whitelist (Google login access) ---
@@ -4629,6 +4888,8 @@ async def on_startup():
         logging.info("Seeded default shipping settings")
     # Phase B5 — seed default legal / policy pages if the collection is empty
     await _seed_default_pages()
+    # Background photo watchdog — emails the owner if a storefront photo stops loading.
+    asyncio.create_task(image_watchdog_loop())
 
 
 @app.on_event("shutdown")

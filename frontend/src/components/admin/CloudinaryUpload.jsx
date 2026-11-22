@@ -72,8 +72,9 @@ export default function CloudinaryUpload({
   const doUpload = useCallback(async (files) => {
     if (!files || !files.length) return;
     setUploading(true);
-    // Snapshot the URL we're about to replace (single mode) so we can delete it
-    // AFTER the new upload succeeds.
+    // Snapshot the URL we're about to replace (single mode). Nov 2026: we no longer
+    // delete the old file — the backend keeps it, because a replaced photo is still
+    // recoverable while a deleted one is gone for good.
     const previousUrl = (!multiple && typeof value === "string") ? value : null;
     try {
       const uploaded = [];
@@ -109,7 +110,21 @@ export default function CloudinaryUpload({
         if (!res.ok || !data.secure_url) {
           throw new Error(data.error?.message || "Cloudinary upload failed");
         }
-        uploaded.push(data.secure_url);
+        // Nov 2026 — keep a permanent copy on our own server as well, so the
+        // product no longer depends on the Cloudinary file staying alive.
+        // If archiving fails we still save the Cloudinary URL (old behaviour).
+        let savedUrl = data.secure_url;
+        try {
+          const { data: archived } = await api.post(
+            `/admin/media/archive`,
+            { url: data.secure_url },
+            { headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {}, timeout: 90000 }
+          );
+          if (archived?.url) savedUrl = archived.url;
+        } catch (err) {
+          console.warn("Photo archive failed, keeping Cloudinary URL:", err?.response?.data?.detail || err?.message);
+        }
+        uploaded.push(savedUrl);
       }
       if (multiple) {
         onChange([...(Array.isArray(value) ? value : (value ? [value] : [])), ...uploaded]);
