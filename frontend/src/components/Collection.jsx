@@ -1,3 +1,4 @@
+import { onPhotoError } from "@/lib/photoPlaceholder";
 import React from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -66,8 +67,7 @@ export const Collection = ({ products = [], content }) => {
                   alt={p.name}
                   loading="lazy"
                   decoding="async"
-                  className="w-full h-full object-cover transition-transform duration-[900ms] md:group-hover:scale-105"
-                />
+                  className="w-full h-full object-cover transition-transform duration-[900ms] md:group-hover:scale-105" onError={onPhotoError} />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity duration-500" />
                 <div className="absolute bottom-4 right-4 opacity-0 group-hover/img:opacity-100 translate-y-2 group-hover/img:translate-y-0 transition-all duration-500">
                   <span className="inline-flex items-center gap-2 glass-gold px-3 py-1.5 text-[10px] uppercase tracking-luxury text-gold">

@@ -1,3 +1,4 @@
+import { onPhotoError } from "@/lib/photoPlaceholder";
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -621,7 +622,7 @@ export default function ProductPage() {
                 if (layout === "full_bleed") {
                   return (
                     <div key={key} data-testid={`product-a-plus-block-${i}`} className="relative w-full h-72 md:h-[420px] overflow-hidden group">
-                      {blk.image && <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />}
+                      {blk.image && <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="absolute inset-0 w-full h-full object-cover" onError={onPhotoError} />}
                       <div className="absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/60 to-ink-950/20" />
                       <div className="absolute inset-0 flex items-end p-6 md:p-12">
                         <div className="max-w-2xl">
@@ -637,7 +638,7 @@ export default function ProductPage() {
                   return (
                     <div key={key} data-testid={`product-a-plus-block-${i}`} className="max-w-3xl mx-auto text-center">
                       {blk.heading && <h3 className="font-serif text-3xl md:text-4xl text-cream">{blk.heading}</h3>}
-                      {blk.image && <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="mt-6 mx-auto max-h-64 object-contain" />}
+                      {blk.image && <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="mt-6 mx-auto max-h-64 object-contain" onError={onPhotoError} />}
                       {blk.body && <p className="mt-6 text-cream/70 leading-relaxed font-light whitespace-pre-line">{blk.body}</p>}
                     </div>
                   );
@@ -647,7 +648,7 @@ export default function ProductPage() {
                   const bullets = (blk.features || "").split("\n").map((s) => s.trim()).filter(Boolean).slice(0, 8);
                   return (
                     <div key={key} data-testid={`product-a-plus-block-${i}`} className="max-w-5xl mx-auto">
-                      {blk.image && <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="w-full h-48 md:h-64 object-cover" />}
+                      {blk.image && <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="w-full h-48 md:h-64 object-cover" onError={onPhotoError} />}
                       <div className="text-center mt-8">
                         {blk.heading && <h3 className="font-serif text-2xl md:text-3xl text-cream">{blk.heading}</h3>}
                         {blk.body && <p className="mt-3 text-cream/70 max-w-2xl mx-auto">{blk.body}</p>}
@@ -684,14 +685,14 @@ export default function ProductPage() {
                     className={`grid gap-8 md:gap-14 items-center ${blk.image ? (imageRight ? "md:grid-cols-[1fr_1.15fr]" : "md:grid-cols-[1.15fr_1fr]") : "md:grid-cols-1 max-w-3xl mx-auto text-center"}`}
                   >
                     {blk.image && !imageRight && (
-                      <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="w-full h-64 md:h-[400px] object-cover" />
+                      <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="w-full h-64 md:h-[400px] object-cover" onError={onPhotoError} />
                     )}
                     <div>
                       {blk.heading && <h3 className="font-serif text-2xl md:text-3xl text-cream">{blk.heading}</h3>}
                       {blk.body && <p className="mt-4 text-cream/70 leading-relaxed font-light whitespace-pre-line">{blk.body}</p>}
                     </div>
                     {blk.image && imageRight && (
-                      <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="w-full h-64 md:h-[400px] object-cover" />
+                      <img src={blk.image} alt={blk.heading || `Block ${i + 1}`} loading="lazy" className="w-full h-64 md:h-[400px] object-cover" onError={onPhotoError} />
                     )}
                   </div>
                 );
@@ -875,7 +876,7 @@ function ProductReviewsSection({ reviews, avg, count, product, user, openAuth, o
           <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 md:-mx-0 md:px-0 pb-2" style={{ scrollbarWidth: "none" }}>
             {photos.slice(0, 20).map((p, i) => (
               <a key={i} href={p.url} target="_blank" rel="noreferrer" className="shrink-0 w-20 h-20 md:w-24 md:h-24 rounded-lg overflow-hidden border border-white/10 hover:border-gold/40 transition">
-                <img src={p.url} alt="Customer photo" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                <img src={p.url} alt="Customer photo" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={onPhotoError} />
               </a>
             ))}
           </div>
@@ -934,7 +935,7 @@ function ProductReviewsSection({ reviews, avg, count, product, user, openAuth, o
               <div className="mt-3 flex gap-2 flex-wrap">
                 {r.photos.slice(0, 6).map((u, i) => (
                   <a key={i} href={u} target="_blank" rel="noreferrer" className="w-16 h-16 md:w-20 md:h-20 overflow-hidden rounded-md border border-white/10 hover:border-gold/40 transition">
-                    <img src={u} alt="Customer" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                    <img src={u} alt="Customer" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={onPhotoError} />
                   </a>
                 ))}
               </div>

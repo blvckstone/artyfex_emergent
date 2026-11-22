@@ -1,3 +1,4 @@
+import { onPhotoError } from "@/lib/photoPlaceholder";
 import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Minus, ShoppingBag, Check, Heart, ArrowUpRight } from "lucide-react";
@@ -93,8 +94,7 @@ export const ProductShowcase = ({ product }) => {
                 <img
                   src={mainImage}
                   alt={product.name}
-                  className="w-full h-full object-cover transition-transform duration-[1200ms] group-hover/hero:scale-[1.03]"
-                />
+                  className="w-full h-full object-cover transition-transform duration-[1200ms] group-hover/hero:scale-[1.03]" onError={onPhotoError} />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover/hero:opacity-100 transition-opacity duration-500" />
                 <div className="absolute top-4 left-4 glass px-3 py-1.5 text-[10px] uppercase tracking-luxury text-gold-soft">
                   Edition · 1 of 1
@@ -117,7 +117,7 @@ export const ProductShowcase = ({ product }) => {
                     activeIdx === i ? "border-gold" : "border-white/10 hover:border-white/30"
                   }`}
                 >
-                  <img src={g} alt="" className="w-full h-full object-cover" />
+                  <img src={g} alt="" className="w-full h-full object-cover" onError={onPhotoError} />
                 </button>
               ))}
             </div>

@@ -1,3 +1,4 @@
+import { onPhotoError } from "@/lib/photoPlaceholder";
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -378,7 +379,7 @@ export default function AccountPage() {
                       <div key={w.product_id} className="group relative bg-ink-900 border border-white/5 hover:border-gold/30 transition-colors" data-testid={`account-wishlist-${p.slug}`}>
                         <Link to={`/product/${p.slug}`} className="block">
                           <div className="aspect-[4/5] overflow-hidden relative">
-                            <img src={p.hero_image} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-[1000ms]" />
+                            <img src={p.hero_image} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-[1000ms]" onError={onPhotoError} />
                           </div>
                         </Link>
                         <button

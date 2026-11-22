@@ -1,3 +1,4 @@
+import { onPhotoError } from "@/lib/photoPlaceholder";
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowUpRight, Heart, Search, SlidersHorizontal, X } from "lucide-react";
@@ -396,7 +397,7 @@ export default function ShopPage() {
                       className="group relative bg-ink-900 border border-white/5 hover:border-gold/30 transition-colors">
                       <Link to={`/product/${p.slug}`} className="block" data-testid={`shop-card-link-${p.slug}`}>
                         <div className="aspect-[4/5] overflow-hidden relative">
-                          <img src={p.hero_image} alt={p.name} className="w-full h-full object-cover transition-transform duration-[1200ms] group-hover:scale-105" />
+                          <img src={p.hero_image} alt={p.name} className="w-full h-full object-cover transition-transform duration-[1200ms] group-hover:scale-105" onError={onPhotoError} />
                           {p.is_hero && <div className="absolute top-3 left-3 glass-gold px-3 py-1 text-[10px] uppercase tracking-luxury text-gold">Signature</div>}
                           {out && <div className="absolute top-3 right-14 glass px-3 py-1 text-[10px] uppercase tracking-luxury text-red-400">Sold out</div>}
                           {!out && lowStock && <div className="absolute top-3 right-14 glass px-3 py-1 text-[10px] uppercase tracking-luxury text-yellow-400">Only {p.stock} left</div>}

@@ -1,3 +1,4 @@
+import { onPhotoError } from "@/lib/photoPlaceholder";
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Plus, Minus, Trash2, ShoppingBag, Tag, Check, Loader2 } from "lucide-react";
@@ -88,7 +89,7 @@ export const CartSheet = ({ onCheckout }) => {
                     return (
                       <div key={key} data-testid={IDS.cart.item(key)} className="flex gap-4 pb-6 border-b border-white/5">
                         <div className="w-24 h-28 shrink-0 overflow-hidden border border-white/10">
-                          <img src={it.image} alt="" className="w-full h-full object-cover" />
+                          <img src={it.image} alt="" className="w-full h-full object-cover" onError={onPhotoError} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-serif text-lg text-cream leading-tight truncate">{it.product_name.split(" — ")[0]}</div>

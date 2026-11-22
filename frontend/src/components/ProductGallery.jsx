@@ -1,3 +1,4 @@
+import { onPhotoError } from "@/lib/photoPlaceholder";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, ZoomIn, X } from "lucide-react";
@@ -154,8 +155,7 @@ export default function ProductGallery({ product, variantImage }) {
               transition: zooming ? "transform 0.35s ease-out" : "transform 0.4s ease-out",
             }}
             draggable={false}
-            data-testid="product-hero-image"
-          />
+            data-testid="product-hero-image" onError={onPhotoError} />
         </AnimatePresence>
 
         {/* Badges */}
@@ -231,8 +231,7 @@ export default function ProductGallery({ product, variantImage }) {
                 alt=""
                 className={`w-full h-full object-cover transition-transform duration-500 ${
                   activeIdx === i ? "scale-105" : "hover:scale-105"
-                }`}
-              />
+                }`} onError={onPhotoError} />
             </button>
           ))}
         </div>

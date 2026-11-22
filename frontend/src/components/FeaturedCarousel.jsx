@@ -1,3 +1,4 @@
+import { onPhotoError } from "@/lib/photoPlaceholder";
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -86,7 +87,7 @@ export default function FeaturedCarousel({ products = [], content }) {
               className="snap-start shrink-0 w-[68%] sm:w-[45%] md:w-[32%] lg:w-[26%] xl:w-[22%] bg-ink-900 border border-white/10 rounded-xl md:rounded-none overflow-hidden hover:border-gold/40 transition-colors group"
             >
               <Link to={`/product/${p.slug}`} className="block aspect-[4/5] overflow-hidden relative">
-                <img src={p.hero_image} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover md:group-hover:scale-105 transition-transform duration-[900ms]" />
+                <img src={p.hero_image} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover md:group-hover:scale-105 transition-transform duration-[900ms]" onError={onPhotoError} />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
                 {p.stock_count !== undefined && p.stock_count <= 1 && (
                   <span className="absolute top-3 left-3 bg-red-500/20 border border-red-400/40 text-red-300 text-[10px] uppercase tracking-luxury px-2 py-1 rounded">Last one</span>

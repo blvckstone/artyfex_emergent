@@ -4304,6 +4304,103 @@ async def media_audit(admin=Depends(get_current_admin)):
     return {"checked": len(probed), "ok": len(probed) - len(broken), "broken": broken}
 
 
+async def _repair_dead_photos(probed: list) -> dict:
+    """Remove photo references the image host says are gone for good.
+
+    Only 404/410 count as gone. A timeout, a 403 or a 5xx is treated as "unknown"
+    and left alone, so a flaky host or a burst of rate limiting can never wipe a
+    real photo out of the catalogue. Every removal is written to `media_repairs`
+    first, and a surviving gallery photo is promoted to main image so the product
+    keeps a face while the owner re-uploads.
+    """
+    dead = {p["url"] for p in probed if p["status"] in (404, 410)}
+    if not dead:
+        return {"photos_removed": 0, "products_changed": 0, "needs_new_photo": []}
+
+    photos_removed = 0
+    changed = []
+    needs_new_photo = []
+
+    async for p in db.products.find({}, {"_id": 0}):
+        gallery = list(p.get("gallery") or [])
+        live_gallery = [g for g in gallery if g not in dead]
+        hero = p.get("hero_image") or ""
+        update: dict = {}
+
+        if len(live_gallery) != len(gallery):
+            update["gallery"] = live_gallery
+            photos_removed += len(gallery) - len(live_gallery)
+
+        if hero in dead:
+            update["hero_image"] = live_gallery[0] if live_gallery else ""
+            if not live_gallery:
+                needs_new_photo.append({"slug": p.get("slug"), "name": p.get("name")})
+
+        variants = p.get("variants") or []
+        if any((v.get("image") or "") in dead for v in variants):
+            photos_removed += sum(1 for v in variants if (v.get("image") or "") in dead)
+            update["variants"] = [
+                {**v, "image": live_gallery[0] if live_gallery else None}
+                if (v.get("image") or "") in dead else v
+                for v in variants
+            ]
+
+        blocks = p.get("a_plus_content") or []
+        if any((b.get("image") or "") in dead or (b.get("secondary_image") or "") in dead for b in blocks):
+            photos_removed += sum(
+                1 for b in blocks for k in ("image", "secondary_image") if (b.get(k) or "") in dead
+            )
+            update["a_plus_content"] = [
+                {**b, **{k: "" for k in ("image", "secondary_image") if (b.get(k) or "") in dead}}
+                for b in blocks
+            ]
+
+        options = p.get("variation_options") or []
+        if any((val.get("image") or "") in dead for opt in options for val in (opt.get("values") or [])):
+            photos_removed += sum(
+                1 for opt in options for val in (opt.get("values") or [])
+                if (val.get("image") or "") in dead
+            )
+            update["variation_options"] = [
+                {**opt, "values": [
+                    {**val, "image": None} if (val.get("image") or "") in dead else val
+                    for val in (opt.get("values") or [])
+                ]}
+                for opt in options
+            ]
+
+        if update:
+            await db.products.update_one({"id": p["id"]}, {"$set": update})
+            changed.append({"slug": p.get("slug"), "name": p.get("name"), "fields": sorted(update.keys())})
+
+    if changed or photos_removed:
+        await db.media_repairs.insert_one({
+            "at": now_iso(),
+            "dead_urls": sorted(dead),
+            "photos_removed": photos_removed,
+            "products_changed": changed,
+            "needs_new_photo": needs_new_photo,
+        })
+    logging.info(
+        f"Photo repair: removed {photos_removed} dead photo link(s) from {len(changed)} product(s)"
+    )
+    return {"photos_removed": photos_removed, "products_changed": len(changed), "needs_new_photo": needs_new_photo}
+
+
+@api_router.post("/admin/media/repair")
+async def media_repair(admin=Depends(get_current_admin)):
+    """Clean dead photo links out of every product, one click. Read-only for
+    photos that are merely unreachable (timeouts, 403, 5xx)."""
+    probed = await _probe_image_urls(await _collect_image_urls())
+    broken = [p for p in probed if not p["ok"]]
+    report = await _repair_dead_photos(probed)
+    return {
+        "checked": len(probed),
+        "broken_found": len(broken),
+        **report,
+    }
+
+
 IMAGE_AUDIT_INTERVAL_HOURS = 20
 
 
@@ -4323,6 +4420,9 @@ async def image_watchdog_loop():
             if due:
                 probed = await _probe_image_urls(await _collect_image_urls())
                 broken = [p for p in probed if not p["ok"]]
+                # Clean the catalogue straight away so a dead photo can never keep
+                # showing as a broken image; only definitive 404/410 is touched.
+                repaired = await _repair_dead_photos(probed) if broken else {"photos_removed": 0}
                 await db.app_settings.update_one(
                     {"key": "image_audit"},
                     {"$set": {"key": "image_audit", "value": {"last_run": now_iso(), "broken": len(broken)}}},
@@ -4340,7 +4440,9 @@ async def image_watchdog_loop():
                         "<div style='font-family:sans-serif;line-height:1.6'>"
                         f"<p>{len(broken)} of {len(probed)} photos on the store could not be loaded.</p>"
                         f"<ul>{rows}</ul>"
-                        "<p>Open Admin &rarr; Products (or Homepage) and re-upload the affected photos.</p></div>",
+                        f"<p>Dead photo links were removed from the catalogue automatically "
+                        f"({int((repaired or {}).get('photos_removed') or 0)} removed). "
+                        f"Re-upload the photos in Admin &rarr; Products (or Homepage).</p></div>",
                     )
                 logging.info(f"Image watchdog: {len(broken)} broken of {len(probed)} photos")
         except Exception as e:
