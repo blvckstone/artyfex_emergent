@@ -48,16 +48,39 @@ function Home() {
   useEffect(() => {
     Promise.all([fetchProducts(), fetchReviews(), fetchHomepage().catch(() => null)])
       .then(([p, r, hp]) => { setProducts(p); setReviews(r); setHomepage(hp); })
-      .catch(() => {})
+      .catch((err) => {
+        // Never swallow this silently again: an API failure used to leave the
+        // storefront stuck on the loading screen with nothing in the console.
+        console.error("Could not load the catalogue:", err?.message || err);
+      })
       .finally(() => setLoading(false));
   }, []);
   const hero = products.find((p) => p.is_hero) || products[0];
-  if (loading || !hero) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-ink-950 flex items-center justify-center">
         <div className="text-center">
           <div className="font-serif text-4xl text-cream">Arty<span className="italic text-gold">Fex</span></div>
           <div className="mt-4 text-[10px] uppercase tracking-luxury text-cream/40">Loading the atelier…</div>
+        </div>
+      </div>
+    );
+  }
+  // Loaded but empty (API hiccup or a genuinely empty catalogue) — say so and
+  // offer a retry instead of showing "Loading…" forever.
+  if (!hero) {
+    return (
+      <div className="min-h-screen bg-ink-950 flex items-center justify-center px-6">
+        <div className="text-center">
+          <div className="font-serif text-4xl text-cream">Arty<span className="italic text-gold">Fex</span></div>
+          <div className="mt-4 text-[10px] uppercase tracking-luxury text-cream/40">The atelier could not load just now</div>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-6 border border-gold/40 px-6 py-3 text-[10px] uppercase tracking-luxury text-gold transition hover:bg-gold hover:text-ink-950"
+          >
+            Try again
+          </button>
         </div>
       </div>
     );

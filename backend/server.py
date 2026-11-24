@@ -29,6 +29,16 @@ import cloudinary
 import cloudinary.utils
 import cloudinary.uploader
 
+# Local, dependency-free document coercion (backend/product_schema.py).
+# Stored product docs are free-form; the API models are strict. Coerce on
+# read so one bad record can never take the whole catalogue down.
+from product_schema import (
+    REQUIRED_INT_FIELDS,
+    REQUIRED_LIST_FIELDS,
+    REQUIRED_STR_FIELDS,
+    normalize_product_doc,
+)
+
 # Rate limiting (brute-force / abuse protection). In-memory backend — fine for
 # single-instance Northflank. For multi-instance, swap in Redis storage_uri.
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -1324,9 +1334,30 @@ async def admin_delete_gst_rule(rule_id: str, admin=Depends(require_permission("
     return {"deleted": True}
 
 
+def _readable_product(doc: dict) -> Optional[dict]:
+    """Coerce a stored document into a valid Product, or None if impossible.
+
+    Never raises: an unreadable record is logged and skipped so the rest of
+    the catalogue still reaches the storefront (24 Nov 2026 — a destroyed
+    photo had written variants[].image = None, which made every product
+    disappear because the list is validated as a whole).
+    """
+    try:
+        return Product.model_validate(normalize_product_doc(doc)).model_dump()
+    except Exception as exc:  # noqa: BLE001 - a read must never 500
+        logging.error(f"Unreadable product {doc.get('slug') or doc.get('id')} skipped: {exc}")
+        return None
+
+
 @api_router.get("/products", response_model=List[Product])
 async def list_products():
-    return await db.products.find({}, {"_id": 0}).to_list(200)
+    docs = await db.products.find({}, {"_id": 0}).to_list(200)
+    products = [p for p in (_readable_product(d) for d in docs) if p]
+    if len(products) != len(docs):
+        logging.warning(
+            f"/products served {len(products)} of {len(docs)} documents — see the error above"
+        )
+    return products
 
 
 @api_router.get("/products/{slug}", response_model=Product)
@@ -1334,7 +1365,10 @@ async def get_product(slug: str):
     doc = await db.products.find_one({"slug": slug}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Product not found")
-    return doc
+    product = _readable_product(doc)
+    if not product:
+        raise HTTPException(status_code=404, detail="This piece is being repaired — please check back shortly")
+    return product
 
 
 @api_router.get("/reviews", response_model=List[Review], response_model_exclude={"user_email"})
@@ -1763,7 +1797,7 @@ async def admin_stats(admin=Depends(get_current_admin)):
 
 @api_router.post("/admin/products", response_model=Product)
 async def create_product(payload: ProductIn, admin=Depends(get_current_admin)):
-    prod = Product(**payload.model_dump())
+    prod = Product(**normalize_product_doc(payload.model_dump()))
     await db.products.insert_one(prod.model_dump())
     return prod
 
@@ -1795,7 +1829,10 @@ async def update_product(product_id: str, payload: ProductIn, background_tasks: 
     existing = await db.products.find_one({"id": product_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Product not found")
-    updated = {**existing, **payload.model_dump()}
+    # Normalise the merge: a legacy field (null hero_image, null variant
+    # photo…) would otherwise make this response itself a 500, which looked
+    # like "saving the product failed". The cleaned values are persisted.
+    updated = normalize_product_doc({**existing, **payload.model_dump()})
     await db.products.update_one({"id": product_id}, {"$set": updated})
     # Batch 5 — clean up any Cloudinary assets the admin removed
     old_urls = _extract_cloudinary_urls(existing)
@@ -4346,7 +4383,7 @@ async def _repair_dead_photos(probed: list) -> dict:
         if any((v.get("image") or "") in dead for v in variants):
             photos_removed += sum(1 for v in variants if (v.get("image") or "") in dead)
             update["variants"] = [
-                {**v, "image": live_gallery[0] if live_gallery else None}
+                {**v, "image": live_gallery[0] if live_gallery else ""}
                 if (v.get("image") or "") in dead else v
                 for v in variants
             ]
@@ -4983,6 +5020,43 @@ async def seo_robots():
 app.include_router(api_router)
 
 
+async def _heal_product_docs() -> int:
+    """Write safe values back into product documents the API models reject.
+
+    Only the fields whose stored value is invalid are rewritten, so a healthy
+    catalogue is left untouched. Idempotent, runs once per boot in the
+    background: it must never delay the health check that keeps the site up.
+    """
+    heal_fields = set(REQUIRED_STR_FIELDS) | set(REQUIRED_INT_FIELDS) | set(REQUIRED_LIST_FIELDS)
+    healed = []
+    async for doc in db.products.find({}, {"_id": 0}):
+        if not doc.get("id"):
+            continue
+        normalized = normalize_product_doc(doc)
+        changed = {
+            key: value
+            for key, value in normalized.items()
+            if key in heal_fields and doc.get(key) != value
+        }
+        if not changed:
+            continue
+        await db.products.update_one({"id": doc["id"]}, {"$set": changed})
+        healed.append({"slug": doc.get("slug"), "fields": sorted(changed)})
+    if healed:
+        logging.warning(f"Repaired {len(healed)} unreadable product document(s): {healed}")
+        try:
+            await db.media_repairs.insert_one({
+                "at": now_iso(),
+                "kind": "schema_repair",
+                "photos_removed": 0,
+                "products_changed": healed,
+                "needs_new_photo": [],
+            })
+        except Exception as exc:  # noqa: BLE001 - logging must not break boot
+            logging.warning(f"schema repair log write failed: {exc}")
+    return len(healed)
+
+
 @app.on_event("startup")
 async def on_startup():
     await seed_if_empty()
@@ -4996,6 +5070,9 @@ async def on_startup():
         logging.info("Seeded default shipping settings")
     # Phase B5 — seed default legal / policy pages if the collection is empty
     await _seed_default_pages()
+    # Heal any product document the strict response models reject, so a
+    # single corrupt record can never blank the storefront again.
+    await _heal_product_docs()
     # Background photo watchdog — emails the owner if a storefront photo stops loading.
     asyncio.create_task(image_watchdog_loop())
 
