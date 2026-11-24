@@ -194,6 +194,31 @@ def normalize_product_doc(doc: Any) -> Dict[str, Any]:
     return out
 
 
+def slugify(value: str) -> str:
+    """Turn a product name into a web address, e.g. "Gold & Teal" -> "gold-teal"."""
+    text = as_str(value).lower().strip()
+    text = "".join(ch if ch.isalnum() else "-" for ch in text)
+    while "--" in text:
+        text = text.replace("--", "-")
+    return text.strip("-") or "art-piece"
+
+
+def save_errors(doc: Any) -> List[str]:
+    """Plain-English reasons a product cannot be saved yet (empty list = fine).
+
+    The admin form opens with an empty name, empty slug and a ₹0 price, and the
+    old save path stored exactly that — a nameless, unopenable, unpriced record
+    that showed up nowhere. These messages are displayed to the owner verbatim.
+    """
+    data = normalize_product_doc(doc)
+    errors = []
+    if not data["name"].strip():
+        errors.append("Please give this piece a name before saving.")
+    if data["price_inr"] <= 0:
+        errors.append("Please set the selling price in ₹ — a ₹0 piece cannot be published.")
+    return errors
+
+
 def fields_needing_repair(original: Any, normalized: Dict[str, Any]) -> Dict[str, Any]:
     """Return only the keys whose stored value differs from the normalized one.
 

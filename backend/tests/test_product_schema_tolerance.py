@@ -23,6 +23,8 @@ from product_schema import (  # noqa: E402
     REQUIRED_STR_FIELDS,
     VARIANT_REQUIRED_STR_FIELDS,
     normalize_product_doc,
+    save_errors,
+    slugify,
 )
 
 
@@ -169,6 +171,26 @@ def test_idempotent():
     once = normalize_product_doc(_base_doc(tagline=None, variants=[{"key": None, "image": None}]))
     twice = normalize_product_doc(once)
     assert once == twice
+
+
+# ---- half-saved drafts must not be publishable ------------------------------
+# The admin form opens pre-filled with name "", slug "" and price 0. The old save
+# path accepted all three, which is how two nameless, unopenable, ₹0 records got
+# into the catalogue on 24 Nov 2026.
+def test_blank_name_or_zero_price_is_refused_in_plain_english():
+    errors = save_errors(_base_doc(name="  ", price_inr=0))
+    assert any("name" in e.lower() for e in errors)
+    assert any("price" in e.lower() for e in errors)
+
+
+def test_priced_named_product_has_no_errors():
+    assert save_errors(_base_doc()) == []
+
+
+def test_slugify_builds_a_web_address_from_the_name():
+    assert slugify("Pink Geode Luxury Resin Round Mirror") == "pink-geode-luxury-resin-round-mirror"
+    assert slugify("  Gold   & Teal  ") == "gold-teal"
+    assert slugify("₹") == "art-piece"
 
 
 if __name__ == "__main__":

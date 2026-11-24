@@ -37,6 +37,8 @@ from product_schema import (
     REQUIRED_LIST_FIELDS,
     REQUIRED_STR_FIELDS,
     normalize_product_doc,
+    save_errors,
+    slugify,
 )
 
 # Rate limiting (brute-force / abuse protection). In-memory backend — fine for
@@ -1795,9 +1797,37 @@ async def admin_stats(admin=Depends(get_current_admin)):
     }
 
 
+async def _prepared_product_doc(
+    payload: ProductIn, product_id: Optional[str] = None, base: Optional[dict] = None
+) -> dict:
+    """Prepare a product the owner is saving, in plain English.
+
+    The admin form opens with name "", slug "" and price 0, and the old save
+    path stored exactly that — nameless, unpriced records with no web address
+    that could never be opened, which is how the shop picked up blank cards.
+    A blank name or a ₹0 price is now refused with a message shown verbatim
+    in the admin toast; a blank slug is derived from the name and kept unique
+    so two pieces can never share one web address.
+    """
+    data = normalize_product_doc({**(base or {}), **payload.model_dump()})
+    errors = save_errors(data)
+    if errors:
+        raise HTTPException(status_code=400, detail=errors[0])
+    slug = slugify(data["slug"] or data["name"])
+    if slug != data["slug"]:
+        base_slug, suffix = slug, 2
+        while await db.products.find_one(
+            {"slug": slug, "id": {"$ne": product_id or ""}}, {"_id": 1}
+        ):
+            slug = f"{base_slug}-{suffix}"
+            suffix += 1
+    data["slug"] = slug
+    return data
+
+
 @api_router.post("/admin/products", response_model=Product)
 async def create_product(payload: ProductIn, admin=Depends(get_current_admin)):
-    prod = Product(**normalize_product_doc(payload.model_dump()))
+    prod = Product(**await _prepared_product_doc(payload))
     await db.products.insert_one(prod.model_dump())
     return prod
 
@@ -1832,7 +1862,7 @@ async def update_product(product_id: str, payload: ProductIn, background_tasks: 
     # Normalise the merge: a legacy field (null hero_image, null variant
     # photo…) would otherwise make this response itself a 500, which looked
     # like "saving the product failed". The cleaned values are persisted.
-    updated = normalize_product_doc({**existing, **payload.model_dump()})
+    updated = await _prepared_product_doc(payload, product_id, base=existing)
     await db.products.update_one({"id": product_id}, {"$set": updated})
     # Batch 5 — clean up any Cloudinary assets the admin removed
     old_urls = _extract_cloudinary_urls(existing)
